@@ -218,8 +218,8 @@ static void test_render(void) {
     assert(tex_count == 2);  /* только две строки-стикера */
     assert(strcmp(tex_calls[0].name, "like.png") == 0);
     assert(strcmp(tex_calls[1].name, "75.png") == 0);
-    near(tex_calls[0].scale, 24.0 / 128.0);
-    near(tex_calls[1].scale, 24.0 / 128.0);
+    near(tex_calls[0].scale, 24.0 / 100.0);  /* стикеры 100x100, строка 24px */
+    near(tex_calls[1].scale, 24.0 / 100.0);
     near(tex_calls[0].x, 16 + 8);
     near(tex_calls[0].y, 84 + 28 + 2);   /* вторая строка, по центру её высоты */
     near(tex_calls[1].y, 84 + 56 + 2);   /* третья строка */
@@ -229,7 +229,7 @@ static void test_render(void) {
     tex_count = 0; roundrect_calls = 0;
     ds_fn_draw_chat_bubble_at(360, 640, "/sticker dislike.png", 2.0);
     assert(tex_count == 1 && strcmp(tex_calls[0].name, "dislike.png") == 0);
-    near(tex_calls[0].scale, 40.0 / 128.0);
+    near(tex_calls[0].scale, 40.0 / 100.0);
     near(tex_calls[0].x, 360 - 56 / 2 + 8);
     near(tex_calls[0].y, 640 - 63 - 56 - 30 + 8);  /* hw = 25*1.4*1.8 = 63 */
     assert(roundrect_calls == 1);
@@ -251,12 +251,12 @@ int main(void) {
 
 
 def main():
-    # Заглушки стикеров должны лежать в ассетах 128x128.
+    # Заглушки стикеров должны лежать в ассетах 100x100.
     for name in ("like.png", "dislike.png", "75.png"):
         data = (ROOT / "game/assets" / name).read_bytes()
         assert data[:8] == b"\x89PNG\r\n\x1a\n", f"{name} is not a PNG"
-        assert int.from_bytes(data[16:20], "big") == 128, f"{name} width"
-        assert int.from_bytes(data[20:24], "big") == 128, f"{name} height"
+        assert int.from_bytes(data[16:20], "big") == 100, f"{name} width"
+        assert int.from_bytes(data[20:24], "big") == 100, f"{name} height"
     with tempfile.TemporaryDirectory(prefix="cubic-sticker-") as directory:
         temp = Path(directory)
         compiler = DimScriptCompiler()
