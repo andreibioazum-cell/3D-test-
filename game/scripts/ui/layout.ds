@@ -281,24 +281,6 @@ end
 function hit_modes_row(number px, number py, number i)
     return hit_rect_pad(px, py, menu_x(), modes_row(i), btn_w, btn_h)
 end
-function bp_w()
-    return fit_w(list_w)
-end
-function bp_x()
-    return center_x(bp_w())
-end
-function bp_top()
-    return content_top()
-end
-function bp_row_y(number n)
-    return bp_top() + (n - 1) * (level_row_h + level_row_gap)
-end
-function bp_msg_y()
-    return bp_row_y(bp_max) + level_row_h + 12
-end
-function hit_bp_row(number px, number py, number n)
-    return hit_rect(px, py, bp_x(), bp_row_y(n), bp_w(), level_row_h)
-end
 function quest_w()
     return fit_w(760)
 end

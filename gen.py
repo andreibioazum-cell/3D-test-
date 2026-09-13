@@ -16,7 +16,7 @@ def find_ds_files(directory):
         "core/config.ds",          # константы: экраны, тема, сетка, баланс
         "ui/locale_core.ds",       # основные переводы RU/EN
         "ui/locale_progress.ds",   # переводы прогресса, наград и магазина
-        "ui/locale_extra.ds",      # батл пасс, квесты, топы
+        "ui/locale_extra.ds",      # квесты, топ
         "core/entities.ds",        # объекты и состояние боя
         "core/ui.ds",              # UI-кит: кнопки, карточки, хит-тесты, текст
         "ui/progress_classes.ds",  # классы, уровни и скины
@@ -25,9 +25,7 @@ def find_ds_files(directory):
         "ui/layout.ds",            # геометрия экранов (draw_* и touch_*)
         "ui/chat.ds",              # онлайн-чат
         "ui/menu_screens.ds",      # отрисовка экранов меню
-        "ui/battlepass.ds",        # батл пасс
         "ui/quests.ds",            # задания
-        "ui/toptime.ds",           # топ по времени
         "ui/menu_input.ds",        # переходы и обработка нажатий меню
         "combat/battle_rules.ds",  # данные классов: текстуры, HP, урон, яд
         "combat/battle_turrets.ds", # турели-деспенсеры бука

@@ -50,6 +50,7 @@ void net_set_skin(double v) { (void)v; }
 void net_save_progress_all(double a, double b, double c, double d, double e, double f,
     double g, double h, double i, double j, double k, double l, double m, double n,
     double o, double p, double q, double r) {}
+double net_load_bp_level(void) { return 0; }
 
 int png_load(const char *name) {
     assert(strcmp(name, "dice.png") != 0);

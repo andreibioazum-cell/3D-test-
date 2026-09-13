@@ -71,19 +71,32 @@ static void apply_screen_size(void) {
     int vw = phys_w / s, vh = phys_h / s;
     if (vw < 1) vw = 1;
     if (vh < 1) vh = 1;
-    if (vw != screen_w || vh != screen_h) {
-        screen_w = vw;
-        screen_h = vh;
-        virt_ensure(vw, vh);
-    }
+    screen_w = vw;
+    screen_h = vh;
+    /* Буфер сверяем всегда, а не только при смене размера: если прошлый
+     * malloc не удался, следующая попытка будет уже в этом кадре. */
+    if (!virt_pixels || virt_w != vw || virt_h != vh) virt_ensure(vw, vh);
 }
-/* nearest-neighbor: каждый виртуальный пиксель масштабируется в s x s. */
+/* nearest-neighbor: каждый виртуальный пиксель масштабируется в s x s.
+ * Координаты источника клампятся: ширина/высота окна не обязаны делиться на
+ * масштаб нацело, и без клампа крайние столбцы/строки читали бы мусор за
+ * концом виртуального буфера. Строки приёмника шагаем по его страйду, а не по
+ * ширине: у ANativeWindow stride бывает шире видимой области, и запись по
+ * ширине давала бы «полосатую кашу» со сдвигом строк. */
 static void upscale_nearest(const uint32_t *src, int sw, int sh,
-                            uint32_t *dst, int dw, int dh, int s) {
+                            uint32_t *dst, int dw, int dh, int dst_stride, int s) {
+    if (!src || !dst || sw < 1 || sh < 1 || dw < 1 || dh < 1 || s < 1) return;
+    if (dst_stride < dw) dst_stride = dw;
     for (int y = 0; y < dh; y++) {
-        uint32_t *drow = dst + (size_t)y * dw;
-        const uint32_t *srow = src + (size_t)(y / s) * sw;
-        for (int x = 0; x < dw; x++) drow[x] = srow[x / s];
+        int sy = y / s;
+        if (sy >= sh) sy = sh - 1;
+        const uint32_t *srow = src + (size_t)sy * (size_t)sw;
+        uint32_t *drow = dst + (size_t)y * (size_t)dst_stride;
+        for (int x = 0; x < dw; x++) {
+            int sx = x / s;
+            if (sx >= sw) sx = sw - 1;
+            drow[x] = srow[sx];
+        }
     }
 }
 /* Лимит FPS: досыпаем остаток кадра сном. 0 - без ограничения. */
@@ -201,6 +214,16 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
              * виртуальных пикселях (screen_w x screen_h), а не в физических. */
             call.x = AMotionEvent_getX(event, i) / (float)active_scale;
             call.y = AMotionEvent_getY(event, i) / (float)active_scale;
+            /* Край окна при масштабе: phys/s округляется вниз, и пара крайних
+             * пикселей может лечь за виртуальный экран — прижимаем к нему. */
+            if (screen_w > 0) {
+                if (call.x < 0) call.x = 0;
+                if (call.x > (float)(screen_w - 1)) call.x = (float)(screen_w - 1);
+            }
+            if (screen_h > 0) {
+                if (call.y < 0) call.y = 0;
+                if (call.y > (float)(screen_h - 1)) call.y = (float)(screen_h - 1);
+            }
             call.action = action; call.id = AMotionEvent_getPointerId(event, i);
             if (!ds_call_protected(protected_touch, &call, "touch")) { mark_script_failed("touch"); break; }
         }
@@ -280,8 +303,23 @@ void android_main(struct android_app *app) {
         ANativeWindow_Buffer native_buffer;
         if (ANativeWindow_lock(app->window, &native_buffer, NULL) == 0) {
             int frame_valid;
+            /* Размеры настоящего буфера — истина: окно могли пересоздать или
+             * повернуть между колбэками, а апскейл считает от phys_w/phys_h. */
+            if (native_buffer.width > 0 && native_buffer.height > 0 &&
+                (native_buffer.width != phys_w || native_buffer.height != phys_h)) {
+                phys_w = native_buffer.width;
+                phys_h = native_buffer.height;
+            }
+            apply_screen_size();
             int s = current_render_scale();
-            if (s > 1 && (!virt_pixels || virt_w != screen_w || virt_h != screen_h)) s = 1;
+            if (s > 1 && (!virt_pixels || virt_w != screen_w || virt_h != screen_h)) {
+                /* Виртуального буфера нет (не хватило памяти) — рисуем в
+                 * полном размере и возвращаем скрипту полный экран, иначе
+                 * интерфейс соберётся под маленький экран в углу большого. */
+                s = 1;
+                screen_w = native_buffer.width;
+                screen_h = native_buffer.height;
+            }
             active_scale = s;
             /* Апскейл: игра рисуется в виртуальном буфере, потом растягивается
              * nearest-neighbor на всё окно - меньше пикселей, пиксельный стиль. */
@@ -307,10 +345,11 @@ void android_main(struct android_app *app) {
                     ds_graphics_cancel_frame();
                 } else ds_graphics_end_frame();
             }
-            if (s > 1) {
+            if (s > 1 && virt_pixels) {
                 upscale_nearest(virt_pixels, virt_w, virt_h,
                                 (uint32_t *)native_buffer.bits,
-                                native_buffer.width, native_buffer.height, s);
+                                native_buffer.width, native_buffer.height,
+                                native_buffer.stride, s);
             }
             ANativeWindow_unlockAndPost(app->window);
         }
