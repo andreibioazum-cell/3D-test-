@@ -183,12 +183,6 @@ double net_leaderboard_count(void);
 const char *net_leaderboard_nick(double idx);
 double net_leaderboard_cups(double idx);
 
-void net_toptime_fetch(const char *url);
-double net_toptime_status(void);
-double net_toptime_count(void);
-const char *net_toptime_nick(double idx);
-double net_toptime_playtime(double idx);
-
 /* Настройки игрока: язык (0 — English, 1 — русский, как в ui/locale_core.ds),
  * хитбоксы (1 — видны), громкость музыки (0..100, по умолчанию 70),
  * лимит FPS (0 — без ограничения, по умолчанию) и апскейл (1..3 — игра

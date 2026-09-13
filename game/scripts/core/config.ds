@@ -1,8 +1,8 @@
 include graphics
 number ST_LOBBY=0, ST_SOLO=1, ST_MODES=2, ST_SETTINGS=4, ST_ONLINE=5
 number ST_LOGIN=7, ST_CLASSES=8, ST_LEVELS=9, ST_LEADERBOARD=10
-number ST_ACHIEVEMENTS=11, ST_BATTLEPASS=12, ST_SKINS=13, ST_PROMO=14
-number ST_QUESTS=15, ST_TOP_TIME=16
+number ST_ACHIEVEMENTS=11, ST_SKINS=13, ST_PROMO=14
+number ST_QUESTS=15
 number game_state=ST_LOBBY
 number language=0, t_dir=0, t_target=0, t_fade=0, transition_duration=0.15
 number ui_purple=0xFF5F10A0
@@ -12,8 +12,8 @@ number locked_shade=0.75, locked_text_alpha=191
 number stat_hp_color=0xE94560, stat_power_color=0x4FC3F7
 number btn_w=280, btn_h=56, btn_gap=16, btn_radius=20
 number back_y=24, title_gap=12
-number lobby_rows=6
-number modes_rows=7
+number lobby_rows=5
+number modes_rows=6
 number touch_pad_x=12, touch_pad_y=8
 number screen_margin=40, class_action_gap=40
 number class_count=4, class_gap=14, class_card_h=272
@@ -45,16 +45,9 @@ number promo_reward_cups=50, promo_reward_candies=20
 number money_scale=0.5, money_gap=24, money_line_h=16
 number alert_hold=0.5, finish_t=0
 number cups_awarded=0
-// Батл пасс
-number bp_cost=100, bp_max=5
-number bp_msg_t=0, bp_msg_kind=0
 // Задания
 number quest_count=3, quest_msg_t=0
 array quest_type=arr_new(), quest_prog=arr_new(), quest_need=arr_new()
-// Топ по времени
-number total_play_time=0
-number top_time_msg_t=0
-number playtime_save_cd=0
 // Плиты ивент - одноразовый
 number plates_finished=0
 number match_seen_foe=0, foes_seen_t=0, foes_seen_min=1.0
