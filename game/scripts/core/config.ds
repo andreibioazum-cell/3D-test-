@@ -1,7 +1,8 @@
 include graphics
 number ST_LOBBY=0, ST_SOLO=1, ST_MODES=2, ST_SETTINGS=4, ST_ONLINE=5
-number ST_CONSOLE=6, ST_LOGIN=7, ST_CLASSES=8, ST_LEVELS=9, ST_LEADERBOARD=10
-number ST_ACHIEVEMENTS=11, ST_SKINS=13, ST_PROMO=14
+number ST_LOGIN=7, ST_CLASSES=8, ST_LEVELS=9, ST_LEADERBOARD=10
+number ST_ACHIEVEMENTS=11, ST_BATTLEPASS=12, ST_SKINS=13, ST_PROMO=14
+number ST_QUESTS=15, ST_TOP_TIME=16
 number game_state=ST_LOBBY
 number language=0, t_dir=0, t_target=0, t_fade=0, transition_duration=0.15
 number ui_purple=0xFF5F10A0
@@ -11,7 +12,8 @@ number locked_shade=0.75, locked_text_alpha=191
 number stat_hp_color=0xE94560, stat_power_color=0x4FC3F7
 number btn_w=280, btn_h=56, btn_gap=16, btn_radius=20
 number back_y=24, title_gap=12
-number lobby_rows=5
+number lobby_rows=6
+number modes_rows=7
 number touch_pad_x=12, touch_pad_y=8
 number screen_margin=40, class_action_gap=40
 number class_count=4, class_gap=14, class_card_h=272
@@ -32,16 +34,29 @@ number azum_revive_count=0
 number ach_toast_bit=0, ach_toast_t=0
 number ACH_TOAST_FADE_IN=0.14, ACH_TOAST_HOLD=1.5, ACH_TOAST_EXIT=0.24
 number ACH_TOAST_DURATION=1.96
-number cups=0, candies=0, cup_win=5, candy_win=3
+number cups=0, candies=0, cup_win=4, candy_win=3
+number cup_lose=1
 number candy_enabled=1
-// Карточки в соло: шанс 1/100 на матч, +1% за матч без карточки (до 20%),
+// Карточки в соло: шанс 6/100 на матч, +1% за матч без карточки (до 20%),
 // стрик живёт в promo.dat. Награда за код: одна на аккаунт (см. promo.ds).
-number card_chance_base=1, card_chance_step=1, card_chance_cap=20
+number card_chance_base=6, card_chance_step=1, card_chance_cap=20
 number card_drop_min=6, card_drop_max=24
 number promo_reward_cups=50, promo_reward_candies=20
 number money_scale=0.5, money_gap=24, money_line_h=16
 number alert_hold=0.5, finish_t=0
 number cups_awarded=0
+// Батл пасс
+number bp_cost=100, bp_max=5
+number bp_msg_t=0, bp_msg_kind=0
+// Задания
+number quest_count=3, quest_msg_t=0
+array quest_type=arr_new(), quest_prog=arr_new(), quest_need=arr_new()
+// Топ по времени
+number total_play_time=0
+number top_time_msg_t=0
+number playtime_save_cd=0
+// Плиты ивент - одноразовый
+number plates_finished=0
 number match_seen_foe=0, foes_seen_t=0, foes_seen_min=1.0
 number CLASS_ORDINARY=0, CLASS_AZUM=1, CLASS_SANTA=2, CLASS_EBUC=3
 number player_class=CLASS_ORDINARY, azum_revived=0, revive_prot=0
@@ -65,7 +80,7 @@ number punch_time=0.2, punch_cooldown=0.3, punch_reach=104, punch_width=104, pun
 number joy_speed=192, player_scale=1.8, enemy_scale=1.8
 number cube_scale=1.4
 number aim_fade_in=0.09, aim_fade_out=0.1, aim_max_alpha=102
-number online_ready=0, max_players=4, pi=3.1415926535, console_scroll=0
+number online_ready=0, max_players=4, pi=3.1415926535
 number azum_second_life_damage_reduction=0.10, azum_speed_bonus=0.03, azum_attack_heal=0.10
 number ordinary_damage_bonus=0.05, ordinary_speed_bonus=0.02, ordinary_attack_heal=0.05
 number bot_speed=190, bot_strafe_speed=96, bot_dodge_speed=330

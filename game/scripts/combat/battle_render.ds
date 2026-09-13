@@ -190,7 +190,18 @@ function finish_game(number result)
         end
         save_progress()
         grant_achievement(ACH_FIRST_WIN)
+        quest_on_win(result)
         ds_log("win +%g cups +%g candies",cup_win,candy_win)
+    end
+    if result==2&&cups_awarded==0
+        cups_awarded=1
+        cups=cups-cup_lose
+        if cups<0
+            cups=0
+        end
+        save_progress()
+        quest_on_win(result)
+        ds_log("lose -%g cups",cup_lose)
     end
 end
 function draw_punch_box(number x, number y, number dx, number dy, number reach, number width, number alpha)
@@ -325,9 +336,15 @@ function draw_result(string title)
     number reward=0
     if finished==1
         reward=cup_win
+    else if finished==2
+        reward=0-cup_lose
     end
     ctext_scaled(title,y+36,0xFFFFFF,1.12)
-    ctext_scaled(tr_cups_reward(reward),y+126,0xFFFFFF,0.9)
+    if finished==2
+        ctext_scaled(tr_cups_lose(reward),y+126,0xFFFFFF,0.9)
+    else
+        ctext_scaled(tr_cups_reward(reward),y+126,0xFFFFFF,0.9)
+    end
     ctext_scaled(tr_tap_to_return(),y+188,0xFFFFFF,0.62)
 end
 function draw_dash_streak()

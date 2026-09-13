@@ -272,3 +272,45 @@ end
 function hit_login_btn(number px, number py)
     return hit_rect_pad(px, py, login_btn_x(), login_btn_y(), login_btn_w, btn_h)
 end
+function modes_top()
+    return screen_h / 2 - (modes_rows * btn_h + (modes_rows - 1) * btn_gap) / 2
+end
+function modes_row(number i)
+    return modes_top() + i * menu_stride()
+end
+function hit_modes_row(number px, number py, number i)
+    return hit_rect_pad(px, py, menu_x(), modes_row(i), btn_w, btn_h)
+end
+function bp_w()
+    return fit_w(list_w)
+end
+function bp_x()
+    return center_x(bp_w())
+end
+function bp_top()
+    return content_top()
+end
+function bp_row_y(number n)
+    return bp_top() + (n - 1) * (level_row_h + level_row_gap)
+end
+function bp_msg_y()
+    return bp_row_y(bp_max) + level_row_h + 12
+end
+function hit_bp_row(number px, number py, number n)
+    return hit_rect(px, py, bp_x(), bp_row_y(n), bp_w(), level_row_h)
+end
+function quest_w()
+    return fit_w(760)
+end
+function quest_x()
+    return center_x(quest_w())
+end
+function quest_top()
+    return content_top()
+end
+function quest_row_y(number i)
+    return quest_top() + i * (ach_card_h + ach_card_gap)
+end
+function hit_quest_row(number px, number py, number i)
+    return hit_rect(px, py, quest_x(), quest_row_y(i), quest_w(), ach_card_h)
+end

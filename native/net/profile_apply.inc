@@ -123,6 +123,8 @@ static void apply_user_json(const char *resp) {
     settings_sync_with_cloud(resp);
     /* Промокод из той же записи: см. promo_sync_with_cloud в promo.inc. */
     promo_sync_with_cloud(resp);
+    /* Время игры */
+    playtime_sync_with_cloud(resp);
 }
 
 /* Протолкнуть текущий локальный прогресс в облако (только после того, как

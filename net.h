@@ -33,12 +33,6 @@ double net_login_status(void);
 const char *net_login_nick(void);
 const char *net_login_pass(void);
 
-void net_leaderboard_fetch(const char *url);
-double net_leaderboard_status(void);
-double net_leaderboard_count(void);
-const char *net_leaderboard_nick(double idx);
-double net_leaderboard_cups(double idx);
-
 void net_publish(double x, double y, double angle, double hp, double alive);
 void net_publish_punch(double x, double y, double dx, double dy, double punch);
 void net_publish_snow(double x, double y, double dx, double dy, double snow);
@@ -177,6 +171,23 @@ void net_promo_mark_used(void);
 double net_promo_streak(void);
 void net_promo_bump_streak(void);
 void net_promo_reset_streak(void);
+double net_promo_card_found(void);
+void net_promo_mark_card_found(void);
+double net_load_playtime(void);
+void net_save_playtime(double seconds);
+void net_add_playtime(double delta);
+
+void net_leaderboard_fetch(const char *url);
+double net_leaderboard_status(void);
+double net_leaderboard_count(void);
+const char *net_leaderboard_nick(double idx);
+double net_leaderboard_cups(double idx);
+
+void net_toptime_fetch(const char *url);
+double net_toptime_status(void);
+double net_toptime_count(void);
+const char *net_toptime_nick(double idx);
+double net_toptime_playtime(double idx);
 
 /* Настройки игрока: язык (0 — English, 1 — русский, как в ui/locale_core.ds),
  * хитбоксы (1 — видны), громкость музыки (0..100, по умолчанию 70),

@@ -168,41 +168,54 @@ function touch_lobby(number x, number y, number action)
         return
     end
     if hit_menu_row(x, y, 1) == 1
-        start_transition(ST_SETTINGS)
-        return
-    end
-    if hit_menu_row(x, y, 2) == 1
         start_transition(ST_CLASSES)
         return
     end
+    if hit_menu_row(x, y, 2) == 1
+        start_transition(ST_BATTLEPASS)
+        return
+    end
     if hit_menu_row(x, y, 3) == 1
+        start_transition(ST_SETTINGS)
+        return
+    end
+    if hit_menu_row(x, y, 4) == 1
         login_after = ST_LOBBY
         start_transition(ST_LOGIN)
         return
     end
-    if hit_menu_row(x, y, 4) == 1
+    if hit_menu_row(x, y, 5) == 1
         start_transition(ST_ACHIEVEMENTS)
     end
 end
 function touch_modes(number x, number y)
-    if hit_menu_row(x, y, 0) == 1
+    if hit_modes_row(x, y, 0) == 1
         start_transition(ST_LOBBY)
         return
     end
-    if hit_menu_row(x, y, 1) == 1
+    if hit_modes_row(x, y, 1) == 1
         start_transition(ST_SOLO)
         return
     end
-    if hit_menu_row(x, y, 2) == 1
+    if hit_modes_row(x, y, 2) == 1
         open_online()
         return
     end
-    if hit_menu_row(x, y, 3) == 1
+    if hit_modes_row(x, y, 3) == 1
         open_leaderboard()
         return
     end
-    if hit_menu_row(x, y, 4) == 1
+    if hit_modes_row(x, y, 4) == 1
+        start_transition(ST_TOP_TIME)
+        return
+    end
+    if hit_modes_row(x, y, 5) == 1
         start_transition(ST_PROMO)
+        return
+    end
+    if hit_modes_row(x, y, 6) == 1
+        quest_load()
+        start_transition(ST_QUESTS)
     end
 end
 function touch_settings(number x, number y)
@@ -405,5 +418,17 @@ function touch_menu(number x, number y, number action)
     end
     if game_state == ST_PROMO
         touch_promo(x, y, action)
+        return
+    end
+    if game_state == ST_BATTLEPASS
+        touch_battlepass(x, y, action)
+        return
+    end
+    if game_state == ST_QUESTS
+        touch_quests(x, y, action)
+        return
+    end
+    if game_state == ST_TOP_TIME
+        touch_top_time(x, y, action)
     end
 end

@@ -221,10 +221,22 @@ function tr_skins_need_legends()
     return "Zombie skin: \"Legends never die...\" achievement"
 end
 function tr_cups_reward(number amount)
+    string out = ""
     if language == 1
-        return "+" + amount + " кубков"
+        out = "+" + amount + " кубков"
+    else
+        out = "+" + amount + " Cups"
     end
-    return "+" + amount + " Cups"
+    return out
+end
+function tr_cups_lose(number amount)
+    string out = ""
+    if language == 1
+        out = "" + amount + " кубков"
+    else
+        out = "" + amount + " Cups"
+    end
+    return out
 end
 function tr_banned()
     if language == 1
@@ -270,9 +282,15 @@ function tr_promo_submit()
 end
 function tr_promo_how1()
     if language == 1
-        return "Карточка выпадает в соло с шансом 1/100"
+        return "Карточка выпадает в соло с шансом 6/100"
     end
-    return "Cards drop in solo with a 1/100 chance"
+    return "Cards drop in solo with a 6/100 chance"
+end
+function tr_promo_need_card()
+    if language == 1
+        return "Найди карточку в соло, чтобы узнать свой код"
+    end
+    return "Find a card in solo to get your code"
 end
 function tr_promo_how2()
     if language == 1

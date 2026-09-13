@@ -117,13 +117,18 @@ void net_save_azum_revives(double) {}
 double net_load_azum_revives(void) { return 0; }
 /* Промокоды (promo.inc): в тестах код детерминированно фиксированный,
  * флаг активации и стрик матчей не меняются. */
-const char *net_promo_code(void) { return "CB4-0000-0000-0000"; }
+const char *net_promo_code(void) { return "ABC1"; }
 void net_promo_register(void) {}
 double net_promo_used(void) { return 0; }
 void net_promo_mark_used(void) {}
 double net_promo_streak(void) { return 0; }
 void net_promo_bump_streak(void) {}
 void net_promo_reset_streak(void) {}
+double net_promo_card_found(void) { return 0; }
+void net_promo_mark_card_found(void) {}
+double net_load_playtime(void) { return 0; }
+void net_save_playtime(double s) { (void)s; }
+void net_add_playtime(double d) { (void)d; }
 void net_set_mode(double v) { (void)v; }
 void net_set_room(double v) { (void)v; }
 /* Публикации в сеть: в соло-тестах не нужны, но update_game тянет их в линк. */
@@ -1096,7 +1101,9 @@ def main():
         assert "touch_promo(" in "".join(fns["touch_menu"][1])
         # Код детерминированно выводится из ника в C (не в конфиге и не на клиенте).
         promo_c = (ROOT / "native/net/promo.inc").read_text(encoding="utf-8")
-        assert "CB4-%04X-%04X-%04X" in promo_c
+        # new format 3 letters + 1 digit, e.g. ABC1, deterministic from nick
+        assert "code[4] = 0" in promo_c
+        assert "'A' + (h % 26)" in promo_c or "promo_code_for_nick" in promo_c
         assert "promo_sync_with_cloud(resp)" in (
             ROOT / "native/net/profile_apply.inc").read_text(encoding="utf-8")
 
