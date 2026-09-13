@@ -225,8 +225,7 @@ function init_game()
 end
 function init_online()
     reset_battle()
-    chat_open=0
-    keyboard_hide()
+    chat_set_open(0)
     chat_bubbles_reset()
     online_ready=0
     banner_skip=1

@@ -1,6 +1,15 @@
 include graphics
 number chat_open=0
+number sticker_menu_open=0
 string chat_input=""
+// Стикеры: кнопка рядом с полем ввода, маленькое меню выбора. Нажатие на
+// стикер мгновенно закрывает чат и отправляет сообщение вида "/sticker <имя>"
+// — остальные клиенты вместо текста рисуют картинку из game/assets (PNG).
+// Заглушки: like.png, dislike.png, 75.png — можно заменить на свои.
+number STICKER_BTN=52
+number STICKER_TILE=64
+string STICKER_LIKE="like.png", STICKER_DISLIKE="dislike.png", STICKER_75="75.png"
+string STICKER_CMD="/sticker "
 function chat_close_x()
     return (screen_w - btn_w) / 2
 end
@@ -130,6 +139,70 @@ function chat_send()
     keyboard_clear()
     net_chat_trim(chat_visible_limit())
 end
+function chat_sticker_tex(string msg)
+    string n = ""
+    if str_starts_with(msg, STICKER_CMD) == 1
+        n = str_sub(msg, 9, str_len(msg) - 9)
+        if str_eq(n, STICKER_LIKE) == 1 || str_eq(n, STICKER_DISLIKE) == 1 || str_eq(n, STICKER_75) == 1
+            return n
+        end
+    end
+    return ""
+end
+function chat_set_open(number v)
+    chat_open = v
+    sticker_menu_open = 0
+    keyboard_hide()
+end
+function chat_send_sticker(string texname)
+    net_chat_send(STICKER_CMD + texname)
+    ds_log("chat sticker: %s", texname)
+    chat_set_open(0)
+end
+function sticker_btn_x()
+    number lx = 16, lw = screen_w - 32
+    return lx + lw - 112 - 8 - STICKER_BTN
+end
+function sticker_menu_w()
+    return 12 + 3 * STICKER_TILE + 2 * 12 + 12
+end
+function sticker_menu_h()
+    return 12 + STICKER_TILE + 12
+end
+function sticker_menu_x()
+    number lx = 16, lw = screen_w - 32
+    return lx + lw - sticker_menu_w()
+end
+function sticker_menu_y()
+    return chat_input_y() - sticker_menu_h() - 10
+end
+function sticker_tile_x(number i)
+    return sticker_menu_x() + 12 + i * (STICKER_TILE + 12)
+end
+function sticker_tile_y()
+    return sticker_menu_y() + 12
+end
+function sticker_tex_of(number i)
+    if i == 0
+        return STICKER_LIKE
+    end
+    if i == 1
+        return STICKER_DISLIKE
+    end
+    return STICKER_75
+end
+function draw_sticker_face(number cx, number cy)
+    ring(cx, cy, 13, 3, text_color)
+    circle(cx - 5, cy - 4, 2.4, text_color)
+    circle(cx + 5, cy - 4, 2.4, text_color)
+    circle(cx, cy + 6, 5, text_color)
+    rect(cx - 7, cy + 1, 14, 5, ui_purple)
+end
+function draw_sticker_tile(number i)
+    number tx = sticker_tile_x(i), ty = sticker_tile_y()
+    roundrect(tx, ty, STICKER_TILE, STICKER_TILE, 10, 0xFF3A3A58)
+    tex(tx + 8, ty + 8, sticker_tex_of(i), 0, 0.3125)
+end
 function chat_update()
     if game_state != 5 || chat_open == 0
         return
@@ -185,7 +258,12 @@ function draw_chat()
                 idx = total
             else
                 string uid = net_chat_uid(idx)
-                draw_nick_msg(uid, ": " + net_chat_text(idx), lx, yy, text_color, 0.5)
+                string st = chat_sticker_tex(net_chat_text(idx))
+                if str_len(st) > 0
+                    tex(lx + 8, yy + (line_h - 24) / 2, st, 0, 0.1875)
+                else
+                    draw_nick_msg(uid, ": " + net_chat_text(idx), lx, yy, text_color, 0.5)
+                end
                 yy = yy + line_h
                 idx = idx + 1
             end
@@ -205,6 +283,16 @@ function draw_chat()
         text_in_field(shown, lx + 10, iy, ih, text_color, 0.55)
     end
     button_scaled(tr_send(), lx + lw - 112, iy, 112, ih, 0.5)
+    roundrect(sticker_btn_x(), iy, STICKER_BTN, ih, 10, ui_purple)
+    draw_sticker_face(sticker_btn_x() + STICKER_BTN / 2, iy + ih / 2)
+    if sticker_menu_open == 1
+        roundrect(sticker_menu_x(), sticker_menu_y(), sticker_menu_w(), sticker_menu_h(), 12, card_bg)
+        number st_i = 0
+        loop st_i < 3
+            draw_sticker_tile(st_i)
+            st_i = st_i + 1
+        end
+    end
 end
 function touch_chat(number x, number y, number action)
     if action != 0
@@ -212,18 +300,39 @@ function touch_chat(number x, number y, number action)
     end
     if chat_open == 0
         if hit_rect(x, y, chat_btn_x(), chat_btn_y(), chat_btn_w(), chat_btn_h()) == 1
-            chat_open = 1
-            keyboard_hide()
+            chat_set_open(1)
             return 1
         end
         return 0
     end
     if hit_rect(x, y, chat_close_x(), chat_top_y(), btn_w, btn_h) == 1
-        chat_open = 0
-        keyboard_hide()
+        chat_set_open(0)
         return 1
     end
     number lx = 16, lw = screen_w - 32, iy = chat_input_y(), ih = 52
+    if hit_rect(x, y, sticker_btn_x(), iy, STICKER_BTN, ih) == 1
+        if sticker_menu_open == 1
+            sticker_menu_open = 0
+        else
+            sticker_menu_open = 1
+        end
+        return 1
+    end
+    if sticker_menu_open == 1
+        number st_i = 0
+        loop st_i < 3
+            if hit_rect(x, y, sticker_tile_x(st_i), sticker_tile_y(), STICKER_TILE, STICKER_TILE) == 1
+                chat_send_sticker(sticker_tex_of(st_i))
+                return 1
+            end
+            st_i = st_i + 1
+        end
+        if hit_rect(x, y, sticker_menu_x(), sticker_menu_y(), sticker_menu_w(), sticker_menu_h()) == 1
+            return 1
+        end
+        sticker_menu_open = 0
+        return 1
+    end
     if hit_rect(x, y, lx, iy, lw - 122, ih) == 1
         if keyboard_visible() == 0
             keyboard_show()
