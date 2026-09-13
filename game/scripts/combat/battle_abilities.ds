@@ -275,6 +275,34 @@ function tick_dash()
         end
     end
 end
+// Соло-леденцы: появление и сбор — с той же анимацией, что у Деда Мороза.
+// Сбор не телепортирует леденец мгновенно: candy_pick заводит pop-out, а
+// только когда он доигран, леденец возрождается в новой случайной точке.
+function tick_candies()
+    if candy_enabled==1
+        number ci=0
+        loop ci<candy_count
+            number cp=arr_get(candy_pick,ci)
+            if cp>0
+                cp=cp-dt
+                if cp<=0
+                    cp=0
+                    candy_rand_pos(ci)
+                end
+                arr_set(candy_pick,ci,cp)
+            else
+                arr_set(candy_t,ci,arr_get(candy_t,ci)+dt)
+                if dist(arr_get(candy_x,ci),arr_get(candy_y,ci),player.x,player.y)<player.size*0.65+18
+                    candies=candies+candy_give
+                    save_progress()
+                    ds_log("candy picked -> %g",candies)
+                    arr_set(candy_pick,ci,candy_pick_time)
+                end
+            end
+            ci=ci+1
+        end
+    end
+end
 function update_game()
     card_update()
     tick_alert_hold()
@@ -300,18 +328,7 @@ function update_game()
     move_player()
     tick_dash()
     tick_dash_solo_hit()
-    if candy_enabled==1
-        number ci=0
-        loop ci<candy_count
-            if dist(arr_get(candy_x,ci),arr_get(candy_y,ci),player.x,player.y)<player.size*0.65+18
-                candies=candies+candy_give
-                save_progress()
-                ds_log("candy picked -> %g",candies)
-                candy_rand_pos(ci)
-            end
-            ci=ci+1
-        end
-    end
+    tick_candies()
     if punch_left>0
         punch_left=punch_left-dt
         if punch_left<0

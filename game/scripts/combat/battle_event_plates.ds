@@ -4,9 +4,6 @@ number plate_a_lit=0, plate_b_lit=0
 number plates_santa_t=0, plates_santa_angle=0, plates_throw_cd=0, plates_next_candy=0
 number plates_thrown=0, plates_santa_out=0, plates_santa_gone=0
 number plates_collect_t=0, plates_vanish_cd=0, plates_dirty=0, plates_save_cd=0
-// Точки, между которыми горит луч ивента: это позиции бойцов, стоящих на плитах,
-// а не центры самих плит.
-number plates_link_ax=0, plates_link_ay=0, plates_link_bx=0, plates_link_by=0
 // Уход Деда Мороза: смещение вверх, скорость, угол в начале разворота и прогресс поворота.
 number plates_santa_dy=0, plates_santa_vy=0, plates_santa_ang0=0, plates_santa_up=0
 array plates_candies=arr_new()
@@ -29,10 +26,6 @@ function plates_event_reset()
     plates_santa_gone=0
     plates_collect_t=0
     plates_vanish_cd=0
-    plates_link_ax=0
-    plates_link_ay=0
-    plates_link_bx=0
-    plates_link_by=0
     plates_santa_dy=0
     plates_santa_vy=0
     plates_santa_ang0=0
@@ -79,47 +72,13 @@ function fighter_on_plate(number px, number py)
     end
     return 0
 end
-// Ищет бойца на плите (своего или сетевого) и запоминает его позицию как конец
-// луча. Если на плите никого нет, конец остаётся там, где был раньше: луч не
-// дёргается обратно к центру пустой плиты.
-function plates_link_one(number px, number py, number which)
-    if me_on_plate(px,py)==1
-        if which==0
-            plates_link_ax=player.x
-            plates_link_ay=player.y
-        else
-            plates_link_bx=player.x
-            plates_link_by=player.y
-        end
-        return
-    end
-    number s=0
-    loop s<max_players
-        number b=s*remote_fields
-        if s!=net_slot()&&arr_get(remotes,b+5)==1
-            if dist(arr_get(remotes,b+1),arr_get(remotes,b+2),px,py)<plates_stand_r
-                if which==0
-                    plates_link_ax=arr_get(remotes,b+1)
-                    plates_link_ay=arr_get(remotes,b+2)
-                else
-                    plates_link_bx=arr_get(remotes,b+1)
-                    plates_link_by=arr_get(remotes,b+2)
-                end
-                return
-            end
-        end
-        s=s+1
-    end
-end
-function plates_update_links()
-    plates_link_one(plate_ax(),plate_ay(),0)
-    plates_link_one(plate_bx(),plate_by(),1)
-end
 function plates_throw_candy()
     if plates_next_candy>=plates_candy_max
         return
     end
     number b=plates_next_candy*plates_candy_fields
+    // Леденец летит из-под Деда Мороза в случайную точку экрана — направление
+    // полёта у каждого броска своё (rand() сидится в main.c при запуске).
     number m=candy_margin+16
     number tx=m+rand()%(int)(screen_w-2*m)
     number ty=m+rand()%(int)(screen_h-2*m)
@@ -130,6 +89,7 @@ function plates_throw_candy()
     arr_set(plates_candies,b+4,tx)
     arr_set(plates_candies,b+5,ty)
     arr_set(plates_candies,b+6,0)
+    arr_set(plates_candies,b+7,0)
     plates_next_candy=plates_next_candy+1
     plates_thrown=plates_thrown+1
 end
@@ -150,7 +110,16 @@ function plates_collect_candies()
         if arr_get(plates_candies,b)==1
             number t=arr_get(plates_candies,b+1)
             number v=arr_get(plates_candies,b+6)
-            if t<plates_candy_flight
+            number pt=arr_get(plates_candies,b+7)
+            if pt>0
+                // Идёт pop-out после сбора: только когда доиграет — леденец снят.
+                pt=pt-dt
+                if pt<=0
+                    arr_set(plates_candies,b,0)
+                else
+                    arr_set(plates_candies,b+7,pt)
+                end
+            else if t<plates_candy_flight
                 arr_set(plates_candies,b+1,t+dt)
             else if v>0
                 v=v+dt
@@ -161,7 +130,7 @@ function plates_collect_candies()
             else if dist(arr_get(plates_candies,b+4),arr_get(plates_candies,b+5),player.x,player.y)<player.size*0.65+18
                 candies=candies+candy_give
                 plates_dirty=1
-                arr_set(plates_candies,b,0)
+                arr_set(plates_candies,b+7,plates_candy_pick_time)
                 ds_log("event candy picked -> %g",candies)
             end
         end
@@ -172,7 +141,7 @@ function plates_start_vanish_one()
     number i=0
     loop i<plates_candy_max
         number b=i*plates_candy_fields
-        if arr_get(plates_candies,b)==1&&arr_get(plates_candies,b+6)<=0&&arr_get(plates_candies,b+1)>=plates_candy_flight
+        if arr_get(plates_candies,b)==1&&arr_get(plates_candies,b+6)<=0&&arr_get(plates_candies,b+7)<=0&&arr_get(plates_candies,b+1)>=plates_candy_flight
             arr_set(plates_candies,b+6,0.0001)
             return 1
         end
@@ -269,29 +238,23 @@ function tick_plates_event()
         if plate_a_lit==1&&plate_b_lit==1
             plates_phase=1
             plates_t=0
-            plates_link_ax=plate_ax()
-            plates_link_ay=plate_ay()
-            plates_link_bx=plate_bx()
-            plates_link_by=plate_by()
-            plates_update_links()
             if me_on_plate(plate_ax(),plate_ay())==1||me_on_plate(plate_bx(),plate_by())==1
                 plates_lock_me=1
                 drop_joy()
             end
-            ds_log("plates event: both plates occupied, beam")
+            ds_log("plates event: both plates occupied, charging")
         end
     else if plates_phase==1
+        // «Заряд»: плиты подсвечены, бойцы зафиксированы. Луча тут больше нет.
         plates_t=plates_t+dt
-        plates_update_links()
-        if plates_t>=plates_beam_time
+        if plates_t>=plates_charge_time
             plates_phase=2
             plates_t=0
             plates_lock_me=0
-            ds_log("plates event: beam gone, shrinking")
+            ds_log("plates event: charge done, shrinking")
         end
     else if plates_phase==2
         plates_t=plates_t+dt
-        plates_update_links()
         if plates_t>=plates_shrink_time
             plates_phase=3
             plates_santa_t=0
@@ -339,67 +302,44 @@ function draw_event_plates()
     draw_plate(plate_ax(),plate_ay(),k,plate_a_lit)
     draw_plate(plate_bx(),plate_by(),k,plate_b_lit)
 end
-function plates_beam_k()
-    if plates_phase==1
-        return clamp(plates_t/plates_beam_grow,0,1)
-    end
-    if plates_phase==2
-        return 1
-    end
-    return 0
-end
-function plates_beam_alpha()
-    if plates_phase==1
-        return 1
-    end
-    if plates_phase==2
-        return clamp(1-plates_t/(plates_shrink_time*0.6),0,1)
-    end
-    return 0
-end
-// Луч соединяет бойцов, стоящих на плитах, и состоит только из самого луча:
-// никаких колец, ореолов и прочих фигур вокруг него не рисуется.
-function draw_event_beam()
-    if event_mode!=3||plates_phase<1||plates_phase>2
-        return
-    end
-    number k=plates_beam_k(), a=plates_beam_alpha()
-    if k<=0||a<=0
-        return
-    end
-    number x1=plates_link_ax, y1=plates_link_ay, x2=plates_link_bx, y2=plates_link_by
-    number ex=x1+(x2-x1)*k, ey=y1+(y2-y1)*k
-    number pulse=0.75+0.25*sin(event_t*14)
-    number w1=18*pulse, w2=7
-    color outer=(((unsigned)(int)floor(a*150))<<24)|0x00FF5A4C
-    color inner=(((unsigned)(int)floor(a*240))<<24)|0x00FFF1C8
-    line(x1,y1,ex,ey,w1,outer)
-    line(x1,y1,ex,ey,w2,inner)
-end
 function draw_event_candies()
     if event_mode!=3||plates_phase!=3
         return
     end
-    number i=0
+    number i=0, t=0, k=0, v=1, e=0, xx=0, yy=0, pt=0, p=0, pop=0, q=0, sc=0, hw=0
     loop i<plates_candy_max
         number b=i*plates_candy_fields
         if arr_get(plates_candies,b)==1
-            number t=arr_get(plates_candies,b+1)
-            number k=t/plates_candy_flight
+            t=arr_get(plates_candies,b+1)
+            k=t/plates_candy_flight
             if k>1
                 k=1
             end
-            number v=1
+            v=1
             if arr_get(plates_candies,b+6)>0
                 v=1-arr_get(plates_candies,b+6)/plates_candy_vanish_time
             end
-            if v>0.02
-                number e=1-(1-k)*(1-k)
-                number xx=arr_get(plates_candies,b+2)+(arr_get(plates_candies,b+4)-arr_get(plates_candies,b+2))*e
-                number yy=arr_get(plates_candies,b+3)+(arr_get(plates_candies,b+5)-arr_get(plates_candies,b+3))*e
-                number sc=candy_scale*(1+0.45*sin(pi*k))*v
-                number hw=25*sc
-                tex(xx-hw,yy-hw,CANDY_TEX,i*1.7+k*5+(1-v)*4,sc)
+            e=1-(1-k)*(1-k)
+            xx=arr_get(plates_candies,b+2)+(arr_get(plates_candies,b+4)-arr_get(plates_candies,b+2))*e
+            yy=arr_get(plates_candies,b+3)+(arr_get(plates_candies,b+5)-arr_get(plates_candies,b+3))*e
+            pt=arr_get(plates_candies,b+7)
+            if pt>0
+                // Сбор: сжимается и проворачивается на месте, как у соло-леденцов.
+                q=pt/plates_candy_pick_time
+                sc=candy_scale*q
+                if sc>0.02
+                    hw=25*sc
+                    tex(xx-hw,yy-hw,CANDY_TEX,(1-q)*2*pi,sc)
+                end
+            else if v>0.02
+                // Появление: как Дед Мороз — дорастает с оборотом, пока летит.
+                p=clamp(t/plates_candy_pop_time,0,1)
+                pop=1-(1-p)*(1-p)
+                sc=candy_scale*pop*(1+0.45*sin(pi*k))*v
+                if sc>0.02
+                    hw=25*sc
+                    tex(xx-hw,yy-hw,CANDY_TEX,i*1.7+k*5+(1-v)*4,sc)
+                end
             end
         end
         i=i+1

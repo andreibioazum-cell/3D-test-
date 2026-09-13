@@ -206,32 +206,63 @@ function touch_modes(number x, number y)
     end
 end
 function touch_settings(number x, number y)
-    if hit_menu_row(x, y, 0) == 1
+    if hit_settings_row(x, y, 0) == 1
         start_transition(ST_LOBBY)
         return
     end
-    if hit_menu_row(x, y, 1) == 1
+    if hit_settings_row(x, y, 1) == 1
         language = 0
         save_settings()
         return
     end
-    if hit_menu_row(x, y, 2) == 1
+    if hit_settings_row(x, y, 2) == 1
         language = 1
         save_settings()
         return
     end
-    if hit_menu_row(x, y, 3) == 1
+    if hit_settings_row(x, y, 3) == 1
         show_hitboxes = 1 - show_hitboxes
         save_settings()
         return
     end
-    if hit_music_minus(x, y) == 1
+    if hit_settings_music_minus(x, y) == 1
         music_volume_step(-music_vol_step)
         return
     end
-    if hit_music_plus(x, y) == 1
+    if hit_settings_music_plus(x, y) == 1
         music_volume_step(music_vol_step)
+        return
     end
+    if hit_settings_row(x, y, 6) == 1
+        fps_cap = next_fps_cap(fps_cap)
+        save_settings()
+        ds_set_fps_cap(fps_cap)
+        return
+    end
+    if hit_settings_row(x, y, 7) == 1
+        render_scale = next_render_scale(render_scale)
+        save_settings()
+        ds_set_render_scale(render_scale)
+        return
+    end
+end
+function next_fps_cap(number cur)
+    if cur == 0
+        return 60
+    end
+    if cur == 60
+        return 30
+    end
+    return 0
+end
+function next_render_scale(number cur)
+    if cur == 1
+        return 2
+    end
+    if cur == 2
+        return 3
+    end
+    return 1
 end
 function touch_classes(number x, number y, number action)
     if action != 0

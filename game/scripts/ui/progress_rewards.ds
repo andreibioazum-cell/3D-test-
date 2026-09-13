@@ -89,9 +89,17 @@ function settings_from_storage()
     language = net_load_language()
     show_hitboxes = net_load_hitboxes()
     music_volume = net_load_music_volume()
+    fps_cap = net_load_fps_cap()
+    render_scale = net_load_render_scale()
 end
 function save_settings()
     net_save_settings(language, show_hitboxes)
+    net_save_fps_cap(fps_cap)
+    net_save_render_scale(render_scale)
+end
+function apply_video_settings()
+    ds_set_fps_cap(fps_cap)
+    ds_set_render_scale(render_scale)
 end
 function music_volume_step(number d)
     music_volume = clamp(music_volume + d, 0, 100)

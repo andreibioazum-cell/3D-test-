@@ -200,7 +200,6 @@ function draw_online()
         end
         i=i+1
     end
-    draw_event_beam()
     draw_event_santa()
     draw_chat_bubbles()
     draw_player_freeze()

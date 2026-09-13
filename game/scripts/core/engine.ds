@@ -11,8 +11,7 @@ function leave_screen(number state)
         keyboard_hide()
     end
     if state == ST_ONLINE
-        chat_open = 0
-        keyboard_hide()
+        chat_set_open(0)
         net_disconnect()
         event_mode = 0
         event_t = 0
@@ -110,6 +109,7 @@ function init()
     start_music()
     progress_from_storage()
     settings_from_storage()
+    apply_video_settings()
     ds_log("init: ready")
 end
 function update_music()
@@ -285,8 +285,7 @@ function back_pressed()
         return 1
     end
     if game_state == ST_ONLINE && chat_open == 1
-        chat_open = 0
-        keyboard_hide()
+        chat_set_open(0)
         return 1
     end
     if game_state == ST_SOLO || game_state == ST_ONLINE

@@ -112,6 +112,9 @@ number azum_dash_damage=3, azum_dash_stun=1.8, dash_hit_r=34
 number azum_hp=8
 number shadow_off=10, shadow_alpha=0x30
 number candy_count=5, candy_margin=46, candy_scale=0.7, candy_give=1
+// Леденец появляется так же, как Дед Мороз: за candy_pop_time дорастает до
+// размера с оборотом; при сборе за candy_pick_time сжимается и пропадает.
+number candy_pop_time=0.4, candy_pick_time=0.3
 number dust_max=48, dust_fields=5, dust_life_max=0.6, dust_spawn_cd=0.06, dust_r_max=8, dust_spd=38
 number dust_back_off=34, dust_back_share=0.85, dust_side_share=0.4
 number dust_cd=0, enemy_dust_cd=0, dust_enemy_min_speed=40
@@ -130,14 +133,24 @@ string login_nick="", login_pass=""
 string LOBBY_MUSIC="lobbymusic.wav"
 number music_ok=0, music_level=1, music_fade_in_time=0.25, music_fade_out_time=1.0
 number music_volume=70, music_vol_step=10, music_btn_gap=16
+// Экономия заряда (настройки): fps_cap 0 — без ограничения (по умолчанию),
+// render_scale 1 — полный размер; 2..3 — рендер в screen/scale, картина
+// пиксельная, но софтрассеру в scale^2 раз меньше работы (ds_set_* в main.c).
+number fps_cap=0
+number render_scale=1
 number event_mode=0, disco_t=0, event_t=0, event_flakes=44
 number plates_size=150, plates_shrink_time=0.9, plates_stand_r=80
 number plates_xa=0.22, plates_xb=0.78, plates_yy=0.5
 number plates_santa_size=112, plates_santa_spin=2.2, plates_throw_interval=0.35
-number plates_candy_flight=0.85, plates_candy_max=30, plates_candy_fields=7
+number plates_candy_flight=0.85, plates_candy_max=30, plates_candy_fields=8
 number plates_candy_total=30, plates_collect_time=50
 number plates_candy_vanish_time=0.7, plates_candy_vanish_stagger=0.12
-number plates_beam_time=2.0, plates_beam_grow=0.45, plates_santa_out_time=2.5
+// Леденцы ивента появляются и собираются с той же анимацией, что Дед Мороз.
+number plates_candy_pop_time=0.4, plates_candy_pick_time=0.3
+number plates_santa_out_time=2.5
+// Луча больше нет: пока два бойца стоят на плитах, они просто «заряжаются»
+// plates_charge_time секунд, затем плиты сжимаются и выходит Дед Мороз.
+number plates_charge_time=2.0
 // Уход Деда Мороза: он не уменьшается, а поворачивается вверх и улетает за экран.
 number plates_santa_turn_time=0.35, plates_santa_fly_acc=2600, plates_santa_fly_speed=1600
 number plates_lock_me=0, plates_save_interval=4

@@ -74,6 +74,12 @@ const char *str_trim(const char *s);
 const char *str_lower(const char *s);
 const char *str_upper(const char *s);
 void ds_set_activity(void *activity);
+/* Апскейл: игра рендерится в виртуальном буфере screen/scale x screen/scale и
+ * растягивается nearest-neighbor на всё окно (пиксельная картинка, меньше
+ * работы софтрассеру). Вызывается скриптом из настроек; 1..3. */
+void ds_set_render_scale(int scale);
+/* Лимит частоты кадров для экономии заряда: 0 - без ограничения. */
+void ds_set_fps_cap(int fps);
 void keyboard_show(void);
 void keyboard_hide(void);
 const char* keyboard_get_text(void);

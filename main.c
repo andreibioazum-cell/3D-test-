@@ -10,6 +10,8 @@
 #include <android/input.h>
 #include <android/keycodes.h>
 #include <android/native_activity.h>
+#include <errno.h>
+#include <unistd.h>
 static int init_done = 0;
 static int script_active = 0;
 static AAssetManager *script_assets = NULL;
@@ -21,6 +23,84 @@ static uint64_t monotonic_ns(void) {
     struct timespec now;
     if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0;
     return (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
+}
+/* Экономия заряда без жёсткого глобального лимита: скрипт из настроек задаёт
+ * 1) апскейл — игра рисуется в виртуальном буфере screen/scale и растянывается
+ *    nearest-neighbor на окно (пиксели, но в scale^2 раз меньше пикселей
+ *    рендерит софтрассер);
+ * 2) лимит FPS (0 = без ограничения, по умолчанию так и остаётся). */
+static volatile int render_scale_setting = 1;
+static volatile int fps_cap_setting = 0;
+void ds_set_render_scale(int s) {
+    if (s < 1) s = 1;
+    if (s > 3) s = 3;
+    render_scale_setting = s;
+}
+void ds_set_fps_cap(int c) {
+    if (c < 0) c = 0;
+    fps_cap_setting = c;
+}
+static int current_render_scale(void) {
+    int s = render_scale_setting;
+    if (s < 1) s = 1;
+    if (s > 3) s = 3;
+    return s;
+}
+static int phys_w = 0, phys_h = 0;
+static int active_scale = 1; /* масштаб, которым реально рисуем: тот же для тачей */
+static uint32_t *virt_pixels = NULL;
+static int virt_w = 0, virt_h = 0;
+static void virt_ensure(int w, int h) {
+    if (virt_w == w && virt_h == h) return;
+    free(virt_pixels);
+    virt_pixels = NULL;
+    virt_w = 0;
+    virt_h = 0;
+    if (w < 1 || h < 1) return;
+    void *p = malloc((size_t)w * (size_t)h * sizeof(uint32_t));
+    if (!p) return; /* не хватило памяти - рисуем в полный размер без апскейла */
+    memset(p, 0, (size_t)w * (size_t)h * sizeof(uint32_t));
+    virt_pixels = (uint32_t *)p;
+    virt_w = w;
+    virt_h = h;
+}
+/* Виртуальный экран = окно / масштаб. screen_w/screen_h — то, что видит скрипт. */
+static void apply_screen_size(void) {
+    if (phys_w < 1 || phys_h < 1) return;
+    int s = current_render_scale();
+    int vw = phys_w / s, vh = phys_h / s;
+    if (vw < 1) vw = 1;
+    if (vh < 1) vh = 1;
+    if (vw != screen_w || vh != screen_h) {
+        screen_w = vw;
+        screen_h = vh;
+        virt_ensure(vw, vh);
+    }
+}
+/* nearest-neighbor: каждый виртуальный пиксель масштабируется в s x s. */
+static void upscale_nearest(const uint32_t *src, int sw, int sh,
+                            uint32_t *dst, int dw, int dh, int s) {
+    for (int y = 0; y < dh; y++) {
+        uint32_t *drow = dst + (size_t)y * dw;
+        const uint32_t *srow = src + (size_t)(y / s) * sw;
+        for (int x = 0; x < dw; x++) drow[x] = srow[x / s];
+    }
+}
+/* Лимит FPS: досыпаем остаток кадра сном. 0 - без ограничения. */
+static void cap_frame_sleep(uint64_t frame_start_ns) {
+    int cap = fps_cap_setting;
+    if (cap < 1) return;
+    uint64_t interval = 1000000000ull / (uint64_t)cap;
+    uint64_t deadline = frame_start_ns + interval;
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return;
+    uint64_t nowns = (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
+    if (nowns >= deadline) return;
+    uint64_t rem = deadline - nowns;
+    struct timespec req;
+    req.tv_sec = (time_t)(rem / 1000000000ull);
+    req.tv_nsec = (long)(rem % 1000000000ull);
+    while (nanosleep(&req, &req) == -1 && errno == EINTR) { /* прерван - досыпаем */ }
 }
 static void protected_init(void *userdata) { init((AAssetManager *)userdata); }
 static void protected_reset(void *userdata) { (void)userdata; reset(); }
@@ -67,9 +147,10 @@ static void handle_cmd(struct android_app *app, int32_t command) {
     switch (command) {
         case APP_CMD_INIT_WINDOW:
             if (!app->window) { init_done = 0; return; }
-            screen_w = ANativeWindow_getWidth(app->window);
-            screen_h = ANativeWindow_getHeight(app->window);
-            if (screen_w <= 0 || screen_h <= 0) { init_done = 0; return; }
+            phys_w = ANativeWindow_getWidth(app->window);
+            phys_h = ANativeWindow_getHeight(app->window);
+            if (phys_w <= 0 || phys_h <= 0) { init_done = 0; return; }
+            apply_screen_size();
             script_assets = app->activity ? app->activity->assetManager : NULL;
             ANativeWindow_setBuffersGeometry(app->window, 0, 0, WINDOW_FORMAT_RGBA_8888);
             ds_set_activity(app->activity);
@@ -90,7 +171,7 @@ static void handle_cmd(struct android_app *app, int32_t command) {
                 ANativeWindow_setBuffersGeometry(app->window, 0, 0, WINDOW_FORMAT_RGBA_8888);
                 int w = ANativeWindow_getWidth(app->window);
                 int h = ANativeWindow_getHeight(app->window);
-                if (w > 0 && h > 0) { screen_w = w; screen_h = h; }
+                if (w > 0 && h > 0) { phys_w = w; phys_h = h; apply_screen_size(); }
             }
             break;
         case APP_CMD_TERM_WINDOW:
@@ -116,7 +197,10 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
         i = (action == AMOTION_EVENT_ACTION_MOVE) ? 0 : index;
         count = (action == AMOTION_EVENT_ACTION_MOVE) ? count : index + 1;
         for (; i < count; i++) {
-            call.x = AMotionEvent_getX(event, i); call.y = AMotionEvent_getY(event, i);
+            /* Координаты окна делим на масштаб апскейла: скрипт живёт в
+             * виртуальных пикселях (screen_w x screen_h), а не в физических. */
+            call.x = AMotionEvent_getX(event, i) / (float)active_scale;
+            call.y = AMotionEvent_getY(event, i) / (float)active_scale;
             call.action = action; call.id = AMotionEvent_getPointerId(event, i);
             if (!ds_call_protected(protected_touch, &call, "touch")) { mark_script_failed("touch"); break; }
         }
@@ -161,6 +245,10 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
 }
 void android_main(struct android_app *app) {
     Buffer frame = {0}; if (!app) return;
+    /* rand() в скриптах использует libc-генератор, который сам себя не
+     * сидит: без srand() спавн леденцов, их направление полёта и прочие
+     * «случайные» броски шли бы по одной и той же последовательности. */
+    srand((unsigned)(time(NULL) * 2654435761u) ^ ((unsigned)getpid() * 0x9E3779B9u));
     app->onAppCmd = handle_cmd; app->onInputEvent = handle_input;
     net_set_java_vm(app->activity->vm);
     ds_sound_set_java_vm((void *)app->activity->vm);
@@ -177,8 +265,12 @@ void android_main(struct android_app *app) {
         }
         if (!app->window || !init_done || app->destroyRequested) continue;
         restart_script_if_due();
+        uint64_t frame_start = monotonic_ns();
+        /* Настройки могут сменить апскейл в любой момент - пересчитываем
+         * виртуальный экран и буфер перед каждым кадром (операция дешёвая). */
+        apply_screen_size();
         if (script_active) {
-            uint64_t now = monotonic_ns();
+            uint64_t now = frame_start;
             dt = prev_frame_ns ? (double)(now - prev_frame_ns) / 1000000000.0 : 0.0;
             if (dt < 0.0) dt = 0.0; if (dt > 0.1) dt = 0.1;
             prev_frame_ns = now;
@@ -188,9 +280,22 @@ void android_main(struct android_app *app) {
         ANativeWindow_Buffer native_buffer;
         if (ANativeWindow_lock(app->window, &native_buffer, NULL) == 0) {
             int frame_valid;
-            frame.pixels = (uint32_t *)native_buffer.bits;
-            frame.width = native_buffer.width; frame.height = native_buffer.height; frame.stride = native_buffer.stride;
-            frame_valid = frame.pixels && frame.width > 0 && frame.height > 0 && frame.stride >= frame.width && native_buffer.format == WINDOW_FORMAT_RGBA_8888;
+            int s = current_render_scale();
+            if (s > 1 && (!virt_pixels || virt_w != screen_w || virt_h != screen_h)) s = 1;
+            active_scale = s;
+            /* Апскейл: игра рисуется в виртуальном буфере, потом растягивается
+             * nearest-neighbor на всё окно - меньше пикселей, пиксельный стиль. */
+            if (s > 1) {
+                frame.pixels = virt_pixels;
+                frame.width = virt_w; frame.height = virt_h; frame.stride = virt_w;
+            } else {
+                frame.pixels = (uint32_t *)native_buffer.bits;
+                frame.width = native_buffer.width; frame.height = native_buffer.height; frame.stride = native_buffer.stride;
+            }
+            frame_valid = frame.pixels && frame.width > 0 && frame.height > 0 && frame.stride >= frame.width
+                && native_buffer.bits && native_buffer.width > 0 && native_buffer.height > 0
+                && native_buffer.stride >= native_buffer.width
+                && native_buffer.format == WINDOW_FORMAT_RGBA_8888;
             if (frame_valid && ds_graphics_begin_frame(&frame)) {
                 int draw_failed = 0;
                 if (script_active) {
@@ -202,8 +307,15 @@ void android_main(struct android_app *app) {
                     ds_graphics_cancel_frame();
                 } else ds_graphics_end_frame();
             }
+            if (s > 1) {
+                upscale_nearest(virt_pixels, virt_w, virt_h,
+                                (uint32_t *)native_buffer.bits,
+                                native_buffer.width, native_buffer.height, s);
+            }
             ANativeWindow_unlockAndPost(app->window);
         }
+        /* Лимит FPS из настроек: 0 - без ограничения (по умолчанию). */
+        cap_frame_sleep(frame_start);
     }
 }
 #include "graphics.c"
