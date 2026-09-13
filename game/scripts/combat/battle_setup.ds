@@ -138,6 +138,8 @@ function reset_battle()
     arr_clear(remote_punches)
     arr_clear(candy_x)
     arr_clear(candy_y)
+    arr_clear(candy_t)
+    arr_clear(candy_pick)
     arr_clear(remote_snow)
     arr_clear(remote_station)
     arr_clear(remote_universe)
@@ -288,6 +290,8 @@ function candy_rand_pos(number i)
     end
     arr_set(candy_x,i,cx)
     arr_set(candy_y,i,cy)
+    // Новое место = новое появление: анимация pop-а запускается заново.
+    arr_set(candy_t,i,0)
 end
 function spawn_all_candies()
     if candy_enabled==0

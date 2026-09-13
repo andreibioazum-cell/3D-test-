@@ -245,6 +245,10 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
 }
 void android_main(struct android_app *app) {
     Buffer frame = {0}; if (!app) return;
+    /* rand() в скриптах использует libc-генератор, который сам себя не
+     * сидит: без srand() спавн леденцов, их направление полёта и прочие
+     * «случайные» броски шли бы по одной и той же последовательности. */
+    srand((unsigned)(time(NULL) * 2654435761u) ^ ((unsigned)getpid() * 0x9E3779B9u));
     app->onAppCmd = handle_cmd; app->onInputEvent = handle_input;
     net_set_java_vm(app->activity->vm);
     ds_sound_set_java_vm((void *)app->activity->vm);
