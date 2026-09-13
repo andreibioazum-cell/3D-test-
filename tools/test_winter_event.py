@@ -58,7 +58,14 @@ int png_load(const char *name) {
 }
 typedef struct { const char *name; float x, y, angle, scale; uint32_t tint; } TextureCall;
 static TextureCall calls[128];
-static int call_count, plate_rects;
+static int call_count, plate_rects, ring_calls;
+typedef struct { float x1, y1, x2, y2, t; uint32_t color; } LineCall;
+static LineCall lines[64];
+static int line_count;
+void line(float x1, float y1, float x2, float y2, float t, uint32_t color) {
+    assert(line_count < 64 && isfinite(x1+y1+x2+y2+t));
+    lines[line_count++] = (LineCall){x1, y1, x2, y2, t, color};
+}
 void tex_tint(float x, float y, const char *name, float a, float sc, uint32_t tint) {
     assert(strcmp(name, "dice.png") != 0);
     assert(call_count < 128 && isfinite(x+y+a+sc) && sc > 0);
@@ -67,7 +74,7 @@ void tex_tint(float x, float y, const char *name, float a, float sc, uint32_t ti
 void tex(float x, float y, const char *name, float a, float sc) {
     tex_tint(x, y, name, a, sc, 0);
 }
-void ring(float x, float y, float r, float th, uint32_t color) { (void)color; }
+void ring(float x, float y, float r, float th, uint32_t color) { (void)color; (void)x; (void)y; (void)r; (void)th; ring_calls++; }
 void roundrect(float x, float y, float w, float h, float r, uint32_t color) { plate_rects++; }
 static void near(double a, double b) { assert(fabs(a-b) < 0.001); }
 
@@ -176,6 +183,27 @@ static void test_plates(void) {
     arr_set(remotes, remote_fields+5, 1);
     ds_fn_update_event();
     assert(plates_phase == 1);
+    /* Луч соединяет бойцов на плитах, а не центры плит, и состоит только из
+     * себя: два штриха (слой+ядро), без колец и ореолов вокруг. */
+    dt = 0.1;
+    player->x = ds_fn_plate_ax() + 18; player->y = ds_fn_plate_ay() - 12;
+    arr_set(remotes, remote_fields+1, ds_fn_plate_bx() - 20);
+    arr_set(remotes, remote_fields+2, ds_fn_plate_by() + 9);
+    ds_fn_update_event();
+    double k = ds_fn_plates_beam_k();
+    assert(k > 0 && k < 1);
+    double bx = player->x + (arr_get(remotes, remote_fields+1) - player->x) * k;
+    double by = player->y + (arr_get(remotes, remote_fields+2) - player->y) * k;
+    line_count = 0; ring_calls = 0;
+    ds_fn_draw_event_beam();
+    assert(line_count == 2);
+    assert(ring_calls == 0);
+    near(lines[0].x1, player->x); near(lines[0].y1, player->y);
+    near(lines[0].x2, bx);        near(lines[0].y2, by);
+    near(lines[1].x1, player->x); near(lines[1].y1, player->y);
+    near(lines[1].x2, bx);        near(lines[1].y2, by);
+    assert(fabs(lines[0].x1 - ds_fn_plate_ax()) > 1);  /* не центр плиты */
+    assert(fabs(lines[0].x2 - ds_fn_plate_bx()) > 1);
     /* Фаза 1: луч между плитами, потом сжатие, потом Санта (фаза 3). */
     dt = plates_beam_time;
     ds_fn_update_event();
@@ -187,9 +215,10 @@ static void test_plates(void) {
     player->x = -1000; player->y = -1000; // Don't collect until explicitly tested.
     for (int i = 0; i < 5; i++) ds_fn_update_event();
     assert(plates_next_candy == 1 && arr_get(plates_candies, 0) == 1);
-    call_count = 0; plate_rects = 0;
+    call_count = 0; plate_rects = 0; ring_calls = 0;
     ds_fn_draw_event_plates(); ds_fn_draw_event_santa();
     assert(plate_rects == 0 && call_count == 2);
+    assert(ring_calls == 0);  /* появление без серого кольца */
     assert(strcmp(calls[0].name, "santa.png") == 0 && calls[0].tint == 0x55000000);
     assert(strcmp(calls[1].name, "santa.png") == 0 && calls[1].tint == 0);
     near(calls[1].scale * 50, plates_santa_size);
@@ -209,6 +238,38 @@ static void test_plates(void) {
     assert(plates_dirty == 1);
     ds_fn_update_event();
     assert(plates_dirty == 0);
+    /* Уход Деда Мороза: не уменьшается, а поворачивается вверх и улетает за
+     * верх экрана; колец вокруг него нет ни при появлении, ни при уходе. */
+    plates_thrown = plates_candy_total;   /* все леденцы розданы -> начало ухода */
+    plates_santa_out = 0;
+    ds_fn_tick_event_santa();
+    assert(plates_santa_out > 0 && plates_santa_gone == 0 && plates_phase == 3);
+    double min_scale = 1e18, min_cy = 1e18, last_angle = 1e18, exit_time = 0;
+    int left_up = 0, steps = 0;
+    while (plates_phase == 3 && steps < 600) {
+        call_count = 0; ring_calls = 0;
+        ds_fn_draw_event_santa();
+        assert(call_count == 2 && ring_calls == 0);
+        double sc = calls[1].scale;
+        if (sc < min_scale) min_scale = sc;
+        double cy = calls[1].y + 25 * sc;
+        if (cy < min_cy) min_cy = cy;
+        last_angle = calls[1].angle;
+        double dy_before = plates_santa_dy;
+        ds_fn_tick_event_santa();
+        exit_time += dt;
+        if (plates_phase == 3) {
+            assert(plates_santa_dy < dy_before);   /* движение только вверх */
+        } else {
+            left_up = 1;                           /* улетел: ивент сбросился */
+        }
+        steps++;
+    }
+    assert(left_up == 1);
+    near(min_scale * 50, plates_santa_size);       /* масштаб не уменьшался */
+    assert(min_cy < screen_h / 2);                 /* поднялся выше центра */
+    assert(exit_time < plates_santa_out_time);     /* ушёл полётом, не таймаутом */
+    assert(last_angle == 0);                       /* повернулся вверх */
     cloud_event = 2;
     ds_fn_update_event();
     assert(plates_phase == 0 && plates_santa_t == 0 && arr_get(plates_candies, 0) == 0);
@@ -259,6 +320,23 @@ def main():
             assert body.count("draw_snow()") == 1
             assert body.index("draw_snow()") < next(i for i, line in enumerate(body) if line.startswith("hud_bar("))
         assert "update_event()" not in compiler.functions["update_game"][1]
+        # Луч ивента: только сам луч между бойцами, без колец вокруг.
+        beam_body = "".join(compiler.functions["draw_event_beam"][1])
+        assert "ring(" not in beam_body, "event beam must not draw anything but itself"
+        assert "plates_link_ax" in beam_body and "plates_link_bx" in beam_body, \
+            "event beam must connect the fighters standing on the plates"
+        # Дед Мороз: без серого кольца при появлении, уход — полётом вверх.
+        santa_body = "".join(compiler.functions["draw_event_santa"][1])
+        assert "ring(" not in santa_body, "Santa must appear and leave without rings"
+        assert "plates_santa_dy" in santa_body, "Santa must move up on exit"
+        assert "plates_santa_out/plates_santa_out_time" not in santa_body, \
+            "Santa must not shrink away on exit"
+        santa_tick = "".join(compiler.functions["tick_event_santa"][1])
+        assert "plates_santa_fly_acc" in santa_tick and "plates_santa_up" in santa_tick
+        # Луч бука: без резкого обреза по дистанции и без мигающей альфы.
+        station_beam = "".join(compiler.functions["draw_station_beam"][1])
+        assert "d<40" not in station_beam and "station_beam_min" in station_beam
+        assert "station_beam_alpha" in station_beam and "floor(250)" not in station_beam
         android = temp / "android"
         android.mkdir()
         (android / "asset_manager.h").write_text("typedef struct AAssetManager AAssetManager;\n")

@@ -83,7 +83,7 @@ number enemy_human_react_min=0.06, enemy_human_react_max=0.16
 number enemy_human_speed_var=0.22, enemy_human_dodge_fail=0.25
 number enemy_class_azum_chance=20, enemy_class_ebuc_chance=8
 number enemy_class_santa_chance=30
-number enemy_santa_cd_time=4.0, enemy_dash_cd_time=9.0, enemy_station_cd_time=6.0
+number enemy_santa_cd_time=4.0, enemy_dash_cd_time=9.0, enemy_station_cd_time=7.0
 number enemy_super_windup_time=0.25, enemy_santa_range=340
 number enemy_dash_min_range=90, enemy_dash_max_range=420
 number enemy_dash_damage=3, enemy_revive_prot_time=1.2, enemy_first_super_min=2.0, enemy_first_super_max=4.0
@@ -93,14 +93,19 @@ number santa_follow_delay=0.4, santa_super_damage=2.0
 number super_freeze=3.0, super_freeze_slow=0.12
 number super_cd_time=3.0, super_speed=420, super_range=260, super_radius=130, boom_time=0.45
 number freeze_fade_in=0.12, freeze_fade_out=0.35, boom_fade_in=0.25, boom_fade_out=0.5
-number ebuc_hp=12, ebuc_station_hp=9, ebuc_station_hp_bonus=1, ebuc_damage=1.0
+number ebuc_hp=12, ebuc_station_hp=6, ebuc_station_hp_bonus=1, ebuc_damage=1.0
 number ebuc_super_cd_time=4.0, ebuc_universe_collapse_time=2.0
 number ebuc_universe_damage=20, ebuc_universe_damage_bonus=3
 number ebuc_universe_particles=140, ebuc_place_heal=0.5, ebuc_beam_heal=0.1
 number universe_fade_in=0.18, universe_fade_out=0.45
 number station_boom_time=0.5
 number turret_max=3, turret_hit_r=30, station_scale=1.6, station_spawn_time=0.2
-number ebuc_station_cd=5
+// Луч турели рисуется сплошным: плотность и цвет фиксированы, альфа никогда не
+// пульсирует и не зависит от расстояния, поэтому луч не мигает прозрачностью.
+number station_beam_w=15, station_beam_core_w=6, station_beam_pull=32, station_beam_min=2
+number station_beam_alpha=255, station_beam_core_alpha=255
+number station_beam_rgb=0x00E676, station_beam_core_rgb=0x00C8FAD6
+number ebuc_station_cd=6
 number turret_counter_damage=0.5
 number azum_dash_cd=5.5, azum_dash_time=1.275, azum_dash_speed=300
 number azum_dash_damage=3, azum_dash_stun=1.8, dash_hit_r=34
@@ -132,7 +137,9 @@ number plates_santa_size=112, plates_santa_spin=2.2, plates_throw_interval=0.35
 number plates_candy_flight=0.85, plates_candy_max=30, plates_candy_fields=7
 number plates_candy_total=30, plates_collect_time=50
 number plates_candy_vanish_time=0.7, plates_candy_vanish_stagger=0.12
-number plates_beam_time=2.0, plates_beam_grow=0.45, plates_santa_out_time=0.5
+number plates_beam_time=2.0, plates_beam_grow=0.45, plates_santa_out_time=2.5
+// Уход Деда Мороза: он не уменьшается, а поворачивается вверх и улетает за экран.
+number plates_santa_turn_time=0.35, plates_santa_fly_acc=2600, plates_santa_fly_speed=1600
 number plates_lock_me=0, plates_save_interval=4
 number warn_open=1, warn_t=0, warn_a=1, warn_hold=2.5, warn_fade=0.6
 number studio_open=0, studio_t=0, studio_a=0, studio_bg_a=1

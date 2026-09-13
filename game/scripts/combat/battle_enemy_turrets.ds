@@ -111,16 +111,18 @@ function enemy_tick_turrets()
 end
 function draw_enemy_turrets()
     number beam=-1
-    if enemy_turret_alive(enemy_last_turret_slot)==1
-        beam=enemy_last_turret_slot
-    else
-        number j=0
-        loop j<turret_max
-            if enemy_turret_alive(j)==1
-                beam=j
-                j=turret_max
+    if station_beam_visible(enemy.hp)==1
+        if enemy_turret_alive(enemy_last_turret_slot)==1
+            beam=enemy_last_turret_slot
+        else
+            number j=0
+            loop j<turret_max
+                if enemy_turret_alive(j)==1
+                    beam=j
+                    j=turret_max
+                end
+                j=j+1
             end
-            j=j+1
         end
     end
     if beam>=0

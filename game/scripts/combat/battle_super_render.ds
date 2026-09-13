@@ -1,16 +1,34 @@
 include graphics
+// Луч виден, пока живы турель и её хозяин и пока бой не закончен: как только
+// условие пропадает, луч гаснет один раз и больше не возвращается. Альфа и
+// толщина постоянны, а короткий луч не обрезается резко, а плавно укорачивается
+// под спрайтами — поэтому миганий «виден/пропал» и скачков прозрачности нет.
+function station_beam_visible(number owner_hp)
+    if finished!=0
+        return 0
+    end
+    if owner_hp<=0
+        return 0
+    end
+    return 1
+end
 function draw_station_beam(number sx, number sy, number px, number py)
     number dx=px-sx, dy=py-sy
     number d=sqrt(dx*dx+dy*dy)
-    if d<40
+    if d<station_beam_min
         return
     end
     number nx=dx/d, ny=dy/d
+    number pull=station_beam_pull
+    if pull>d*0.5
+        pull=d*0.5
+    end
     number x1=sx, y1=sy
-    number x2=px-nx*32, y2=py-ny*32
-    number a=floor(250)
-    line(x1,y1,x2,y2,15,(((unsigned)(int)200)<<24)|0x0000E676)
-    line(x1,y1,x2,y2,6,(((unsigned)(int)a)<<24)|0x00C8FAD6)
+    number x2=px-nx*pull, y2=py-ny*pull
+    color outer=(((unsigned)(int)station_beam_alpha)<<24)|((unsigned)(int)station_beam_rgb)
+    color core=(((unsigned)(int)station_beam_core_alpha)<<24)|((unsigned)(int)station_beam_core_rgb)
+    line(x1,y1,x2,y2,station_beam_w,outer)
+    line(x1,y1,x2,y2,station_beam_core_w,core)
 end
 function draw_turret_shadow_at(number x, number y, number spawn)
     number scale=station_scale
@@ -108,16 +126,18 @@ function draw_turret_boom(number x, number y, number bt)
 end
 function draw_station()
     number beam=-1
-    if turret_alive(last_turret_slot)==1
-        beam=last_turret_slot
-    else
-        number j=0
-        loop j<turret_max
-            if turret_alive(j)==1
-                beam=j
-                j=turret_max
+    if station_beam_visible(player.hp)==1
+        if turret_alive(last_turret_slot)==1
+            beam=last_turret_slot
+        else
+            number j=0
+            loop j<turret_max
+                if turret_alive(j)==1
+                    beam=j
+                    j=turret_max
+                end
+                j=j+1
             end
-            j=j+1
         end
     end
     if beam>=0
@@ -230,23 +250,25 @@ function draw_remote_station()
             number ox=arr_get(remotes,rb+1)
             number oy=arr_get(remotes,rb+2)
             number beam=-1
-            number lslot=arr_get(remote_station,b)
-            if lslot>=1&&lslot<=turret_max
-                if arr_get(remote_station,b+1+(lslot-1)*5)==1
-                    beam=lslot-1
-                end
-            end
             number i=0
-            if beam<0
-                loop i<turret_max
-                    if arr_get(remote_station,b+1+i*5)==1
-                        beam=i
-                        i=turret_max
+            if station_beam_visible(arr_get(remotes,rb+4))==1&&owner_alive==1
+                number lslot=arr_get(remote_station,b)
+                if lslot>=1&&lslot<=turret_max
+                    if arr_get(remote_station,b+1+(lslot-1)*5)==1
+                        beam=lslot-1
                     end
-                    i=i+1
+                end
+                if beam<0
+                    loop i<turret_max
+                        if arr_get(remote_station,b+1+i*5)==1
+                            beam=i
+                            i=turret_max
+                        end
+                        i=i+1
+                    end
                 end
             end
-            if beam>=0&&owner_alive==1
+            if beam>=0
                 number bo=b+1+beam*5
                 draw_station_beam(arr_get(remote_station,bo+1),arr_get(remote_station,bo+2),ox,oy)
             end
