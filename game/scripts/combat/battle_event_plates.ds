@@ -4,6 +4,11 @@ number plate_a_lit=0, plate_b_lit=0
 number plates_santa_t=0, plates_santa_angle=0, plates_throw_cd=0, plates_next_candy=0
 number plates_thrown=0, plates_santa_out=0, plates_santa_gone=0
 number plates_collect_t=0, plates_vanish_cd=0, plates_dirty=0, plates_save_cd=0
+// Точки, между которыми горит луч ивента: это позиции бойцов, стоящих на плитах,
+// а не центры самих плит.
+number plates_link_ax=0, plates_link_ay=0, plates_link_bx=0, plates_link_by=0
+// Уход Деда Мороза: смещение вверх, скорость, угол в начале разворота и прогресс поворота.
+number plates_santa_dy=0, plates_santa_vy=0, plates_santa_ang0=0, plates_santa_up=0
 array plates_candies=arr_new()
 function plates_event_reset()
     if plates_dirty==1
@@ -24,6 +29,14 @@ function plates_event_reset()
     plates_santa_gone=0
     plates_collect_t=0
     plates_vanish_cd=0
+    plates_link_ax=0
+    plates_link_ay=0
+    plates_link_bx=0
+    plates_link_by=0
+    plates_santa_dy=0
+    plates_santa_vy=0
+    plates_santa_ang0=0
+    plates_santa_up=0
     plates_lock_me=0
     arr_clear(plates_candies)
     number i=0
@@ -65,6 +78,42 @@ function fighter_on_plate(number px, number py)
         s=s+1
     end
     return 0
+end
+// Ищет бойца на плите (своего или сетевого) и запоминает его позицию как конец
+// луча. Если на плите никого нет, конец остаётся там, где был раньше: луч не
+// дёргается обратно к центру пустой плиты.
+function plates_link_one(number px, number py, number which)
+    if me_on_plate(px,py)==1
+        if which==0
+            plates_link_ax=player.x
+            plates_link_ay=player.y
+        else
+            plates_link_bx=player.x
+            plates_link_by=player.y
+        end
+        return
+    end
+    number s=0
+    loop s<max_players
+        number b=s*remote_fields
+        if s!=net_slot()&&arr_get(remotes,b+5)==1
+            if dist(arr_get(remotes,b+1),arr_get(remotes,b+2),px,py)<plates_stand_r
+                if which==0
+                    plates_link_ax=arr_get(remotes,b+1)
+                    plates_link_ay=arr_get(remotes,b+2)
+                else
+                    plates_link_bx=arr_get(remotes,b+1)
+                    plates_link_by=arr_get(remotes,b+2)
+                end
+                return
+            end
+        end
+        s=s+1
+    end
+end
+function plates_update_links()
+    plates_link_one(plate_ax(),plate_ay(),0)
+    plates_link_one(plate_bx(),plate_by(),1)
 end
 function plates_throw_candy()
     if plates_next_candy>=plates_candy_max
@@ -138,22 +187,48 @@ function plates_time_left()
     end
     return left
 end
+function plates_wrap_angle(number a)
+    number w=a
+    loop w>pi
+        w=w-2*pi
+    end
+    loop w<0-pi
+        w=w+2*pi
+    end
+    return w
+end
+function plates_santa_exit_dy()
+    return screen_h/2+plates_santa_size
+end
 function tick_event_santa()
     plates_santa_t=plates_santa_t+dt
     plates_collect_t=plates_collect_t+dt
     if plates_santa_gone==0
-        plates_santa_angle=plates_santa_angle+dt*(plates_santa_spin+0.9*sin(plates_santa_t*1.7))
-        if plates_thrown<plates_candy_total
-            plates_throw_cd=plates_throw_cd-dt
-            if plates_throw_cd<=0
-                plates_throw_cd=plates_throw_interval
-                plates_throw_candy()
+        if plates_santa_out>0
+            // Уход: Дед Мороз не уменьшается — он поворачивается вверх и улетает за экран.
+            plates_santa_out=plates_santa_out+dt
+            plates_santa_up=clamp(plates_santa_out/plates_santa_turn_time,0,1)
+            plates_santa_angle=plates_santa_ang0*(1-plates_santa_up)
+            plates_santa_vy=plates_santa_vy+plates_santa_fly_acc*dt
+            if plates_santa_vy>plates_santa_fly_speed
+                plates_santa_vy=plates_santa_fly_speed
+            end
+            plates_santa_dy=plates_santa_dy-plates_santa_vy*dt
+            if plates_santa_dy<=0-plates_santa_exit_dy()||plates_santa_out>=plates_santa_out_time
+                plates_santa_gone=1
+                ds_log("plates event: Santa flew up and left")
             end
         else
-            plates_santa_out=plates_santa_out+dt
-            if plates_santa_out>=plates_santa_out_time
-                plates_santa_gone=1
-                ds_log("plates event: Santa left")
+            plates_santa_angle=plates_santa_angle+dt*(plates_santa_spin+0.9*sin(plates_santa_t*1.7))
+            if plates_thrown<plates_candy_total
+                plates_throw_cd=plates_throw_cd-dt
+                if plates_throw_cd<=0
+                    plates_throw_cd=plates_throw_interval
+                    plates_throw_candy()
+                end
+            else
+                plates_santa_out=plates_santa_out+dt
+                plates_santa_ang0=plates_wrap_angle(plates_santa_angle)
             end
         end
     end
@@ -194,6 +269,11 @@ function tick_plates_event()
         if plate_a_lit==1&&plate_b_lit==1
             plates_phase=1
             plates_t=0
+            plates_link_ax=plate_ax()
+            plates_link_ay=plate_ay()
+            plates_link_bx=plate_bx()
+            plates_link_by=plate_by()
+            plates_update_links()
             if me_on_plate(plate_ax(),plate_ay())==1||me_on_plate(plate_bx(),plate_by())==1
                 plates_lock_me=1
                 drop_joy()
@@ -202,6 +282,7 @@ function tick_plates_event()
         end
     else if plates_phase==1
         plates_t=plates_t+dt
+        plates_update_links()
         if plates_t>=plates_beam_time
             plates_phase=2
             plates_t=0
@@ -210,6 +291,7 @@ function tick_plates_event()
         end
     else if plates_phase==2
         plates_t=plates_t+dt
+        plates_update_links()
         if plates_t>=plates_shrink_time
             plates_phase=3
             plates_santa_t=0
@@ -275,6 +357,8 @@ function plates_beam_alpha()
     end
     return 0
 end
+// Луч соединяет бойцов, стоящих на плитах, и состоит только из самого луча:
+// никаких колец, ореолов и прочих фигур вокруг него не рисуется.
 function draw_event_beam()
     if event_mode!=3||plates_phase<1||plates_phase>2
         return
@@ -283,7 +367,7 @@ function draw_event_beam()
     if k<=0||a<=0
         return
     end
-    number x1=plate_ax(), y1=plate_ay(), x2=plate_bx(), y2=plate_by()
+    number x1=plates_link_ax, y1=plates_link_ay, x2=plates_link_bx, y2=plates_link_by
     number ex=x1+(x2-x1)*k, ey=y1+(y2-y1)*k
     number pulse=0.75+0.25*sin(event_t*14)
     number w1=18*pulse, w2=7
@@ -291,9 +375,6 @@ function draw_event_beam()
     color inner=(((unsigned)(int)floor(a*240))<<24)|0x00FFF1C8
     line(x1,y1,ex,ey,w1,outer)
     line(x1,y1,ex,ey,w2,inner)
-    color glow=(((unsigned)(int)floor(a*190))<<24)|0x00FFFFFF
-    ring(x1,y1,28+6*pulse,4,glow)
-    ring(ex,ey,28+6*pulse,4,glow)
 end
 function draw_event_candies()
     if event_mode!=3||plates_phase!=3
@@ -328,30 +409,21 @@ function draw_event_santa()
     if event_mode!=3||plates_phase!=3||plates_santa_gone==1
         return
     end
-    number cx=screen_w/2, cy=screen_h/2
+    // Появление без серого кольца; уход — поворотом вверх и полётом, а не ужиманием.
+    number cx=screen_w/2, cy=screen_h/2+plates_santa_dy
     number pop=1
     if plates_santa_t<0.4
         number p=plates_santa_t/0.4
         pop=1-(1-p)*(1-p)
     end
-    if plates_santa_out>0
-        pop=pop*clamp(1-plates_santa_out/plates_santa_out_time,0,1)
-    end
     number sc=plates_santa_size/50*pop
     if sc<=0.01
         return
     end
-    number wob=6*pop*sin(plates_santa_t*3)
+    number wob=6*pop*sin(plates_santa_t*3)*(1-plates_santa_up)
     number hw=25*sc
     tex_tint(cx-hw+10,cy-hw+wob+12,SANTA_TEX,plates_santa_angle,sc,0x55000000)
     tex(cx-hw,cy-hw+wob,SANTA_TEX,plates_santa_angle,sc)
-    if plates_santa_t<0.6
-        number rr=40+plates_santa_t/0.6*170
-        number aa=floor((1-plates_santa_t/0.6)*170)
-        if aa>0
-            ring(cx,cy,rr,6,aa*0x1000000)
-        end
-    end
 end
 function draw_plates_hud()
     if event_mode!=3||plates_phase!=3

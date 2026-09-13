@@ -823,6 +823,53 @@ static void test_turret_shadow_square(void) {
     puts("turret: square sprite shadow stays, no hit square around the despenser");
 }
 
+static void test_station_beam_stable(void) {
+    /* Луч бука плотный и не мигает: рисуется даже вплотную к турели (раньше
+     * обрезался при d<40), альфа всегда непрозрачна, а в конце боя гаснет один
+     * раз и больше не возвращается — и у своего, и у вражеского бука. */
+    ds_fn_reset_battle();
+    game_state = ST_SOLO;
+    player_class = CLASS_EBUC;
+    enemy_class = CLASS_EBUC;
+    dt = 0.05;
+    player->x = 500; player->y = 400; player->hp = 10; player->max_hp = 10;
+    enemy->x = 900; enemy->y = 400; enemy->hp = 10; enemy->max_hp = 10;
+    uint32_t outer = (255u << 24) | 0x0000E676;   /* station_beam_alpha + rgb */
+    uint32_t core = (255u << 24) | 0x00C8FAD6;    /* сплошное ядро луча */
+    finished = 0;
+    own_turret(0, 512, 416, 6);                   /* d=20: вплотную к буку */
+    last_turret_slot = 0;
+    call_count = 0;
+    ds_fn_draw_station();
+    assert(count_kind_color('l', outer) == 1);
+    assert(count_kind_color('l', core) == 1);
+    own_turret(0, 700, 100, 6);                   /* далеко: та же пара линий */
+    call_count = 0;
+    ds_fn_draw_station();
+    assert(count_kind_color('l', outer) == 1);
+    assert(count_kind_color('l', core) == 1);
+    player->hp = 0;                               /* мёртвый бук: луча нет */
+    call_count = 0;
+    ds_fn_draw_station();
+    assert(count_kind_color('l', outer) == 0 && count_kind_color('l', core) == 0);
+    player->hp = 10;
+    finished = 1;                                 /* конец боя: луч ушёл навсегда */
+    call_count = 0;
+    ds_fn_draw_station();
+    assert(count_kind_color('l', outer) == 0 && count_kind_color('l', core) == 0);
+    finished = 0;
+    foe_turret(0, 905, 405, 6);
+    enemy_last_turret_slot = 0;
+    call_count = 0;
+    ds_fn_draw_enemy_turrets();
+    assert(count_kind_color('l', outer) == 1 && count_kind_color('l', core) == 1);
+    finished = 2;
+    call_count = 0;
+    ds_fn_draw_enemy_turrets();
+    assert(count_kind_color('l', outer) == 0 && count_kind_color('l', core) == 0);
+    puts("beam: buk beam is solid at any range and gone for good at battle end");
+}
+
 static void test_universe_fade(void) {
     /* Вспышка вселенной не обрывается в момент схлопывания. */
     ds_fn_reset_battle();
@@ -882,6 +929,7 @@ int main(void) {
     test_enemy_shield_front_only();
     test_online_turret_punch_death();
     test_turret_shadow_square();
+    test_station_beam_stable();
     test_universe_fade();
     test_enemy_class_chances();
     test_poison_green();
@@ -978,6 +1026,10 @@ def main():
         # Turret shadow is the despenser sprite itself (square, tinted).
         shadow_body = "".join(fns["draw_turret_shadow_at"][1])
         assert "tex_tint(" in shadow_body and "DESPENSER_TEX" in shadow_body
+        # Видимость луча бука решается одним предикатом во всех трёх местах.
+        for name in ("draw_station", "draw_remote_station", "draw_enemy_turrets"):
+            assert "station_beam_visible(" in "".join(fns[name][1]), \
+                f"{name} must gate the buk beam through station_beam_visible"
         for name in ("draw_game", "draw_online"):
             assert "".join(fns[name][1]).count("draw_turret_shadows()") == 1, \
                 f"{name} must draw turret shadows in the shadow layer"
