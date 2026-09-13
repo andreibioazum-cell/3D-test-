@@ -81,8 +81,11 @@ end
 function class_sprite_y()
     return classes_top() + 12
 end
+function class_title_scale()
+    return 0.85
+end
 function class_title_y()
-    return classes_top() + 88
+    return classes_top() + 82
 end
 function class_desc_y()
     return classes_top() + 114

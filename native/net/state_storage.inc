@@ -213,7 +213,7 @@ static void progress_write(int cups, int candies, int cls, int azum, int santa, 
 static void progress_read(void);
 
 
-typedef struct { char plain[URL]; char url[FB_URL_MAX]; char body[BODY*2]; } HttpJob;
+typedef struct { char plain[URL]; char url[FB_URL_MAX]; char body[BODY*2]; int progress; } HttpJob;
 static int fb_enabled(void);
 static void fb_url(char *dst, size_t cap, const char *url);
 static int fb_ensure_token(void);
@@ -222,6 +222,24 @@ static int net_log_ok(void);
 static int http(const char *method,const char *url,const char *body,char *out,size_t cap);
 static void *http_delete_job(void *arg);
 static void room_slot_delete_async(int slot);
+static void sleep_ms(int ms);
+/* progress.dirty = «облако отстало от устройства»: PATCH профиля не прошёл
+ * (нет сети, сервер лёг). Следующий вход дошлёт локальный прогресс целиком. */
+#define PROGRESS_DIRTY_FILE "progress.dirty"
+static void cloud_dirty_set(int on) {
+    char path[320];
+    data_file_path(path, sizeof(path), PROGRESS_DIRTY_FILE);
+    if (on) file_write_atomic(path, "1\n");
+    else remove(path);
+}
+static int cloud_dirty_get(void) {
+    char path[320]; FILE *f;
+    data_file_path(path, sizeof(path), PROGRESS_DIRTY_FILE);
+    f = fopen(path, "r");
+    if (!f) return 0;
+    fclose(f);
+    return 1;
+}
 /* Облачные записи (прогресс, достижения) уходят PATCH'ем из фоновой нити.
  * Надёжность важна: раньше токен перед записью не обновлялся, и через час
  * после входа idToken протухал - PATCH уходил со старым токеном, Firebase
@@ -229,9 +247,7 @@ static void room_slot_delete_async(int slot);
  * облака, и после перезахода (особенно с другого телефона) класс «исчезал».
  * Теперь: токен обновляем до записи, при 401 - форсируем refresh и
  * повторяем один раз. */
-static void *http_patch_job(void *arg) {
-    HttpJob *j = (HttpJob*)arg;
-    if (!j) return NULL;
+static int http_patch_once(HttpJob *j) {
     int code;
     if (fb_enabled()) {
         fb_ensure_token();
@@ -244,20 +260,65 @@ static void *http_patch_job(void *arg) {
     } else {
         code = http("PATCH", j->url, j->body, NULL, 0);
     }
-    if (code != 200 && net_log_ok()) LOGERR("cloud PATCH failed: HTTP %d", code);
+    return code;
+}
+/* Повторы облачной записи: 0 (нет ответа), 5xx и 429 - временные, шлём снова
+ * через 1, 2, 4 с; 400/403 - правила базы, повтор бессмысленен. */
+#define PATCH_RETRIES 4
+/* Порядковый номер записи прогресса в облако (0 - не прогресс). */
+static DSMutex patch_seq_lock = DS_MUTEX_INIT;
+static int patch_seq = 0;
+static void *http_patch_job(void *arg) {
+    HttpJob *j = (HttpJob*)arg;
+    if (!j) return NULL;
+    int code = 0, attempt = 0, wait = 1000;
+    for (;;) {
+        code = http_patch_once(j);
+        if (code == 200) break;
+        int transient = (code == 0 || code == 429 || code >= 500);
+        if (!transient || ++attempt >= PATCH_RETRIES) break;
+        sleep_ms(wait);
+        if (wait < 4000) wait *= 2;
+    }
+    if (code != 200) {
+        if (j->progress) cloud_dirty_set(1);
+        if (net_log_ok()) LOGERR("cloud PATCH failed: HTTP %d%s", code,
+                                 j->progress ? " (progress will be resent on next login)" : "");
+    } else {
+        /* Метку снимает только самая свежая запись прогресса: если старый
+         * PATCH дошёл позже нового, а новый упал, устройство всё ещё «грязное». */
+        if (j->progress) {
+            int latest;
+            ds_mutex_lock(patch_seq_lock);
+            latest = (j->progress == patch_seq);
+            ds_mutex_unlock(patch_seq_lock);
+            if (latest) cloud_dirty_set(0);
+        }
+        if (attempt > 0) LOG("cloud PATCH ok after %d retry(ies)", attempt);
+    }
     free(j);
     return NULL;
 }
-static void http_patch_async(const char *url, const char *body) {
+static void http_patch_async_ex(const char *url, const char *body, int progress) {
     HttpJob *j = (HttpJob*)malloc(sizeof(*j));
     DSThread t;
     if (!j) return;
     snprintf(j->plain, sizeof(j->plain), "%s", url);
     snprintf(j->url, sizeof(j->url), "%s", url);
     snprintf(j->body, sizeof(j->body), "%s", body);
+    j->progress = 0;
+    if (progress) {
+        ds_mutex_lock(patch_seq_lock);
+        j->progress = ++patch_seq;
+        ds_mutex_unlock(patch_seq_lock);
+    }
     t = ds_thread_start(http_patch_job, j);
     if (t) { ds_thread_detach(t); return; }
+    if (progress) cloud_dirty_set(1);
     free(j);
+}
+static void http_patch_async(const char *url, const char *body) {
+    http_patch_async_ex(url, body, 0);
 }
 
 void net_save_progress(double cups, double candies, double cls, double azum, double santa, double ebuc,
@@ -306,6 +367,9 @@ void net_save_progress_all(double cups, double candies, double cls, double azum,
     if (k != 1 && k != 2 && k != 3) k = 0;
     // Владение персонажами - липкое: раз куплен, не теряется даже если
     // в облаке старая запись без него (фикс бага «буК пропал после перезахода»).
+    // Файл читаем обязательно: первое сохранение после запуска раньше шло
+    // мимо него (pg ещё не загружен) и затирало купленное на устройстве.
+    progress_read();
     pg_lock();
     if (pg.loaded) {
         if (pg.azum == 1) a = 1;
@@ -368,7 +432,14 @@ void net_save_progress_all(double cups, double candies, double cls, double azum,
         snprintf(body, sizeof(body),
                  "{\"cups\":%d,\"candies\":%d,\"cls\":%d,\"azum\":%d,\"santa\":%d,\"ebuc\":%d,\"level\":%d,\"levels\":%d,\"ordinary_level\":%d,\"ordinary_levels\":%d,\"azum_level\":%d,\"azum_levels\":%d,\"santa_level\":%d,\"santa_levels\":%d,\"ebuc_level\":%d,\"ebuc_levels\":%d,\"bp\":%d,\"azum_skin\":%d,\"ach_flags\":%u,\"ach_revives\":%u}",
                  c, cd, k, a, sn, eu, lv, lu, ol, ou, al, au, sl, su, el, eul, bp, sk, af, ar);
-        http_patch_async(url, body);
+        /* Пока запись в пути, профиль считается несинхронизированным: если
+         * приложение убьют раньше ответа, следующий вход дошлёт прогресс. */
+        cloud_dirty_set(1);
+        http_patch_async_ex(url, body, 1);
+    } else {
+        /* Без сессии (играли офлайн) покупка живёт только на устройстве -
+         * помечаем, чтобы при первом же входе она ушла в облако. */
+        cloud_dirty_set(1);
     }
 }
 /* Достижения - отдельный маленький файл с единым битмаском: ACH_FLAG_* задают

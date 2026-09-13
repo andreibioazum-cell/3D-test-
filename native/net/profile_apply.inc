@@ -153,9 +153,10 @@ static void push_pg_to_cloud(void) {
  * но никогда не отнимает то, что уже есть на устройстве. Возврат 1 - облако
  * нужно обновить после логина (push_pg_to_cloud в net_auth). */
 static int apply_user_json_keep_local(const char *resp) {
-    int had = 0, restored = 0;
+    int had = 0, restored = 0, dirty = cloud_dirty_get();
     int local_azum = 0, local_santa = 0, local_ebuc = 0, local_cls = 0;
     int local_al = 0, local_au = 0, local_sl = 0, local_su = 0, local_el = 0, local_eu = 0;
+    int local_cups = 0, local_candies = 0, local_ol = 0, local_ou = 0, local_sk = 0;
     progress_read();
     pg_lock();
     if (pg.loaded) {
@@ -165,6 +166,9 @@ static int apply_user_json_keep_local(const char *resp) {
         local_al = pg.azum_level; local_au = pg.azum_levels_unlocked;
         local_sl = pg.santa_level; local_su = pg.santa_levels_unlocked;
         local_el = pg.ebuc_level; local_eu = pg.ebuc_levels_unlocked;
+        local_cups = pg.cups; local_candies = pg.candies;
+        local_ol = pg.ordinary_level; local_ou = pg.ordinary_levels_unlocked;
+        local_sk = pg.azum_skin;
     }
     pg_unlock();
     apply_user_json(resp);
@@ -172,6 +176,17 @@ static int apply_user_json_keep_local(const char *resp) {
     int cloud_azum, cloud_santa, cloud_ebuc;
     pg_lock();
     cloud_azum = pg.azum; cloud_santa = pg.santa; cloud_ebuc = pg.ebuc;
+    /* Последняя запись с этого устройства до облака не дошла: локальный файл
+     * новее облачной записи, поэтому валюты, уровни обычного и скин тоже
+     * берём с устройства (иначе купленное офлайн «оплатится» дважды - кубки
+     * вернутся из облака, а класс останется). */
+    if (dirty) {
+        if (pg.cups != local_cups) { pg.cups = local_cups; restored = 1; }
+        if (pg.candies != local_candies) { pg.candies = local_candies; restored = 1; }
+        if (local_ou > pg.ordinary_levels_unlocked) { pg.ordinary_levels_unlocked = local_ou; restored = 1; }
+        if (local_ol > pg.ordinary_level) { pg.ordinary_level = local_ol; restored = 1; }
+        if (pg.azum_skin != local_sk) { pg.azum_skin = local_sk; restored = 1; }
+    }
     if (local_azum == 1 && pg.azum == 0) { pg.azum = 1; restored = 1; }
     if (local_santa == 1 && pg.santa == 0) { pg.santa = 1; restored = 1; }
     if (local_ebuc == 1 && pg.ebuc == 0) { pg.ebuc = 1; restored = 1; }
@@ -191,6 +206,10 @@ static int apply_user_json_keep_local(const char *resp) {
         else if (local_cls == 2) { local_owned = local_santa; was_in_cloud = cloud_santa; }
         else { local_owned = local_ebuc; was_in_cloud = cloud_ebuc; }
         if (local_owned && !was_in_cloud && pg.cls != local_cls) { pg.cls = local_cls; restored = 1; }
+        /* При «грязном» устройстве локальный выбор тоже свежее облачного. */
+        else if (dirty && local_owned && pg.cls != local_cls) { pg.cls = local_cls; restored = 1; }
+    } else if (dirty && local_cls == 0 && pg.cls != 0) {
+        pg.cls = 0; restored = 1;
     }
     /* Зеркало «уровень выбранного класса» пересобираем под финальный cls. */
     if (pg.cls == 0) { pg.level = pg.ordinary_level; pg.levels_unlocked = pg.ordinary_levels_unlocked; }
@@ -211,6 +230,13 @@ static int apply_user_json_keep_local(const char *resp) {
                        ol, ou, al, au, sl, su, el, eul, bp, sk);
         LOG("restored locally bought progress over cloud (azum=%d santa=%d ebuc=%d cls=%d)",
             azum, santa, ebuc, cls);
+        return 1;
+    }
+    /* Устройство помнит, что последняя запись в облако не дошла (progress.dirty):
+     * даже если по классам расхождений нет, кубки/леденцы/уровни могли
+     * отстать - досылаем весь локальный прогресс. */
+    if (cloud_dirty_get()) {
+        LOG("cloud profile marked stale on device - pushing local progress");
         return 1;
     }
     return 0;

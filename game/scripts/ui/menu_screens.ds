@@ -85,7 +85,7 @@ function draw_class_card(number vi)
     else
         tex(sx, class_sprite_y(), class_idle_tex(cls), 0, scale)
     end
-    centered_text(class_name_of(cls), x, w, class_title_y(), text_color, 1)
+    centered_text(class_name_of(cls), x, w, class_title_y(), text_color, class_title_scale())
     centered_text(class_desc_of(cls), x, w, class_desc_y(), text_color, 0.5)
     centered_text(tr_level() + " " + class_level_of(cls), x, w, class_level_y(), text_color, 0.45)
     button_scaled(class_pick_label(cls), x + class_pick_inset(), class_pick_y(), class_pick_w(), class_pick_h, 0.55)

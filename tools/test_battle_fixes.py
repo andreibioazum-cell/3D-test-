@@ -677,7 +677,9 @@ static void test_status_circles(void) {
 }
 
 static void test_dash_zone_narrow(void) {
-    /* Зона рывка узкая и в уроне, и в рисунке: радиус уменьшен масштабом. */
+    /* Зона рывка в уроне и в рисунке одна: радиус задаётся масштабом.
+     * Масштаб чуть меньше единицы (рывок всё ещё прицельный), но заметно
+     * больше прежних 0.75 - рывок Азума должен попадать чаще. */
     ds_fn_reset_battle();
     game_state = ST_SOLO;
     player->size = 45; enemy->size = 45;
@@ -685,7 +687,8 @@ static void test_dash_zone_narrow(void) {
     double pr = ds_fn_dash_hit_radius_solo();
     near(pr, old_r * dash_hit_radius_scale);
     assert(dash_hit_radius_scale < 1.0);
-    assert(pr * dash_hitbox_zone_scale < old_r);   /* полоса уже прежнего диаметра */
+    assert(dash_hit_radius_scale >= 0.85);
+    assert(pr * dash_hitbox_zone_scale < old_r * 2);   /* полоса уже прежнего диаметра */
     /* Рывок, прошедший в стороне между новым и старым радиусом, больше не бьёт. */
     game_state = ST_ONLINE;
     double remote_old = player->size * 0.65 + 14;

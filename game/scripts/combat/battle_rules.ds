@@ -69,6 +69,9 @@ function player_max_hp_for(number cls)
     if cls==CLASS_EBUC
         return ebuc_hp
     end
+    if cls==CLASS_AZUM
+        return azum_hp
+    end
     return 10
 end
 function ebuc_station_hp_for(number lv)

@@ -70,13 +70,7 @@ function class_desc_of(number cls)
     return tr_class_ordinary_desc()
 end
 function class_hp_of(number cls)
-    if cls == CLASS_AZUM
-        return 20
-    end
-    if cls == CLASS_EBUC
-        return ebuc_hp
-    end
-    return 10
+    return player_max_hp_for(cls)
 end
 function class_power_of(number cls)
     return class_punch_damage_for(cls, class_level_of(cls))
