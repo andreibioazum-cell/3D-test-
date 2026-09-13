@@ -1,0 +1,112 @@
+include graphics
+function tr_battlepass()
+    if language == 1
+        return "Батл Пасс"
+    end
+    return "Battle Pass"
+end
+function tr_quests()
+    if language == 1
+        return "Задания"
+    end
+    return "Quests"
+end
+function tr_top_cups()
+    if language == 1
+        return "Топ (Кубки)"
+    end
+    return "Top (Cups)"
+end
+function tr_top_time()
+    if language == 1
+        return "Топ (Время)"
+    end
+    return "Top (Time)"
+end
+function tr_playtime()
+    if language == 1
+        return "Время игры"
+    end
+    return "Play time"
+end
+function tr_quest_win_solo()
+    if language == 1
+        return "Выиграй соло"
+    end
+    return "Win solo"
+end
+function tr_quest_win_online()
+    if language == 1
+        return "Выиграй онлайн"
+    end
+    return "Win online"
+end
+function tr_quest_collect_candy()
+    if language == 1
+        return "Собери леденцы"
+    end
+    return "Collect candies"
+end
+function tr_quest_play_matches()
+    if language == 1
+        return "Сыграй боев"
+    end
+    return "Play matches"
+end
+function tr_quest_reward(number c, number cd)
+    string out = ""
+    if language == 1
+        out = "+" + c + " кубков, +" + cd + " леденцов"
+    else
+        out = "+" + c + " cups, +" + cd + " candies"
+    end
+    return out
+end
+function tr_bp_reward1()
+    if language == 1
+        return "Обычный 3 уровень"
+    end
+    return "Ordinary lvl 3"
+end
+function tr_bp_reward2()
+    if language == 1
+        return "Скин Зомби Азум"
+    end
+    return "Zombie Azum skin"
+end
+function tr_bp_reward3()
+    if language == 1
+        return "50 леденцов"
+    end
+    return "50 candies"
+end
+function tr_bp_reward4()
+    if language == 1
+        return "100 кубков"
+    end
+    return "100 cups"
+end
+function tr_bp_reward5()
+    if language == 1
+        return "150 кубков + 50 леденцов"
+    end
+    return "150 cups + 50 candies"
+end
+function tr_bp_bought()
+    if language == 1
+        return "Куплено"
+    end
+    return "Bought"
+end
+function tr_bp_buy()
+    if language == 1
+        return "Купить за 100 кубков"
+    end
+    return "Buy for 100 cups"
+end
+function tr_bp_locked()
+    if language == 1
+        return "Закрыт"
+    end
+    return "Locked"
+end

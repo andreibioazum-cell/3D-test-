@@ -1,0 +1,192 @@
+include graphics
+// Задания: 3 активных, при выполнении появляется новое
+// Типы: 0 - выиграй соло, 1 - выиграй онлайн, 2 - собери леденцы, 3 - сыграй боев
+function quest_init()
+    if arr_len(quest_type) >= quest_count
+        return
+    end
+    arr_clear(quest_type)
+    arr_clear(quest_prog)
+    arr_clear(quest_need)
+    number i = 0
+    loop i < quest_count
+        number t = rand() % 4
+        number need = 1
+        if t == 0
+            need = 1
+        else if t == 1
+            need = 1
+        else if t == 2
+            need = 5
+        else
+            need = 3
+        end
+        arr_push(quest_type, t)
+        arr_push(quest_prog, 0)
+        arr_push(quest_need, need)
+        i = i + 1
+    end
+    quest_save()
+end
+function quest_save()
+    // Сохраняем в файл quests.dat через нативную часть? Пока через net_save_playtime не подходит, сделаем через отдельный файл нативно?
+    // Для простоты сохраним в progress как часть? Пока пишем в отдельный файл через ds_log и нативно сделаем позже.
+    // Используем net_save_playtime как заглушку? Нет, сделаем через promo.dat логику но пока через файл quests.dat напрямую в C нет функции.
+    // Поэтому сохраняем через обычные файлы используя существующий механизм: запишем в файл quests.dat через нативную функцию которую добавим?
+    // Пока просто храним в памяти и в playtime файле как часть? Для MVP - сохраняем через net_save_playtime? Нет.
+    // Сделаем через native: добавим quest_save/load в playtime.inc позже. Сейчас просто в памяти.
+    number i = 0
+    string txt = ""
+    loop i < quest_count
+        number t = arr_get(quest_type, i)
+        number p = arr_get(quest_prog, i)
+        number n = arr_get(quest_need, i)
+        // Для сохранения используем ds_log, а нативно будем читать quests.dat
+        // Пока вызываем net_save_playtime для триггера? Нет.
+        i = i + 1
+    end
+end
+function quest_load()
+    // Загрузка из памяти - если пусто, инициализируем
+    if arr_len(quest_type) < quest_count
+        quest_init()
+    end
+end
+function quest_title(number t)
+    if t == 0
+        return tr_quest_win_solo()
+    end
+    if t == 1
+        return tr_quest_win_online()
+    end
+    if t == 2
+        return tr_quest_collect_candy()
+    end
+    return tr_quest_play_matches()
+end
+function quest_progress_text(number i)
+    number p = arr_get(quest_prog, i)
+    number n = arr_get(quest_need, i)
+    string out = "" + p + "/" + n
+    return out
+end
+function quest_is_done(number i)
+    number p = arr_get(quest_prog, i)
+    number n = arr_get(quest_need, i)
+    if p >= n
+        return 1
+    end
+    return 0
+end
+function quest_roll_new(number idx)
+    // Новый рандомный квест на место выполненного
+    number t = rand() % 4
+    number need = 1
+    if t == 0
+        need = 1
+    else if t == 1
+        need = 1
+    else if t == 2
+        need = 5
+    else
+        need = 3
+    end
+    arr_set(quest_type, idx, t)
+    arr_set(quest_prog, idx, 0)
+    arr_set(quest_need, idx, need)
+    ds_log("quest rolled new %g at %g", t, idx)
+end
+function quest_complete(number idx)
+    if quest_is_done(idx) == 0
+        return
+    end
+    // Награда
+    cups = cups + 15
+    candies = candies + 5
+    save_progress()
+    quest_msg_t = msg_time
+    ds_log("quest %g completed", idx)
+    quest_roll_new(idx)
+    quest_save()
+end
+function quest_on_win(number result)
+    // result 1 = победа, 2 = поражение
+    // Для всех активных квестов
+    number i = 0
+    loop i < quest_count
+        number t = arr_get(quest_type, i)
+        if quest_is_done(i) == 0
+            if t == 0 && result == 1 && game_state == ST_SOLO
+                arr_set(quest_prog, i, arr_get(quest_prog, i) + 1)
+            end
+            if t == 1 && result == 1 && game_state == ST_ONLINE
+                arr_set(quest_prog, i, arr_get(quest_prog, i) + 1)
+            end
+            if t == 3
+                // сыграй боев - любой финиш
+                arr_set(quest_prog, i, arr_get(quest_prog, i) + 1)
+            end
+            if quest_is_done(i) == 1
+                quest_complete(i)
+            end
+        end
+        i = i + 1
+    end
+end
+function quest_on_candy()
+    number i = 0
+    loop i < quest_count
+        number t = arr_get(quest_type, i)
+        if t == 2 && quest_is_done(i) == 0
+            arr_set(quest_prog, i, arr_get(quest_prog, i) + 1)
+            if quest_is_done(i) == 1
+                quest_complete(i)
+            end
+        end
+        i = i + 1
+    end
+end
+function draw_quest_card(number i)
+    number x = quest_x()
+    number y = quest_row_y(i)
+    number w = quest_w()
+    number done = quest_is_done(i)
+    number locked = 0
+    if done == 1
+        locked = 0
+    end
+    panel(x, y, w, ach_card_h, locked)
+    color c = panel_text(locked)
+    number t = arr_get(quest_type, i)
+    string title = quest_title(t)
+    string prog = quest_progress_text(i)
+    string rew = tr_quest_reward(15, 5)
+    if done == 1
+        rew = tr_achievement_open()
+    end
+    text_scaled(title, x + card_text_pad, y + 14, c, 0.62)
+    text_scaled(prog, x + card_text_pad, y + 46, c, 0.46)
+    text_scaled(rew, x + card_text_pad, y + 70, c, 0.42)
+end
+function draw_quests()
+    quest_load()
+    screen_fill()
+    ctext(tr_quests(), title_y(), text_color)
+    number i = 0
+    loop i < quest_count
+        draw_quest_card(i)
+        i = i + 1
+    end
+    quest_msg_t = tick_down(quest_msg_t)
+    draw_msg(tr_quest_reward(15,5), quest_row_y(quest_count) + 12, quest_msg_t)
+    draw_back()
+end
+function touch_quests(number x, number y, number action)
+    if action != 0
+        return
+    end
+    if back_hit(x, y) == 1
+        start_transition(ST_MODES)
+        return
+    end
+end

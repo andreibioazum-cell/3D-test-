@@ -12,6 +12,7 @@ function plates_event_reset()
         plates_dirty=0
         save_progress()
     end
+    plates_finished=0
     plates_save_cd=0
     plates_phase=0
     plates_t=0
@@ -131,6 +132,7 @@ function plates_collect_candies()
                 candies=candies+candy_give
                 plates_dirty=1
                 arr_set(plates_candies,b+7,plates_candy_pick_time)
+                quest_on_candy()
                 ds_log("event candy picked -> %g",candies)
             end
         end
@@ -216,8 +218,13 @@ function tick_event_santa()
         save_progress()
     end
     if plates_santa_gone==1&&plates_candies_left()==0
-        ds_log("plates event: round over, plates are back")
-        plates_event_reset()
+        ds_log("plates event: round over, finished one-time")
+        plates_finished=1
+        plates_phase=4
+        if plates_dirty==1
+            plates_dirty=0
+            save_progress()
+        end
     end
 end
 function tick_plates_event()

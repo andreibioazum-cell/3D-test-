@@ -295,6 +295,7 @@ function tick_candies()
                 if dist(arr_get(candy_x,ci),arr_get(candy_y,ci),player.x,player.y)<player.size*0.65+18
                     candies=candies+candy_give
                     save_progress()
+                    quest_on_candy()
                     ds_log("candy picked -> %g",candies)
                     arr_set(candy_pick,ci,candy_pick_time)
                 end

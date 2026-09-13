@@ -58,7 +58,8 @@
         "lang": { ".validate": "newData.isNumber() && (newData.val() == 0 || newData.val() == 1)" },
         "hitboxes": { ".validate": "newData.isNumber() && (newData.val() == 0 || newData.val() == 1)" },
         "musicvol": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
-        "promo": { ".validate": "newData.isString() && newData.val().length >= 18 && newData.val().length <= 24" },
+        "promo": { ".validate": "newData.isString() && newData.val().length >= 4 && newData.val().length <= 24" },
+        "playtime": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000000" },
         "promo_used": { ".validate": "newData.isNumber() && (newData.val() == 0 || newData.val() == 1)" },
         "scale": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 3" },
         "$other": { ".validate": false }

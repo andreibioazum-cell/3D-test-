@@ -1,0 +1,62 @@
+include graphics
+function format_playtime(number secs)
+    number days = floor(secs / 86400)
+    number hours = floor((secs - days * 86400) / 3600)
+    number mins = floor((secs - days * 86400 - hours * 3600) / 60)
+    string out = ""
+    if days > 0
+        out = "" + days + "d " + hours + "h " + mins + "m"
+    else if hours > 0
+        out = "" + hours + "h " + mins + "m"
+    else
+        out = "" + mins + "m"
+    end
+    return out
+end
+function draw_top_time()
+    screen_fill()
+    ctext(tr_top_time(), title_y(), text_color)
+    number w = lb_w()
+    number x = lb_x()
+    number y = lb_top()
+    number secs = net_load_playtime()
+    string my = tr_playtime() + ": " + format_playtime(secs)
+    ctext_scaled(my, y, text_color, 0.6)
+    number top_y = y + 50
+    number status = net_toptime_status()
+    if status == 1
+        ctext(tr_loading(), top_y + 40, text_color)
+    else if status == 4
+        ctext(tr_no_data(), top_y + 40, text_color)
+    else
+        number cnt = net_toptime_count()
+        if cnt <= 0
+            ctext(tr_no_data(), top_y + 40, text_color)
+        else
+            number i = 0
+            loop i < cnt
+                number row_y = top_y + i * 58
+                string nick = net_toptime_nick(i)
+                number pt = net_toptime_playtime(i)
+                panel(x, row_y, w, 52, 0)
+                text_scaled(nick, x + 16, row_y + 10, text_color, 0.55)
+                string tstr = format_playtime(pt)
+                text_scaled(tstr, x + w - 16 - text_ink_width(tstr) * 0.45, row_y + 10, text_color, 0.45)
+                i = i + 1
+            end
+        end
+    end
+    draw_back()
+end
+function touch_top_time(number x, number y, number action)
+    if action != 0
+        return
+    end
+    if back_hit(x, y) == 1
+        start_transition(ST_MODES)
+        return
+    end
+end
+function top_time_fetch()
+    net_toptime_fetch("")
+end

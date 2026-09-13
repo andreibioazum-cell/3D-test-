@@ -27,14 +27,14 @@ typedef struct {
     int loaded;
     int used;
     int streak;
+    int card_found;
 } Promo;
 static Promo pr = { .lock = DS_MUTEX_INIT };
 static void pr_lock(void) { ds_mutex_lock(pr.lock); }
 static void pr_unlock(void) { ds_mutex_unlock(pr.lock); }
 static char s_promo_ret[PROMO_MAX];
 
-/* FNV-1a с солью: код стабилен между сборками (соли зашиты здесь), а
- * разный второй basis даёт независимую вторую половину кода. */
+/* FNV-1a с солью: код стабилен между сборками */
 static unsigned long long promo_hash(const char *nick, unsigned long long basis) {
     const unsigned long long prime = 1099511628211ull;
     unsigned long long h = basis;
@@ -47,15 +47,27 @@ static unsigned long long promo_hash(const char *nick, unsigned long long basis)
     return h;
 }
 
-/* Код формата CB4-XXXX-XXXX-XXXX (12 hex-цифр = 48 бит на два хэша). */
+/* Новый формат: 3 англ буквы + 1 цифра, например ABC7. Детерминированно из ника. */
 static void promo_code_for_nick(const char *nick, char *out, size_t cap) {
     out[0] = 0;
-    if (!nick || !*nick || cap < 20) return;
+    if (!nick || !*nick || cap < 8) return;
     if (strlen(nick) > LOGIN_NICK_MAX) return;
-    unsigned long long a = promo_hash(nick, 1469598103934665603ull);
-    unsigned long long b = promo_hash(nick, 0xCBF29CE484222325ull);
-    snprintf(out, cap, "CB4-%04X-%04X-%04X",
-             (int)(a >> 48), (int)(a >> 16 & 0xFFFF), (int)(b & 0xFFFF));
+    unsigned long long h = promo_hash(nick, 1469598103934665603ull);
+    unsigned long long h2 = promo_hash(nick, 0xCBF29CE484222325ull);
+    char l1 = 'A' + (h % 26);
+    char l2 = 'A' + ((h >> 5) % 26);
+    char l3 = 'A' + ((h >> 10) % 26);
+    char d = '0' + (h2 % 10);
+    /* Перемешиваем позицию цифры по хешу, чтобы было не всегда в конце */
+    int pos = h % 4;
+    char code[5];
+    code[4] = 0;
+    for (int i = 0; i < 4; i++) code[i] = 'A';
+    if (pos == 0) { code[0] = d; code[1] = l1; code[2] = l2; code[3] = l3; }
+    else if (pos == 1) { code[0] = l1; code[1] = d; code[2] = l2; code[3] = l3; }
+    else if (pos == 2) { code[0] = l1; code[1] = l2; code[2] = d; code[3] = l3; }
+    else { code[0] = l1; code[1] = l2; code[2] = l3; code[3] = d; }
+    snprintf(out, cap, "%s", code);
 }
 
 /* Личный код текущего игрока (пусто, если не в аккаунте). */
@@ -74,7 +86,7 @@ const char *net_promo_code(void) {
 static void promo_read(void) {
     char path[320], line[64];
     FILE *f;
-    int used = 0, streak = 0;
+    int used = 0, streak = 0, card_found = 0;
     pr_lock();
     if (pr.loaded) { pr_unlock(); return; }
     pr_unlock();
@@ -85,26 +97,44 @@ static void promo_read(void) {
             int v = 0;
             if (sscanf(line, "used %d", &v) == 1) { used = v ? 1 : 0; continue; }
             if (sscanf(line, "streak %d", &v) == 1) { streak = v < 0 ? 0 : v; continue; }
+            if (sscanf(line, "card_found %d", &v) == 1) { card_found = v ? 1 : 0; continue; }
+            if (sscanf(line, "card %d", &v) == 1) { card_found = v ? 1 : 0; continue; }
         }
         fclose(f);
     }
     pr_lock();
     pr.used = used;
     pr.streak = streak;
+    pr.card_found = card_found;
     pr.loaded = 1;
     pr_unlock();
 }
 
 static void promo_write(void) {
-    char path[320], text[96];
-    int used = 0, streak = 0;
+    char path[320], text[128];
+    int used = 0, streak = 0, card_found = 0;
     promo_read();
     pr_lock();
-    used = pr.used; streak = pr.streak;
+    used = pr.used; streak = pr.streak; card_found = pr.card_found;
     pr_unlock();
     data_file_path(path, sizeof(path), PROMO_FILE);
-    snprintf(text, sizeof(text), "used %d\nstreak %d\n", used, streak);
+    snprintf(text, sizeof(text), "used %d\nstreak %d\ncard_found %d\n", used, streak, card_found);
     file_write_atomic(path, text);
+}
+
+double net_promo_card_found(void) {
+    double v;
+    promo_read();
+    pr_lock(); v = (double)pr.card_found; pr_unlock();
+    return v;
+}
+
+void net_promo_mark_card_found(void) {
+    promo_read();
+    pr_lock();
+    pr.card_found = 1;
+    pr_unlock();
+    promo_write();
 }
 
 double net_promo_used(void) {
