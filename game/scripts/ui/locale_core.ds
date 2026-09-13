@@ -368,3 +368,36 @@ function tr_hitboxes_toggle()
     end
     return "Hitboxes: OFF"
 end
+function tr_fps_label()
+    if language == 1
+        return "Частота кадров"
+    end
+    return "Frame rate"
+end
+function tr_fps_value()
+    if fps_cap == 0
+        if language == 1
+            return "максимум"
+        end
+        return "max"
+    end
+    return fps_cap + " fps"
+end
+function tr_scale_label()
+    if language == 1
+        return "Апскейл"
+    end
+    return "Upscale"
+end
+function tr_scale_value()
+    if render_scale == 1
+        if language == 1
+            return "выкл"
+        end
+        return "off"
+    end
+    if language == 1
+        return "пиксели " + render_scale + "x"
+    end
+    return "pixels " + render_scale + "x"
+end

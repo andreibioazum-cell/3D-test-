@@ -109,6 +109,7 @@ function init()
     start_music()
     progress_from_storage()
     settings_from_storage()
+    apply_video_settings()
     ds_log("init: ready")
 end
 function update_music()

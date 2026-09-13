@@ -130,6 +130,11 @@ string login_nick="", login_pass=""
 string LOBBY_MUSIC="lobbymusic.wav"
 number music_ok=0, music_level=1, music_fade_in_time=0.25, music_fade_out_time=1.0
 number music_volume=70, music_vol_step=10, music_btn_gap=16
+// Экономия заряда (настройки): fps_cap 0 — без ограничения (по умолчанию),
+// render_scale 1 — полный размер; 2..3 — рендер в screen/scale, картина
+// пиксельная, но софтрассеру в scale^2 раз меньше работы (ds_set_* в main.c).
+number fps_cap=0
+number render_scale=1
 number event_mode=0, disco_t=0, event_t=0, event_flakes=44
 number plates_size=150, plates_shrink_time=0.9, plates_stand_r=80
 number plates_xa=0.22, plates_xb=0.78, plates_yy=0.5

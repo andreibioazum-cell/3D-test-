@@ -26,6 +26,28 @@ end
 function hit_menu_row(number px, number py, number i)
     return hit_rect_pad(px, py, menu_x(), menu_row(i), btn_w, btn_h)
 end
+// Настройки: 8 строк (в лобби их 5) — центрируем отдельно, чтобы на низких
+// экранах последние строки не уходили за нижний край.
+number SETTINGS_ROWS=8
+function settings_top()
+    number top = screen_h / 2 - (SETTINGS_ROWS * btn_h + (SETTINGS_ROWS - 1) * btn_gap) / 2
+    if top < 8
+        top = 8
+    end
+    return top
+end
+function settings_row_y(number i)
+    return settings_top() + i * menu_stride()
+end
+function hit_settings_row(number px, number py, number i)
+    return hit_rect_pad(px, py, menu_x(), settings_row_y(i), btn_w, btn_h)
+end
+function hit_settings_music_minus(number px, number py)
+    return hit_rect_pad(px, py, music_minus_x(), settings_row_y(5), music_half_w(), btn_h)
+end
+function hit_settings_music_plus(number px, number py)
+    return hit_rect_pad(px, py, music_plus_x(), settings_row_y(5), music_half_w(), btn_h)
+end
 function music_half_w()
     return (btn_w - music_btn_gap) / 2
 end

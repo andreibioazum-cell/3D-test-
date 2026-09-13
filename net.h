@@ -179,7 +179,9 @@ void net_promo_bump_streak(void);
 void net_promo_reset_streak(void);
 
 /* Настройки игрока: язык (0 — English, 1 — русский, как в ui/locale_core.ds),
- * хитбоксы (1 — видны) и громкость музыки (0..100, по умолчанию 70). Живут в
+ * хитбоксы (1 — видны), громкость музыки (0..100, по умолчанию 70),
+ * лимит FPS (0 — без ограничения, по умолчанию) и апскейл (1..3 — игра
+ * рендерится в screen/scale и растягивается на окно, по умолчанию 1). Живут в
  * settings.dat на устройстве и в профиле /users/<ник> в облаке — то есть
  * сохраняются и там, и там, как прогресс.
  * Реализация — settings_storage.inc. */
@@ -188,6 +190,10 @@ double net_load_hitboxes(void);
 void net_save_settings(double language, double hitboxes);
 double net_load_music_volume(void);
 void net_save_music_volume(double volume);
+double net_load_fps_cap(void);
+void net_save_fps_cap(double cap);
+double net_load_render_scale(void);
+void net_save_render_scale(double scale);
 
 /* Бан система */
 double net_banned(void);

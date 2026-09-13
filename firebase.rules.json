@@ -50,6 +50,7 @@
         "santa_levels": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3" },
         "ebuc_level": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3" },
         "ebuc_levels": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3" },
+        "fps": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 240" },
         "bp": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5" },
         "azum_skin": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1" },
         "ach_flags": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 255" },
@@ -59,6 +60,7 @@
         "musicvol": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
         "promo": { ".validate": "newData.isString() && newData.val().length >= 18 && newData.val().length <= 24" },
         "promo_used": { ".validate": "newData.isNumber() && (newData.val() == 0 || newData.val() == 1)" },
+        "scale": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 3" },
         "$other": { ".validate": false }
       }
     },
