@@ -280,7 +280,7 @@ end
 function candy_rand_pos(number i)
     // Финал в рандомной точке в рандомном направлении от центра, чтобы не было одинакового направления
     number m=candy_margin, k=0
-    number cx=0, cy=0, ang=0, rad=0
+    number cx=0, cy=0, ang=0, rad=0, ang_deg=0
     number max_r=screen_w
     if screen_h < max_r
         max_r=screen_h
@@ -290,9 +290,9 @@ function candy_rand_pos(number i)
         max_r=100
     end
     loop k<40
-        // Каждый вызов rand() даёт новое направление
-        ang=(rand()%360 + rand()%180 + i*137 + k*53)%360
-        ang=ang*pi/180
+        // Каждый вызов rand() даёт новое направление, используем только int для %
+        ang_deg=(rand()%360 + rand()%180 + (int)(i*137) + (int)(k*53)) % 360
+        ang=ang_deg * pi / 180
         rad=60 + rand()%(int)(max_r-60+1)
         cx=screen_w/2 + cos(ang)*rad
         cy=screen_h/2 + sin(ang)*rad
