@@ -2,25 +2,19 @@ function draw_candies()
     if candy_enabled==0
         return
     end
-    number i=0, cp=0, p=0, pop=0, q=0, sc=0, hw=0
+    number i=0, cp=0, p=0, pop=0, sc=0, hw=0
     loop i<candy_count
         cp=arr_get(candy_pick,i)
         if cp>0
-            // Сбор: сжимается и проворачивается, как «в обратную сторону» от появления.
-            q=cp/candy_pick_time
-            sc=candy_scale*q
-            if sc>0.02
-                hw=25*sc
-                tex(arr_get(candy_x,i)-hw,arr_get(candy_y,i)-hw,CANDY_TEX,(1-q)*2*pi,sc)
-            end
+            // При сборе пропадает сразу — не рисуем
         else
-            // Появление: как Дед Мороз — за candy_pop_time дорастает с оборотом.
+            // Появление: просто увеличивается к своей середине, без закрутки и без движения к игроку
             p=clamp(arr_get(candy_t,i)/candy_pop_time,0,1)
             pop=1-(1-p)*(1-p)
             sc=candy_scale*pop
             if sc>0.02
                 hw=25*sc
-                tex(arr_get(candy_x,i)-hw,arr_get(candy_y,i)-hw,CANDY_TEX,(1-pop)*2*pi,sc)
+                tex(arr_get(candy_x,i)-hw,arr_get(candy_y,i)-hw,CANDY_TEX,0,sc)
             end
         end
         i=i+1

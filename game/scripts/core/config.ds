@@ -13,7 +13,7 @@ number stat_hp_color=0xE94560, stat_power_color=0x4FC3F7
 number btn_w=280, btn_h=56, btn_gap=16, btn_radius=20
 number back_y=24, title_gap=12
 number lobby_rows=5
-number modes_rows=6
+number modes_rows=5
 number touch_pad_x=12, touch_pad_y=8
 number screen_margin=40, class_action_gap=40
 number class_count=4, class_gap=14, class_card_h=272
@@ -37,18 +37,14 @@ number ACH_TOAST_DURATION=1.96
 number cups=0, candies=0, cup_win=4, candy_win=3
 number cup_lose=1
 number candy_enabled=1
-// Карточки в соло: шанс 6/100 на матч, +1% за матч без карточки (до 20%),
-// стрик живёт в promo.dat. Награда за код: одна на аккаунт (см. promo.ds).
 number card_chance_base=6, card_chance_step=1, card_chance_cap=20
 number card_drop_min=6, card_drop_max=24
 number promo_reward_cups=50, promo_reward_candies=20
 number money_scale=0.5, money_gap=24, money_line_h=16
 number alert_hold=0.5, finish_t=0
 number cups_awarded=0
-// Задания
 number quest_count=3, quest_msg_t=0
 array quest_type=arr_new(), quest_prog=arr_new(), quest_need=arr_new()
-// Плиты ивент - одноразовый
 number plates_finished=0
 number match_seen_foe=0, foes_seen_t=0, foes_seen_min=1.0
 number CLASS_ORDINARY=0, CLASS_AZUM=1, CLASS_SANTA=2, CLASS_EBUC=3
@@ -108,8 +104,6 @@ number ebuc_universe_particles=140, ebuc_place_heal=0.5, ebuc_beam_heal=0.1
 number universe_fade_in=0.18, universe_fade_out=0.45
 number station_boom_time=0.5
 number turret_max=3, turret_hit_r=30, station_scale=1.6, station_spawn_time=0.2
-// Луч турели рисуется сплошным: плотность и цвет фиксированы, альфа никогда не
-// пульсирует и не зависит от расстояния, поэтому луч не мигает прозрачностью.
 number station_beam_w=15, station_beam_core_w=6, station_beam_pull=32, station_beam_min=2
 number station_beam_alpha=255, station_beam_core_alpha=255
 number station_beam_rgb=0x00E676, station_beam_core_rgb=0x00C8FAD6
@@ -119,9 +113,7 @@ number azum_dash_cd=5.5, azum_dash_time=1.275, azum_dash_speed=300
 number azum_dash_damage=3, azum_dash_stun=1.8, dash_hit_r=34
 number azum_hp=8
 number shadow_off=10, shadow_alpha=0x30
-number candy_count=5, candy_margin=46, candy_scale=0.7, candy_give=1
-// Леденец появляется так же, как Дед Мороз: за candy_pop_time дорастает до
-// размера с оборотом; при сборе за candy_pick_time сжимается и пропадает.
+number candy_count=5, candy_margin=46, candy_scale=0.8, candy_give=1
 number candy_pop_time=0.4, candy_pick_time=0.3
 number dust_max=48, dust_fields=5, dust_life_max=0.6, dust_spawn_cd=0.06, dust_r_max=8, dust_spd=38
 number dust_back_off=34, dust_back_share=0.85, dust_side_share=0.4
@@ -135,15 +127,12 @@ string FB_KEY="AIzaSyDJEqopxP5EqEoxP_ehO3jFXbNztu3DgVs"
 number lb_wait=0, lb_wait_max=8
 number banner_show_time=6, banner_fade=0.5, banner_seen_ts=0, banner_t=0, banner_skip=1
 number login_field=1, login_status=0, login_after=0
-number login_ox=0, login_oy=-20, login_fh=50, login_lab=28, login_lab_ox=12
+number login_ox=0, login_oy=-50, login_fh=50, login_lab=28, login_lab_ox=12
 number login_w=460, login_btn_w=380, login_field_gap=26, login_btn_gap=22
 string login_nick="", login_pass=""
 string LOBBY_MUSIC="lobbymusic.wav"
 number music_ok=0, music_level=1, music_fade_in_time=0.25, music_fade_out_time=1.0
 number music_volume=70, music_vol_step=10, music_btn_gap=16
-// Экономия заряда (настройки): fps_cap 0 — без ограничения (по умолчанию),
-// render_scale 1 — полный размер; 2..3 — рендер в screen/scale, картина
-// пиксельная, но софтрассеру в scale^2 раз меньше работы (ds_set_* в main.c).
 number fps_cap=0
 number render_scale=1
 number event_mode=0, disco_t=0, event_t=0, event_flakes=44
@@ -153,13 +142,9 @@ number plates_santa_size=112, plates_santa_spin=2.2, plates_throw_interval=0.35
 number plates_candy_flight=0.85, plates_candy_max=30, plates_candy_fields=8
 number plates_candy_total=30, plates_collect_time=50
 number plates_candy_vanish_time=0.7, plates_candy_vanish_stagger=0.12
-// Леденцы ивента появляются и собираются с той же анимацией, что Дед Мороз.
 number plates_candy_pop_time=0.4, plates_candy_pick_time=0.3
 number plates_santa_out_time=2.5
-// Луча больше нет: пока два бойца стоят на плитах, они просто «заряжаются»
-// plates_charge_time секунд, затем плиты сжимаются и выходит Дед Мороз.
 number plates_charge_time=2.0
-// Уход Деда Мороза: он не уменьшается, а поворачивается вверх и улетает за экран.
 number plates_santa_turn_time=0.35, plates_santa_fly_acc=2600, plates_santa_fly_speed=1600
 number plates_lock_me=0, plates_save_interval=4
 number warn_open=1, warn_t=0, warn_a=1, warn_hold=2.5, warn_fade=0.6

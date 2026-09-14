@@ -182,6 +182,11 @@ function touch_lobby(number x, number y, number action)
     end
     if hit_menu_row(x, y, 4) == 1
         start_transition(ST_ACHIEVEMENTS)
+        return
+    end
+    if hit_lobby_quests(x, y) == 1
+        quest_load()
+        start_transition(ST_QUESTS)
     end
 end
 function touch_modes(number x, number y)
@@ -203,11 +208,6 @@ function touch_modes(number x, number y)
     end
     if hit_modes_row(x, y, 4) == 1
         start_transition(ST_PROMO)
-        return
-    end
-    if hit_modes_row(x, y, 5) == 1
-        quest_load()
-        start_transition(ST_QUESTS)
     end
 end
 function touch_settings(number x, number y)

@@ -186,7 +186,7 @@ function touch_quests(number x, number y, number action)
         return
     end
     if back_hit(x, y) == 1
-        start_transition(ST_MODES)
+        start_transition(ST_LOBBY)
         return
     end
 end

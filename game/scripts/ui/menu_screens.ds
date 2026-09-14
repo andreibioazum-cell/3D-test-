@@ -40,6 +40,8 @@ function draw_lobby()
     draw_menu_button(2, tr_settings())
     draw_menu_button(3, tr_account())
     draw_menu_button(4, tr_achievements())
+    // Quests button in right bottom corner (position restored, size same as other buttons)
+    button(tr_quests(), lobby_quests_x(), lobby_quests_y(), btn_w, btn_h)
     draw_lobby_nick()
     draw_lobby_money()
     if str_len(banned_msg) > 0
@@ -48,13 +50,12 @@ function draw_lobby()
 end
 function draw_modes()
     screen_fill()
-    // 6 rows: Back, Solo, Online, Top, Promo, Quests
+    // 5 rows: Back, Solo, Online, Top, Promo (Quests moved to lobby)
     button(tr_back(), menu_x(), modes_row(0), btn_w, btn_h)
     button(tr_solo(), menu_x(), modes_row(1), btn_w, btn_h)
     button(tr_online(), menu_x(), modes_row(2), btn_w, btn_h)
     button(tr_top(), menu_x(), modes_row(3), btn_w, btn_h)
     button(tr_promo(), menu_x(), modes_row(4), btn_w, btn_h)
-    button(tr_quests(), menu_x(), modes_row(5), btn_w, btn_h)
 end
 function draw_settings()
     screen_fill()

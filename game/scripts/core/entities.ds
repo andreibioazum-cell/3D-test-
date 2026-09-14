@@ -72,7 +72,7 @@ array runiverse_box_a=arr_new(), rstation_box_a=arr_new()
 array turret_box_a=arr_new(), enemy_turret_box_a=arr_new()
 number thud_seq=0
 array remote_thuds=arr_new()
-array candy_x=arr_new(), candy_y=arr_new(), candy_t=arr_new(), candy_pick=arr_new()
+array candy_x=arr_new(), candy_y=arr_new(), candy_t=arr_new(), candy_pick=arr_new(), candy_ang=arr_new()
 array dust=arr_new()
 array remote_dust_cd=arr_new()
 string banned_msg=""

@@ -75,6 +75,15 @@ end
 function lobby_msg_y()
     return lobby_money_y() + money_line_h + 6
 end
+function lobby_quests_x()
+    return screen_w - btn_w - 20
+end
+function lobby_quests_y()
+    return screen_h - btn_h - 20
+end
+function hit_lobby_quests(number px, number py)
+    return hit_rect_pad(px, py, lobby_quests_x(), lobby_quests_y(), btn_w, btn_h)
+end
 function classes_card_w()
     number n = classes_visible_count()
     if n < 1
