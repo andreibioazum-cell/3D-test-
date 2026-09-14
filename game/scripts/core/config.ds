@@ -12,8 +12,8 @@ number locked_shade=0.75, locked_text_alpha=191
 number stat_hp_color=0xE94560, stat_power_color=0x4FC3F7
 number btn_w=280, btn_h=56, btn_gap=16, btn_radius=20
 number back_y=24, title_gap=12
-number lobby_rows=5
-number modes_rows=6
+number lobby_rows=6
+number modes_rows=5
 number touch_pad_x=12, touch_pad_y=8
 number screen_margin=40, class_action_gap=40
 number class_count=4, class_gap=14, class_card_h=272
@@ -135,7 +135,7 @@ string FB_KEY="AIzaSyDJEqopxP5EqEoxP_ehO3jFXbNztu3DgVs"
 number lb_wait=0, lb_wait_max=8
 number banner_show_time=6, banner_fade=0.5, banner_seen_ts=0, banner_t=0, banner_skip=1
 number login_field=1, login_status=0, login_after=0
-number login_ox=0, login_oy=-20, login_fh=50, login_lab=28, login_lab_ox=12
+number login_ox=0, login_oy=-50, login_fh=50, login_lab=28, login_lab_ox=12
 number login_w=460, login_btn_w=380, login_field_gap=26, login_btn_gap=22
 string login_nick="", login_pass=""
 string LOBBY_MUSIC="lobbymusic.wav"
