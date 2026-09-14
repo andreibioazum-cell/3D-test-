@@ -140,6 +140,7 @@ function reset_battle()
     arr_clear(candy_y)
     arr_clear(candy_t)
     arr_clear(candy_pick)
+    arr_clear(candy_ang)
     arr_clear(remote_snow)
     arr_clear(remote_station)
     arr_clear(remote_universe)
@@ -277,25 +278,24 @@ function spawn_enemy()
     ds_log("enemy spawned instantly")
 end
 function candy_rand_pos(number i)
-    // Появление в рандомном направлении от центра экрана
+    // Финал в рандомной точке в рандомном направлении от центра, чтобы не было одинакового направления
     number m=candy_margin, k=0
-    number cx=0, cy=0
-    number ang=0, rad=0
-    loop k<32
-        ang=(rand()%360)*pi/180
-        // радиус от 90 до половины экрана минус margin
-        number max_r=screen_w
-        if screen_h < max_r
-            max_r=screen_h
-        end
-        max_r=max_r/2 - m - 20
-        if max_r < 90
-            max_r=90
-        end
-        rad=90 + rand()%(int)(max_r-90+1)
+    number cx=0, cy=0, ang=0, rad=0
+    number max_r=screen_w
+    if screen_h < max_r
+        max_r=screen_h
+    end
+    max_r=max_r/2 - m - 10
+    if max_r < 100
+        max_r=100
+    end
+    loop k<40
+        // Каждый вызов rand() даёт новое направление
+        ang=(rand()%360 + rand()%180 + i*137 + k*53)%360
+        ang=ang*pi/180
+        rad=60 + rand()%(int)(max_r-60+1)
         cx=screen_w/2 + cos(ang)*rad
         cy=screen_h/2 + sin(ang)*rad
-        // clamp в границы экрана
         if cx < m
             cx=m
         end
@@ -311,12 +311,13 @@ function candy_rand_pos(number i)
         if dist(cx,cy,player.x,player.y)<80||dist(cx,cy,enemy.x,enemy.y)<80
             k=k+1
         else
-            k=32
+            k=40
         end
     end
+    // Сохраняем угол для возможного использования, но появление — просто к середине
     arr_set(candy_x,i,cx)
     arr_set(candy_y,i,cy)
-    // Новое место = новое появление: анимация только размером, без закрутки
+    arr_set(candy_ang,i,ang)
     arr_set(candy_t,i,0)
 end
 function spawn_all_candies()

@@ -113,7 +113,7 @@ number azum_dash_cd=5.5, azum_dash_time=1.275, azum_dash_speed=300
 number azum_dash_damage=3, azum_dash_stun=1.8, dash_hit_r=34
 number azum_hp=8
 number shadow_off=10, shadow_alpha=0x30
-number candy_count=5, candy_margin=46, candy_scale=1.2, candy_give=1
+number candy_count=5, candy_margin=46, candy_scale=0.8, candy_give=1
 number candy_pop_time=0.4, candy_pick_time=0.3
 number dust_max=48, dust_fields=5, dust_life_max=0.6, dust_spawn_cd=0.06, dust_r_max=8, dust_spd=38
 number dust_back_off=34, dust_back_share=0.85, dust_side_share=0.4

@@ -113,13 +113,8 @@ function plates_collect_candies()
             number v=arr_get(plates_candies,b+6)
             number pt=arr_get(plates_candies,b+7)
             if pt>0
-                // Идёт pop-out после сбора: только когда доиграет — леденец снят.
-                pt=pt-dt
-                if pt<=0
-                    arr_set(plates_candies,b,0)
-                else
-                    arr_set(plates_candies,b+7,pt)
-                end
+                // Старая анимация сбора больше не нужна — сразу исчезает
+                arr_set(plates_candies,b,0)
             else if t<plates_candy_flight
                 arr_set(plates_candies,b+1,t+dt)
             else if v>0
@@ -131,7 +126,8 @@ function plates_collect_candies()
             else if dist(arr_get(plates_candies,b+4),arr_get(plates_candies,b+5),player.x,player.y)<player.size*0.65+18
                 candies=candies+candy_give
                 plates_dirty=1
-                arr_set(plates_candies,b+7,plates_candy_pick_time)
+                // Пропадает сразу, без анимации
+                arr_set(plates_candies,b,0)
                 quest_on_candy()
                 ds_log("event candy picked -> %g",candies)
             end
@@ -331,18 +327,12 @@ function draw_event_candies()
             yy=arr_get(plates_candies,b+3)+(arr_get(plates_candies,b+5)-arr_get(plates_candies,b+3))*e
             pt=arr_get(plates_candies,b+7)
             if pt>0
-                // Сбор: просто уменьшается в размере, без закрутки
-                q=pt/plates_candy_pick_time
-                sc=candy_scale*q
-                if sc>0.02
-                    hw=25*sc
-                    tex(xx-hw,yy-hw,CANDY_TEX,0,sc)
-                end
+                // При сборе пропадает сразу — не рисуем
             else if v>0.02
-                // Появление: просто увеличивается в размере, без закрутки, летит в рандомном направлении
+                // Появление: просто увеличивается к своей середине, без закрутки, летит в рандомном направлении из центра
                 p=clamp(t/plates_candy_pop_time,0,1)
                 pop=1-(1-p)*(1-p)
-                sc=candy_scale*pop*(1+0.2*sin(pi*k))*v
+                sc=candy_scale*pop*v
                 if sc>0.02
                     hw=25*sc
                     tex(xx-hw,yy-hw,CANDY_TEX,0,sc)

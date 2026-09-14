@@ -275,21 +275,18 @@ function tick_dash()
         end
     end
 end
-// Соло-леденцы: появление и сбор — с той же анимацией, что у Деда Мороза.
-// Сбор не телепортирует леденец мгновенно: candy_pick заводит pop-out, а
-// только когда он доигран, леденец возрождается в новой случайной точке.
+// Соло-леденцы: появляются с анимацией только размером (без закрутки, в середину),
+// при сборе пропадают сразу и респавнятся в новой рандомной точке.
 function tick_candies()
     if candy_enabled==1
         number ci=0
         loop ci<candy_count
             number cp=arr_get(candy_pick,ci)
             if cp>0
-                cp=cp-dt
-                if cp<=0
-                    cp=0
-                    candy_rand_pos(ci)
-                end
-                arr_set(candy_pick,ci,cp)
+                // Старая логика с задержкой больше не используется — сразу респавн
+                cp=0
+                candy_rand_pos(ci)
+                arr_set(candy_pick,ci,0)
             else
                 arr_set(candy_t,ci,arr_get(candy_t,ci)+dt)
                 if dist(arr_get(candy_x,ci),arr_get(candy_y,ci),player.x,player.y)<player.size*0.65+18
@@ -297,7 +294,10 @@ function tick_candies()
                     save_progress()
                     quest_on_candy()
                     ds_log("candy picked -> %g",candies)
-                    arr_set(candy_pick,ci,candy_pick_time)
+                    // Пропадает сразу, без анимации уменьшения
+                    candy_rand_pos(ci)
+                    arr_set(candy_pick,ci,0)
+                    arr_set(candy_t,ci,0)
                 end
             end
             ci=ci+1
