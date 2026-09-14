@@ -331,21 +331,21 @@ function draw_event_candies()
             yy=arr_get(plates_candies,b+3)+(arr_get(plates_candies,b+5)-arr_get(plates_candies,b+3))*e
             pt=arr_get(plates_candies,b+7)
             if pt>0
-                // Сбор: сжимается и проворачивается на месте, как у соло-леденцов.
+                // Сбор: просто уменьшается в размере, без закрутки
                 q=pt/plates_candy_pick_time
                 sc=candy_scale*q
                 if sc>0.02
                     hw=25*sc
-                    tex(xx-hw,yy-hw,CANDY_TEX,(1-q)*2*pi,sc)
+                    tex(xx-hw,yy-hw,CANDY_TEX,0,sc)
                 end
             else if v>0.02
-                // Появление: как Дед Мороз — дорастает с оборотом, пока летит.
+                // Появление: просто увеличивается в размере, без закрутки, летит в рандомном направлении
                 p=clamp(t/plates_candy_pop_time,0,1)
                 pop=1-(1-p)*(1-p)
-                sc=candy_scale*pop*(1+0.45*sin(pi*k))*v
+                sc=candy_scale*pop*(1+0.2*sin(pi*k))*v
                 if sc>0.02
                     hw=25*sc
-                    tex(xx-hw,yy-hw,CANDY_TEX,i*1.7+k*5+(1-v)*4,sc)
+                    tex(xx-hw,yy-hw,CANDY_TEX,0,sc)
                 end
             end
         end

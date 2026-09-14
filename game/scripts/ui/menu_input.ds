@@ -184,7 +184,7 @@ function touch_lobby(number x, number y, number action)
         start_transition(ST_ACHIEVEMENTS)
         return
     end
-    if hit_menu_row(x, y, 5) == 1
+    if hit_lobby_quests(x, y) == 1
         quest_load()
         start_transition(ST_QUESTS)
     end

@@ -277,20 +277,46 @@ function spawn_enemy()
     ds_log("enemy spawned instantly")
 end
 function candy_rand_pos(number i)
+    // Появление в рандомном направлении от центра экрана
     number m=candy_margin, k=0
-    number cx=m+rand()%(int)(screen_w-2*m), cy=m+rand()%(int)(screen_h-2*m)
-    loop k<24
+    number cx=0, cy=0
+    number ang=0, rad=0
+    loop k<32
+        ang=(rand()%360)*pi/180
+        // радиус от 90 до половины экрана минус margin
+        number max_r=screen_w
+        if screen_h < max_r
+            max_r=screen_h
+        end
+        max_r=max_r/2 - m - 20
+        if max_r < 90
+            max_r=90
+        end
+        rad=90 + rand()%(int)(max_r-90+1)
+        cx=screen_w/2 + cos(ang)*rad
+        cy=screen_h/2 + sin(ang)*rad
+        // clamp в границы экрана
+        if cx < m
+            cx=m
+        end
+        if cx > screen_w - m
+            cx=screen_w - m
+        end
+        if cy < m
+            cy=m
+        end
+        if cy > screen_h - m
+            cy=screen_h - m
+        end
         if dist(cx,cy,player.x,player.y)<80||dist(cx,cy,enemy.x,enemy.y)<80
-            cx=m+rand()%(int)(screen_w-2*m)
-            cy=m+rand()%(int)(screen_h-2*m)
             k=k+1
         else
-            k=24
+            k=32
         end
     end
     arr_set(candy_x,i,cx)
     arr_set(candy_y,i,cy)
-    // Новое место = новое появление: анимация pop-а запускается заново.
+    // Новое место = новое появление: анимация только размером, без закрутки
     arr_set(candy_t,i,0)
 end
 function spawn_all_candies()

@@ -6,21 +6,21 @@ function draw_candies()
     loop i<candy_count
         cp=arr_get(candy_pick,i)
         if cp>0
-            // Сбор: сжимается и проворачивается, как «в обратную сторону» от появления.
+            // Сбор: просто уменьшается в размере, без закрутки
             q=cp/candy_pick_time
             sc=candy_scale*q
             if sc>0.02
                 hw=25*sc
-                tex(arr_get(candy_x,i)-hw,arr_get(candy_y,i)-hw,CANDY_TEX,(1-q)*2*pi,sc)
+                tex(arr_get(candy_x,i)-hw,arr_get(candy_y,i)-hw,CANDY_TEX,0,sc)
             end
         else
-            // Появление: как Дед Мороз — за candy_pop_time дорастает с оборотом.
+            // Появление: просто увеличивается в размере, без закрутки, в рандомном направлении от центра (позиция уже рандомная)
             p=clamp(arr_get(candy_t,i)/candy_pop_time,0,1)
             pop=1-(1-p)*(1-p)
             sc=candy_scale*pop
             if sc>0.02
                 hw=25*sc
-                tex(arr_get(candy_x,i)-hw,arr_get(candy_y,i)-hw,CANDY_TEX,(1-pop)*2*pi,sc)
+                tex(arr_get(candy_x,i)-hw,arr_get(candy_y,i)-hw,CANDY_TEX,0,sc)
             end
         end
         i=i+1
