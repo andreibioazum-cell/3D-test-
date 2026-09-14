@@ -26,9 +26,9 @@ end
 function hit_menu_row(number px, number py, number i)
     return hit_rect_pad(px, py, menu_x(), menu_row(i), btn_w, btn_h)
 end
-// Настройки: 8 строк (в лобби их 5) — центрируем отдельно, чтобы на низких
+// Настройки: 6 строк (в лобби их 5) — центрируем отдельно, чтобы на низких
 // экранах последние строки не уходили за нижний край.
-number SETTINGS_ROWS=8
+number SETTINGS_ROWS=6
 function settings_top()
     number top = screen_h / 2 - (SETTINGS_ROWS * btn_h + (SETTINGS_ROWS - 1) * btn_gap) / 2
     if top < 8
@@ -295,4 +295,20 @@ function quest_row_y(number i)
 end
 function hit_quest_row(number px, number py, number i)
     return hit_rect(px, py, quest_x(), quest_row_y(i), quest_w(), ach_card_h)
+end
+// Квесты в главном меню справа снизу — небольшая кнопка
+function lobby_quest_w()
+    return 148
+end
+function lobby_quest_h()
+    return 48
+end
+function lobby_quest_x()
+    return screen_w - lobby_quest_w() - 20
+end
+function lobby_quest_y()
+    return screen_h - lobby_quest_h() - 18
+end
+function hit_lobby_quest(number px, number py)
+    return hit_rect_pad(px, py, lobby_quest_x(), lobby_quest_y(), lobby_quest_w(), lobby_quest_h())
 end

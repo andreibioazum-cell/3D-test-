@@ -163,6 +163,12 @@ function touch_lobby(number x, number y, number action)
     if action != 0
         return
     end
+    if hit_lobby_quest(x, y) == 1
+        quest_load()
+        quest_prev_state = ST_LOBBY
+        start_transition(ST_QUESTS)
+        return
+    end
     if hit_menu_row(x, y, 0) == 1
         start_transition(ST_MODES)
         return
@@ -207,6 +213,7 @@ function touch_modes(number x, number y)
     end
     if hit_modes_row(x, y, 5) == 1
         quest_load()
+        quest_prev_state = ST_MODES
         start_transition(ST_QUESTS)
     end
 end
@@ -236,18 +243,6 @@ function touch_settings(number x, number y)
     end
     if hit_settings_music_plus(x, y) == 1
         music_volume_step(music_vol_step)
-        return
-    end
-    if hit_settings_row(x, y, 6) == 1
-        fps_cap = next_fps_cap(fps_cap)
-        save_settings()
-        ds_set_fps_cap(fps_cap)
-        return
-    end
-    if hit_settings_row(x, y, 7) == 1
-        render_scale = next_render_scale(render_scale)
-        save_settings()
-        ds_set_render_scale(render_scale)
         return
     end
 end

@@ -305,8 +305,16 @@ function back_pressed()
         start_transition(ST_CLASSES)
         return 1
     end
-    if game_state == ST_LEADERBOARD || game_state == ST_PROMO || game_state == ST_QUESTS
+    if game_state == ST_LEADERBOARD || game_state == ST_PROMO
         start_transition(ST_MODES)
+        return 1
+    end
+    if game_state == ST_QUESTS
+        if quest_prev_state == ST_LOBBY
+            start_transition(ST_LOBBY)
+        else
+            start_transition(ST_MODES)
+        end
         return 1
     end
     if game_state == ST_LOGIN

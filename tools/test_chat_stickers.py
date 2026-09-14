@@ -206,18 +206,18 @@ static void test_send_and_touch(void) {
 }
 
 static void test_video_settings(void) {
-    /* Циклы значений в настройках: FPS макс -> 60 -> 30 -> макс, апскейл 1 -> 2 -> 3. */
+    /* Циклы значений в настройках: FPS макс -> 60 -> 30 -> макс, апскейл 1 -> 2 -> 3 — функции остались, но из UI убраны. */
     assert(ds_fn_next_fps_cap(0) == 60);
     assert(ds_fn_next_fps_cap(60) == 30);
     assert(ds_fn_next_fps_cap(30) == 0);
     assert(ds_fn_next_render_scale(1) == 2);
     assert(ds_fn_next_render_scale(2) == 3);
     assert(ds_fn_next_render_scale(3) == 1);
-    /* Все 8 строк настроек помещаются на низком (landscape) экране. */
+    /* Настройки теперь 6 строк (FPS и апскейл убраны), должны помещаться на низком экране. */
     screen_h = 720;
-    assert(ds_fn_settings_row_y(7) + 56 <= screen_h - 4);
+    assert(ds_fn_settings_row_y(5) + 56 <= screen_h - 4);
     screen_h = 1280;
-    assert(ds_fn_settings_row_y(7) + 56 <= screen_h - 4);
+    assert(ds_fn_settings_row_y(5) + 56 <= screen_h - 4);
     puts("video settings: fps/scale cycling and settings screen fit OK");
 }
 
@@ -285,13 +285,14 @@ def main():
         assert "sticker_menu_open == 1" in draw_body
         touch_body = "".join(compiler.functions["touch_chat"][1])
         assert "chat_send_sticker(" in touch_body
-        # Настройки: FPS и апскейл меняются из экрана настроек.
+        # Настройки: FPS и апскейл убраны из экрана настроек (6 строк).
         settings_body = "".join(compiler.functions["draw_settings"][1])
-        assert "tr_fps_label()" in settings_body and "tr_scale_label()" in settings_body
-        assert "settings_row_y(7)" in settings_body
+        assert "tr_fps_label()" not in settings_body and "tr_scale_label()" not in settings_body
+        assert "settings_row_y(5)" in settings_body
+        assert "settings_row_y(7)" not in settings_body
         touch_settings_body = "".join(compiler.functions["touch_settings"][1])
-        assert "ds_set_fps_cap(" in touch_settings_body
-        assert "ds_set_render_scale(" in touch_settings_body
+        assert "ds_set_fps_cap(" not in touch_settings_body
+        assert "ds_set_render_scale(" not in touch_settings_body
         bubble_body = "".join(compiler.functions["draw_chat_bubble_at"][1])
         assert "chat_sticker_tex(" in bubble_body
         android = temp / "android"
