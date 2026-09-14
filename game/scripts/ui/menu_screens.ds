@@ -33,6 +33,7 @@ function draw_lobby_money()
 end
 function draw_lobby()
     check_achievements()
+    quest_load()
     screen_fill()
     ctext("Cubic Battle 4", lobby_title_y(), text_color)
     draw_menu_button(0, tr_play())
@@ -45,6 +46,29 @@ function draw_lobby()
     if str_len(banned_msg) > 0
         ctext(banned_msg, lobby_msg_y(), text_color)
     end
+    // Квесты справа снизу — компактная кнопка с прогрессом
+    number qx = lobby_quest_x(), qy = lobby_quest_y(), qw = lobby_quest_w(), qh = lobby_quest_h()
+    roundrect(qx, qy, qw, qh, 16, ui_purple)
+    // иконка/текст: показываем общий прогресс квестов
+    number done = 0, tot = quest_count, ii = 0
+    loop ii < quest_count
+        if quest_is_done(ii) == 1
+            done = done + 1
+        end
+        ii = ii + 1
+    end
+    // Считаем общий прогресс
+    number prog_sum = 0, need_sum = 0, k = 0
+    loop k < quest_count
+        prog_sum = prog_sum + clamp(arr_get(quest_prog, k), 0, arr_get(quest_need, k))
+        need_sum = need_sum + arr_get(quest_need, k)
+        k = k + 1
+    end
+    string label = tr_quests() + " " + prog_sum + "/" + need_sum
+    if done > 0
+        label = tr_quests() + " !"
+    end
+    text_in_box(label, qx, qy, qw, qh, text_color, 0.62)
 end
 function draw_modes()
     screen_fill()
@@ -65,8 +89,6 @@ function draw_settings()
     text_in_box(tr_music_vol() + ": " + music_volume + "%", menu_x(), settings_row_y(4), btn_w, btn_h, text_color, 0.7)
     button_scaled("-" + music_vol_step + "%", music_minus_x(), settings_row_y(5), music_half_w(), btn_h, 0.7)
     button_scaled("+" + music_vol_step + "%", music_plus_x(), settings_row_y(5), music_half_w(), btn_h, 0.7)
-    text_in_box(tr_fps_label() + ": " + tr_fps_value(), menu_x(), settings_row_y(6), btn_w, btn_h, text_color, 0.7)
-    text_in_box(tr_scale_label() + ": " + tr_scale_value(), menu_x(), settings_row_y(7), btn_w, btn_h, text_color, 0.7)
 end
 function draw_class_card(number vi)
     number cls = visible_class_at(vi)

@@ -34,7 +34,7 @@ number azum_revive_count=0
 number ach_toast_bit=0, ach_toast_t=0
 number ACH_TOAST_FADE_IN=0.14, ACH_TOAST_HOLD=1.5, ACH_TOAST_EXIT=0.24
 number ACH_TOAST_DURATION=1.96
-number cups=0, candies=0, cup_win=4, candy_win=3
+number cups=0, candies=0, cup_win=5, candy_win=3
 number cup_lose=1
 number candy_enabled=1
 // Карточки в соло: шанс 6/100 на матч, +1% за матч без карточки (до 20%),
@@ -47,6 +47,7 @@ number alert_hold=0.5, finish_t=0
 number cups_awarded=0
 // Задания
 number quest_count=3, quest_msg_t=0
+number quest_reward_cups=7, quest_reward_candies=2
 array quest_type=arr_new(), quest_prog=arr_new(), quest_need=arr_new()
 // Плиты ивент - одноразовый
 number plates_finished=0
