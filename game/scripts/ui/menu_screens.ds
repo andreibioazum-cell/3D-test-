@@ -1,37 +1,36 @@
-include graphics
-function draw_menu_button(number row, string label)
+public function draw_menu_button(number row, string label)
     button(label, menu_x(), menu_row(row), btn_w, btn_h)
 end
-function draw_lobby_nick()
-    if net_login_status() != 2
+public function draw_lobby_nick()
+    if net_login_status() != 2 then
         return
     end
-    string nick = net_login_nick()
-    if str_len(nick) == 0
+    local string nick = net_login_nick()
+    if str_len(nick) == 0 then
         return
     end
-    string pre = tr_hello_pre()
-    string post = tr_hello_post()
-    number scale = 0.5
-    number pw = text_ink_width(pre) * scale
-    number nw = text_ink_width(nick) * scale
-    number qw = text_ink_width(post) * scale
-    number x = (screen_w - pw - nw - qw) / 2
-    number y = lobby_hello_y()
+    local string pre = tr_hello_pre()
+    local string post = tr_hello_post()
+    local number scale = 0.5
+    local number pw = text_ink_width(pre) * scale
+    local number nw = text_ink_width(nick) * scale
+    local number qw = text_ink_width(post) * scale
+    local number x = (screen_w - pw - nw - qw) / 2
+    local number y = lobby_hello_y()
     text_scaled(pre, x, y, text_color, scale)
     text_scaled(nick, x + pw, y, admin_color_of(nick, text_color), scale)
     text_scaled(post, x + pw + nw, y, text_color, scale)
 end
-function draw_lobby_money()
-    string cup_s = tr_cups() + ": " + cups
-    if candy_enabled == 0
+public function draw_lobby_money()
+    local string cup_s = tr_cups() + ": " + cups
+    if candy_enabled == 0 then
         ctext_scaled(cup_s, lobby_money_y(), text_color, money_scale)
         return
     end
-    string cd_s = tr_candies() + ": " + candies
+    local string cd_s = tr_candies() + ": " + candies
     money_pair(cup_s, cd_s, lobby_money_y(), money_scale, money_gap)
 end
-function draw_lobby()
+public function draw_lobby()
     check_achievements()
     screen_fill()
     ctext("Cubic Battle 4", lobby_title_y(), text_color)
@@ -40,24 +39,24 @@ function draw_lobby()
     draw_menu_button(2, tr_settings())
     draw_menu_button(3, tr_account())
     draw_menu_button(4, tr_achievements())
-    // Quests button in right bottom corner (position restored, size same as other buttons)
+    -- Quests button in right bottom corner (position restored, size same as other buttons)
     button(tr_quests(), lobby_quests_x(), lobby_quests_y(), btn_w, btn_h)
     draw_lobby_nick()
     draw_lobby_money()
-    if str_len(banned_msg) > 0
+    if str_len(banned_msg) > 0 then
         ctext(banned_msg, lobby_msg_y(), text_color)
     end
 end
-function draw_modes()
+public function draw_modes()
     screen_fill()
-    // 5 rows: Back, Solo, Online, Top, Promo (Quests moved to lobby)
+    -- 5 rows: Back, Solo, Online, Top, Promo (Quests moved to lobby)
     button(tr_back(), menu_x(), modes_row(0), btn_w, btn_h)
     button(tr_solo(), menu_x(), modes_row(1), btn_w, btn_h)
     button(tr_online(), menu_x(), modes_row(2), btn_w, btn_h)
     button(tr_top(), menu_x(), modes_row(3), btn_w, btn_h)
     button(tr_promo(), menu_x(), modes_row(4), btn_w, btn_h)
 end
-function draw_settings()
+public function draw_settings()
     screen_fill()
     button(tr_back(), menu_x(), settings_row_y(0), btn_w, btn_h)
     button("English", menu_x(), settings_row_y(1), btn_w, btn_h)
@@ -68,21 +67,23 @@ function draw_settings()
     button_scaled("+" + music_vol_step + "%", music_plus_x(), settings_row_y(5), music_half_w(), btn_h, 0.7)
     text_in_box(tr_fps_label() + ": " + tr_fps_value(), menu_x(), settings_row_y(6), btn_w, btn_h, text_color, 0.7)
     text_in_box(tr_scale_label() + ": " + tr_scale_value(), menu_x(), settings_row_y(7), btn_w, btn_h, text_color, 0.7)
+    button_scaled(tr_winter_toggle(), menu_x(), settings_row_y(8), btn_w, btn_h, 0.8)
+    button_scaled(tr_fps_meter_toggle(), menu_x(), settings_row_y(9), btn_w, btn_h, 0.8)
 end
-function draw_class_card(number vi)
-    number cls = visible_class_at(vi)
-    number x = classes_card_x(vi)
-    number w = classes_card_w()
-    number selected = 0
-    if player_class == cls && class_owned_of(cls) == 1
+public function draw_class_card(number vi)
+    local number cls = visible_class_at(vi)
+    local number x = classes_card_x(vi)
+    local number w = classes_card_w()
+    local number selected = 0
+    if player_class == cls && class_owned_of(cls) == 1 then
         selected = 1
     end
     card(x, classes_top(), w, class_card_h, selected)
-    number scale = class_sprite_scale()
-    number sprite = 50 * scale
-    number sx = x + (w - sprite) / 2
-    if class_skin_active(cls) == 1
-        if zombie_tex_ok() == 1
+    local number scale = class_sprite_scale()
+    local number sprite = 50 * scale
+    local number sx = x + (w - sprite) / 2
+    if class_skin_active(cls) == 1 then
+        if zombie_tex_ok() == 1 then
             tex(sx, class_sprite_y(), AZUM_ZOMBIE_TEX, 0, scale)
         else
             tex(sx, class_sprite_y(), class_idle_tex(cls), 0, scale)
@@ -91,32 +92,37 @@ function draw_class_card(number vi)
         tex(sx, class_sprite_y(), class_idle_tex(cls), 0, scale)
     end
     centered_text(class_name_of(cls), x, w, class_title_y(), text_color, class_title_scale())
-    centered_text(class_desc_of(cls), x, w, class_desc_y(), text_color, 0.5)
+    -- Девиз у буК длинный («You thought I was a regular cube...»), поэтому
+    -- масштаб подбираем по ширине карточки: надпись всегда внутри неё.
+    local string motto = class_desc_of(cls)
+    centered_text(motto, x, w, class_desc_y(), text_color, fit_text_scale(motto, w - 16, 0.5))
     centered_text(tr_level() + " " + class_level_of(cls), x, w, class_level_y(), text_color, 0.45)
     button_scaled(class_pick_label(cls), x + class_pick_inset(), class_pick_y(), class_pick_w(), class_pick_h, 0.55)
 end
-function draw_stat_row(string label, number x, number y, number w, number h, number cur, number maxv, color c)
+public function draw_stat_row(string label, number x, number y, number w, number h, number cur, number maxv, color c)
     text_scaled(label, x, y - 26, text_color, 0.5)
     hud_bar(x, y, w, h, cur, maxv, c, 0)
 end
-function draw_class_stats()
-    number w = stat_bar_w()
-    number x = center_x(w)
-    number hp = class_hp_of(player_class)
-    number power = class_power_of(player_class)
-    ctext_scaled(class_desc_of(player_class), stat_motto_y(), text_color, 0.8)
+public function draw_class_stats()
+    local number w = stat_bar_w()
+    local number x = center_x(w)
+    local number hp = class_hp_of(player_class)
+    local number power = class_power_of(player_class)
+    local string smotto = class_desc_of(player_class)
+    ctext_scaled(smotto, stat_motto_y(), text_color,
+        fit_text_scale(smotto, screen_w - 2 * screen_margin, 0.8))
     draw_stat_row(tr_hp() + ": " + hp, x, stat_hp_y(), w, stat_bar_h(), hp, 20, stat_hp_color)
     draw_stat_row(tr_strength() + ": " + power, x, stat_power_y(), w, stat_bar_h(), power, 2, stat_power_color)
 end
-function draw_classes()
+public function draw_classes()
     screen_fill()
-    number vi = 0
-    loop vi < classes_visible_count()
+    local number vi = 0
+    while vi < classes_visible_count() do
         draw_class_card(vi)
         vi = vi + 1
     end
     button_scaled(tr_levels(), levels_btn_x(), class_actions_y(), class_action_w(), btn_h, 0.9)
-    if skins_btn_visible() == 1
+    if skins_btn_visible() == 1 then
         button_scaled(tr_skins(), skins_btn_x(), class_actions_y(), class_action_w(), btn_h, 0.9)
     end
     class_msg_t = tick_down(class_msg_t)
@@ -124,12 +130,12 @@ function draw_classes()
     draw_class_stats()
     draw_back()
 end
-function draw_level_row(number n)
-    number x = levels_x()
-    number w = levels_w()
-    number y = levels_row_y(n)
-    number selected = 0
-    if player_level == n && n <= levels_unlocked
+public function draw_level_row(number n)
+    local number x = levels_x()
+    local number w = levels_w()
+    local number y = levels_row_y(n)
+    local number selected = 0
+    if player_level == n && n <= levels_unlocked then
         selected = 1
     end
     card(x, y, w, level_row_h, selected)
@@ -137,10 +143,10 @@ function draw_level_row(number n)
     centered_text(tr_class_level_effect(player_class, n), x, w, y + 34, text_color, 0.46)
     centered_text(level_status_of(player_class, n), x, w, y + 52, text_color, 0.42)
 end
-function draw_levels()
+public function draw_levels()
     screen_fill()
-    number n = 1
-    loop n <= max_level
+    local number n = 1
+    while n <= max_level do
         draw_level_row(n)
         n = n + 1
     end
@@ -148,38 +154,38 @@ function draw_levels()
     draw_msg(level_msg_text(), levels_msg_y(), level_msg_t)
     draw_back()
 end
-function draw_skin_card(number skin)
-    number x = skins_card_x(skin)
-    number w = skin_card_w
-    number locked = 1 - skin_unlocked(skin)
-    number selected = 0
-    if azum_skin == skin
+public function draw_skin_card(number skin)
+    local number x = skins_card_x(skin)
+    local number w = skin_card_w
+    local number locked = 1 - skin_unlocked(skin)
+    local number selected = 0
+    if azum_skin == skin then
         selected = 1
     end
     card_state(x, skins_top(), w, skin_card_h, selected, locked)
-    number scale = skin_preview_scale()
-    number sprite = 50 * scale
-    number sx = x + (w - sprite) / 2
-    if skin == SKIN_ZOMBIE
+    local number scale = skin_preview_scale()
+    local number sprite = 50 * scale
+    local number sx = x + (w - sprite) / 2
+    if skin == SKIN_ZOMBIE then
         tex(sx, skin_preview_y(), zombie_idle_tex(), 0, scale)
     else
         tex(sx, skin_preview_y(), azum_idle_tex(), 0, scale)
     end
-    color c = panel_text(locked)
-    string status = tr_skin_legends_hint()
-    if locked == 0
+    local color c = panel_text(locked)
+    local string status = tr_skin_legends_hint()
+    if locked == 0 then
         status = tr_class_pick()
-        if selected == 1
+        if selected == 1 then
             status = tr_class_selected()
         end
     end
     centered_text(skin_name_of(skin), x, w, skin_name_y(), c, 0.8)
     centered_text(status, x, w, skin_status_y(), c, 0.45)
 end
-function draw_skins()
+public function draw_skins()
     screen_fill()
-    number skin = 0
-    loop skin < SKIN_COUNT
+    local number skin = 0
+    while skin < SKIN_COUNT do
         draw_skin_card(skin)
         skin = skin + 1
     end
@@ -187,95 +193,95 @@ function draw_skins()
     draw_msg(tr_skins_need_legends(), skins_msg_y(), skin_msg_t)
     draw_back()
 end
-function achievement_count()
+public function achievement_count()
     return 3
 end
-function achievement_bit(number i)
-    if i == 1
+public function achievement_bit(number i)
+    if i == 1 then
         return ACH_FIRST_WIN
     end
-    if i == 2
+    if i == 2 then
         return ACH_ALL_CHARACTERS
     end
     return ACH_LEGENDS
 end
-function achievement_title(number i)
-    if i == 1
+public function achievement_title(number i)
+    if i == 1 then
         return tr_achievement_first_win()
     end
-    if i == 2
+    if i == 2 then
         return tr_achievement_grass()
     end
     return tr_achievement_legends()
 end
-function achievement_desc(number i)
-    if i == 1
+public function achievement_desc(number i)
+    if i == 1 then
         return tr_achievement_first_win_desc()
     end
-    if i == 2
+    if i == 2 then
         return tr_achievement_grass_desc()
     end
     return tr_achievement_legends_desc()
 end
-function draw_achievement_card(number i)
-    number locked = 1 - has_achievement(achievement_bit(i))
-    number x = ach_x()
-    number y = ach_card_y(i)
+public function draw_achievement_card(number i)
+    local number locked = 1 - has_achievement(achievement_bit(i))
+    local number x = ach_x()
+    local number y = ach_card_y(i)
     panel(x, y, ach_w(), ach_card_h, locked)
-    color c = panel_text(locked)
-    string status = tr_achievement_open()
-    if locked == 1
+    local color c = panel_text(locked)
+    local string status = tr_achievement_open()
+    if locked == 1 then
         status = tr_achievement_locked()
     end
     text_scaled(achievement_title(i), x + card_text_pad, y + 14, c, 0.62)
     text_scaled(achievement_desc(i), x + card_text_pad, y + 46, c, 0.46)
     text_scaled(status, x + card_text_pad, y + 70, c, 0.42)
 end
-function draw_achievements()
+public function draw_achievements()
     check_achievements()
     screen_fill()
-    number i = 0
-    loop i < achievement_count()
+    local number i = 0
+    while i < achievement_count() do
         draw_achievement_card(i)
         i = i + 1
     end
     draw_back()
 end
-function lb_place_bg(number i)
-    if i == 0
+public function lb_place_bg(number i)
+    if i == 0 then
         return 0xFF3D3215
     end
-    if i == 1
+    if i == 1 then
         return 0xFF2E2E30
     end
-    if i == 2
+    if i == 2 then
         return 0xFF3A2414
     end
     return card_bg
 end
-function draw_lb_row(number i)
-    number x = lb_x()
-    number y = lb_row_y(i)
-    number w = lb_w()
+public function draw_lb_row(number i)
+    local number x = lb_x()
+    local number y = lb_row_y(i)
+    local number w = lb_w()
     roundrect(x, y, w, lb_row_h, 12, lb_place_bg(i))
-    string place = "#" + (i + 1)
-    string nick = net_leaderboard_nick(i)
-    string cup_s = "" + floor(net_leaderboard_cups(i) + 0.5)
-    number scale = 0.6
-    number th = text_ink_height(place) * scale
-    number tt = text_ink_top(place) * scale
-    number ty = y + (lb_row_h - th) / 2 - tt + 1
+    local string place = "#" + (i + 1)
+    local string nick = net_leaderboard_nick(i)
+    local string cup_s = "" + floor(net_leaderboard_cups(i) + 0.5)
+    local number scale = 0.6
+    local number th = text_ink_height(place) * scale
+    local number tt = text_ink_top(place) * scale
+    local number ty = y + (lb_row_h - th) / 2 - tt + 1
     text_scaled(place, x + card_text_pad, ty, text_color, scale)
     text_scaled(nick, x + 70, ty, text_color, scale)
-    number cw = text_ink_width(cup_s) * scale
+    local number cw = text_ink_width(cup_s) * scale
     text_scaled(cup_s, x + w - card_text_pad - cw, ty, text_color, scale)
 end
-function draw_leaderboard()
+public function draw_leaderboard()
     screen_fill()
-    number st = net_leaderboard_status()
-    if st == 1
+    local number st = net_leaderboard_status()
+    if st == 1 then
         lb_wait = lb_wait + dt
-        if lb_wait > lb_wait_max
+        if lb_wait > lb_wait_max then
             ctext(tr_no_connection(), screen_h / 2, text_color)
         else
             ctext(tr_loading(), screen_h / 2, text_color)
@@ -283,17 +289,17 @@ function draw_leaderboard()
         draw_back()
         return
     end
-    if st == 4
+    if st == 4 then
         ctext(tr_no_connection(), screen_h / 2, text_color)
         draw_back()
         return
     end
-    number count = net_leaderboard_count()
-    if count == 0
+    local number count = net_leaderboard_count()
+    if count == 0 then
         ctext(tr_no_data(), screen_h / 2, text_color)
     else
-        number i = 0
-        loop i < count
+        local number i = 0
+        while i < count do
             draw_lb_row(i)
             i = i + 1
         end

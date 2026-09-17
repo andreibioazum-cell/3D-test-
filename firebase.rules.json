@@ -62,6 +62,8 @@
         "playtime": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000000" },
         "promo_used": { ".validate": "newData.isNumber() && (newData.val() == 0 || newData.val() == 1)" },
         "scale": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 3" },
+        "winter": { ".validate": "newData.isNumber() && (newData.val() == 0 || newData.val() == 1)" },
+        "showfps": { ".validate": "newData.isNumber() && (newData.val() == 0 || newData.val() == 1)" },
         "$other": { ".validate": false }
       }
     },

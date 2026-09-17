@@ -1,61 +1,104 @@
-include graphics
-function draw_arena_background()
-    string ground=GRASS
-    if candy_enabled==1&&snow_tex_ok==1
-        ground=SNOW_TEX
+-- Зимняя тема (настройка в меню) включает сразу и снежный фон, и снегопад.
+-- Как только она выключена, арена снова в траве и хлопьев нет.
+public function winter_theme_on()
+    return winter_theme==1
+end
+public function arena_ground_tex()
+    if winter_theme_on()==1&&snow_tex_ok==1 then
+        return SNOW_TEX
     end
-    number y=0
-    loop y<screen_h
-        number x=0
-        loop x<screen_w
+    return GRASS
+end
+public function draw_arena_background()
+    local string ground=arena_ground_tex()
+    local number y=0
+    while y<screen_h do
+        local number x=0
+        while x<screen_w do
             tex(x,y,ground,0,1)
             x=x+arena_tile_size
         end
         y=y+arena_tile_size
     end
 end
-function snow_active()
-    if game_state==ST_SOLO||game_state==ST_ONLINE
-        return candy_enabled==1
+public function snow_active()
+    if game_state==ST_SOLO||game_state==ST_ONLINE then
+        return winter_theme_on()
     end
     return 0
 end
-function update_weather()
-    if snow_active()==0
+public function update_weather()
+    if snow_active()==0 then
         return
     end
     snow_t=snow_t+dt
-    if snow_t>100000
+    if snow_t>100000 then
         snow_t=0
     end
 end
-function hash01(number i)
-    number v=sin(i*127.1+11.7)*43758.5453
+public function hash01(number i)
+    local number v=sin(i*127.1+11.7)*43758.5453
     return v-floor(v)
 end
-function frac01(number v)
+public function frac01(number v)
     return v-floor(v)
 end
-function draw_snow()
-    if snow_active()==0
+-- Хэш хлопьев считается один раз на «цикл» падения, а не каждый кадр: раньше
+-- на каждую из 44 снежинок приходилось по шесть sin() за кадр, и именно это
+-- заметнее всего съедало время кадра в бою. Кэш хранит по хлопью номер цикла и
+-- все его случайные значения; пересчёт происходит только когда цикл сменился
+-- (раз в 2-5 секунд на хлопье), поэтому картинка ровно та же, что и была.
+public number flake_fields=7
+public number flake_cached=0
+public array flake_cache=arr_new()
+public function flake_grow(number count)
+    while flake_cached<count do
+        local number k=0
+        while k<flake_fields do
+            arr_push(flake_cache,-1)
+            k=k+1
+        end
+        flake_cached=flake_cached+1
+    end
+end
+public function flake_refresh(number b, number i, number cyc)
+    arr_set(flake_cache,b,cyc)
+    arr_set(flake_cache,b+3,hash01(i*7+cyc*131+1))
+    arr_set(flake_cache,b+4,hash01(i*13+cyc*197+2))
+    arr_set(flake_cache,b+5,hash01(i*29+cyc*57+3))
+    arr_set(flake_cache,b+6,hash01(i*17+cyc*83+4))
+end
+public function draw_snow()
+    if snow_active()==0 then
         return
     end
-    number i=0
-    loop i<event_flakes
-        number h1=hash01(i), h2=hash01(i+91)
-        number life=2.2+2.6*h1
-        number ph=frac01(snow_t/life+h2)
-        number cyc=floor(snow_t/life+h2)
-        number hx=hash01(i*7+cyc*131+1)
-        number hy=hash01(i*13+cyc*197+2)
-        number hs=hash01(i*29+cyc*57+3)
-        number hr=hash01(i*17+cyc*83+4)
-        number s0=0.3+0.7*hs
-        number s=s0*(1-ph)
-        if s>0.02
-            number xx=36+hx*(screen_w-72)
-            number yy=36+hy*(screen_h-72)
-            number hw=32*s
+    flake_grow(event_flakes)
+    local number i=0
+    while i<event_flakes do
+        local number b=i*flake_fields
+        local number h1=arr_get(flake_cache,b+1), h2=arr_get(flake_cache,b+2)
+        if h1<0 then
+            h1=hash01(i)
+            h2=hash01(i+91)
+            arr_set(flake_cache,b+1,h1)
+            arr_set(flake_cache,b+2,h2)
+        end
+        local number life=2.2+2.6*h1
+        local number cyc=floor(snow_t/life+h2)
+        if arr_get(flake_cache,b)!=cyc then
+            flake_refresh(b,i,cyc)
+        end
+        local number ph=frac01(snow_t/life+h2)
+        local number hx=arr_get(flake_cache,b+3)
+        local number hy=arr_get(flake_cache,b+4)
+        local number hs=arr_get(flake_cache,b+5)
+        local number hr=arr_get(flake_cache,b+6)
+        local number s0=0.3+0.7*hs
+        local number s=s0*(1-ph)
+        if s>0.02 then
+            local number xx=36+hx*(screen_w-72)
+            local number yy=36+hy*(screen_h-72)
+            local number hw=32*s
             tex(xx-hw,yy-hw,SNOWFLAKE_TEX,hr*2*pi,s)
         end
         i=i+1

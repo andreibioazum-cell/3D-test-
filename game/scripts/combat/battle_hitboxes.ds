@@ -1,231 +1,248 @@
-include graphics
-function fade_up_a(number a, number t)
-    if t<=0
+public function fade_up_a(number a, number t)
+    if t<=0 then
         return 1
     end
     a=a+dt/t
-    if a>1
+    if a>1 then
         a=1
     end
     return a
 end
-function fade_down_a(number a, number t)
-    if t<=0
+public function fade_down_a(number a, number t)
+    if t<=0 then
         return 0
     end
     a=a-dt/t
-    if a<0
+    if a<0 then
         a=0
     end
     return a
 end
-function hb_env(number a)
-    if a<0
+public function hb_env(number a)
+    if a<0 then
         a=0
     end
-    if a>1
+    if a>1 then
         a=1
     end
     return a
 end
-function hb_line_alpha(number env)
+public function hb_line_alpha(number env)
     return floor(hitbox_line_alpha*hb_env(env))
 end
-function hb_fill_alpha(number env)
+public function hb_fill_alpha(number env)
     return floor(hitbox_fill_alpha*hb_env(env))
 end
-function hb_solid_alpha(number env)
+public function hb_solid_alpha(number env)
     return floor(hitbox_solid_alpha*hb_env(env))
 end
-function draw_hit_circle(number x, number y, number r, number rgb, number env)
-    if show_hitboxes==0
+public function draw_hit_circle(number x, number y, number r, number rgb, number env)
+    if show_hitboxes==0 then
         return
     end
-    if r<=0||env<=0
+    if r<=0||env<=0 then
         return
     end
-    circle(x,y,r,(((unsigned)(int)hb_fill_alpha(env))<<24)|((unsigned)(int)rgb))
-    ring(x,y,r,3,(((unsigned)(int)hb_line_alpha(env))<<24)|((unsigned)(int)rgb))
+    local number fa=hb_fill_alpha(env), la=hb_line_alpha(env)
+    if fa>0 then
+        circle(x,y,r,(((unsigned)(int)fa)<<24)|((unsigned)(int)rgb))
+    end
+    if la>0 then
+        ring(x,y,r,3,(((unsigned)(int)la)<<24)|((unsigned)(int)rgb))
+    end
 end
-function draw_hit_circle_solid(number x, number y, number r, number rgb, number env)
-    if show_hitboxes==0
+public function draw_hit_circle_solid(number x, number y, number r, number rgb, number env)
+    if show_hitboxes==0 then
         return
     end
-    if r<=0||env<=0
+    if r<=0||env<=0 then
         return
     end
-    circle(x,y,r,(((unsigned)(int)hb_solid_alpha(env))<<24)|((unsigned)(int)rgb))
-    ring(x,y,r,3,(((unsigned)(int)hb_line_alpha(env))<<24)|((unsigned)(int)rgb))
+    local number sa=hb_solid_alpha(env), la=hb_line_alpha(env)
+    if sa>0 then
+        circle(x,y,r,(((unsigned)(int)sa)<<24)|((unsigned)(int)rgb))
+    end
+    if la>0 then
+        ring(x,y,r,3,(((unsigned)(int)la)<<24)|((unsigned)(int)rgb))
+    end
 end
-function draw_hit_line(number x1, number y1, number x2, number y2, number w, number rgb, number env)
-    if show_hitboxes==0
+public function draw_hit_line(number x1, number y1, number x2, number y2, number w, number rgb, number env)
+    if show_hitboxes==0 then
         return
     end
-    if w<=0||env<=0
+    if w<=0||env<=0 then
         return
     end
-    line(x1,y1,x2,y2,w,(((unsigned)(int)hb_line_alpha(env))<<24)|((unsigned)(int)rgb))
+    local number la=hb_line_alpha(env)
+    if la<=0 then
+        return
+    end
+    line(x1,y1,x2,y2,w,(((unsigned)(int)la)<<24)|((unsigned)(int)rgb))
 end
-function draw_hit_snowball(number x, number y, number dx, number dy, number t, number r, number env)
+public function draw_hit_snowball(number x, number y, number dx, number dy, number t, number r, number env)
     draw_hit_circle_solid(x,y,r,hitbox_snow_rgb,env)
-    number left=super_range-t*super_speed
-    if left>0
+    local number left=super_range-t*super_speed
+    if left>0 then
         draw_hit_line(x,y,x+dx*left,y+dy*left,r*2,hitbox_snow_rgb,env)
     end
 end
-function snow_hit_radius(number target_size)
+public function snow_hit_radius(number target_size)
     return target_size*0.65+24
 end
-function draw_hit_snow()
-    if snow_ball_a>0
-        number r=snow_hit_radius(enemy.size)
-        if game_state==ST_ONLINE
+public function draw_hit_snow()
+    if snow_ball_a>0 then
+        local number r=snow_hit_radius(enemy.size)
+        if game_state==ST_ONLINE then
             r=snow_hit_radius(player.size)
         end
         draw_hit_snowball(gift.x,gift.y,gift.dx,gift.dy,gift.t,r,snow_ball_a)
     end
-    if snow_boom_a>0
+    if snow_boom_a>0 then
         draw_hit_circle_solid(boom_x,boom_y,super_radius,hitbox_snow_rgb,snow_boom_a)
     end
-    if game_state==ST_SOLO
-        if esnow_ball_a>0
-            number er=snow_hit_radius(player.size)
+    if game_state==ST_SOLO then
+        if esnow_ball_a>0 then
+            local number er=snow_hit_radius(player.size)
             draw_hit_snowball(enemy_gift.x,enemy_gift.y,enemy_gift.dx,enemy_gift.dy,enemy_gift.t,er,esnow_ball_a)
         end
-        if esnow_boom_a>0
+        if esnow_boom_a>0 then
             draw_hit_circle_solid(enemy_boom_x,enemy_boom_y,super_radius,hitbox_snow_rgb,esnow_boom_a)
         end
     end
-    if game_state!=ST_ONLINE
+    if game_state!=ST_ONLINE then
         return
     end
-    if net_slot()<0
+    if net_slot()<0 then
         return
     end
-    number s=0
-    loop s<max_players
-        number b=s*snow_fields
-        if arr_get(rsnow_ball_a,s)>0
-            number rr=snow_hit_radius(player.size)
+    local number s=0
+    while s<max_players do
+        local number b=s*snow_fields
+        if arr_get(rsnow_ball_a,s)>0 then
+            local number rr=snow_hit_radius(player.size)
             draw_hit_snowball(arr_get(remote_snow,b+3),arr_get(remote_snow,b+4),net_player_snow_dx(s),net_player_snow_dy(s),arr_get(remote_snow,b+2),rr,arr_get(rsnow_ball_a,s))
         end
-        if arr_get(rsnow_boom_a,s)>0
+        if arr_get(rsnow_boom_a,s)>0 then
             draw_hit_circle_solid(arr_get(remote_snow,b+6),arr_get(remote_snow,b+7),super_radius,hitbox_snow_rgb,arr_get(rsnow_boom_a,s))
         end
         s=s+1
     end
 end
-function hb_aim_alpha(number env)
+public function hb_aim_alpha(number env)
     return floor(aim_max_alpha*hb_env(env))
 end
-function draw_hit_dash_path(number sx, number sy, number dx, number dy, number cx, number cy, number pr, number env)
-    number travel=(cx-sx)*dx+(cy-sy)*dy
-    if travel<0
+-- Клетки зоны рывка: один общий массив на все вызовы (раньше на каждый кадр
+-- рывка создавался и выбрасывался свой), а повтор предыдущей клетки отсекается
+-- сравнением с соседом — путь прямой, поэтому в одну клетку можно попасть
+-- только дважды подряд. Сами клетки теперь со скруглёнными углами.
+public array dash_cells=arr_new()
+public function draw_hit_dash_path(number sx, number sy, number dx, number dy, number cx, number cy, number pr, number env)
+    local number travel=(cx-sx)*dx+(cy-sy)*dy
+    if travel<0 then
         travel=0
     end
-    number len=azum_dash_speed*azum_dash_time
-    if travel>len
+    local number len=azum_dash_speed*azum_dash_time
+    if travel>len then
         travel=len
     end
-    if pr<=0||env<=0
+    if pr<=0||env<=0 then
         return
     end
-    number side=pr*dash_hitbox_zone_scale
-    if side<=0
+    local number side=pr*dash_hitbox_zone_scale
+    if side<=0 then
         side=2
     end
-    array cells=arr_new()
-    number off=0, step=side*0.5, px=0, py=0, gx=0, gy=0, seen=0, k=0
-    loop off<=travel
+    local number aa=hb_aim_alpha(env)
+    if aa<=0 then
+        return
+    end
+    arr_clear(dash_cells)
+    local number off=0, step=side*0.5, px=0, py=0, gx=0, gy=0, prev_x=0, prev_y=0, first=1
+    while off<=travel do
         px=sx+dx*off
         py=sy+dy*off
         gx=floor(px/side)
         gy=floor(py/side)
-        seen=0
-        k=0
-        loop k<arr_len(cells)
-            if arr_get(cells,k)==gx&&arr_get(cells,k+1)==gy
-                seen=1
-                k=arr_len(cells)
-            end
-            k=k+2
-        end
-        if seen==0
-            arr_push(cells,gx)
-            arr_push(cells,gy)
+        if first==1||gx!=prev_x||gy!=prev_y then
+            arr_push(dash_cells,gx)
+            arr_push(dash_cells,gy)
+            prev_x=gx
+            prev_y=gy
+            first=0
         end
         off=off+step
     end
-    number col=(((unsigned)(int)hb_aim_alpha(env))<<24)|((unsigned)(int)hitbox_dash_rgb)
-    k=0
-    loop k<arr_len(cells)
-        gx=arr_get(cells,k)
-        gy=arr_get(cells,k+1)
-        rect(gx*side,gy*side,side,side,col)
+    local number col=(((unsigned)(int)aa)<<24)|((unsigned)(int)hitbox_dash_rgb)
+    local number rad=side*hitbox_corner
+    local number k=0
+    while k<arr_len(dash_cells) do
+        gx=arr_get(dash_cells,k)
+        gy=arr_get(dash_cells,k+1)
+        roundrect(gx*side,gy*side,side,side,rad,col)
         k=k+2
     end
 end
-function draw_hit_dash()
-    if dash_box_a>0
-        number dpr=dash_hit_radius_remote()
-        if game_state==ST_SOLO
+public function draw_hit_dash()
+    if dash_box_a>0 then
+        local number dpr=dash_hit_radius_remote()
+        if game_state==ST_SOLO then
             dpr=dash_hit_radius_solo()
         end
         draw_hit_dash_path(dash_x0,dash_y0,dash_dx,dash_dy,player.x,player.y,dpr,dash_box_a)
     end
-    if game_state==ST_SOLO&&edash_box_a>0
-        number epr=dash_hit_radius_solo()
+    if game_state==ST_SOLO&&edash_box_a>0 then
+        local number epr=dash_hit_radius_solo()
         draw_hit_dash_path(enemy_dash_x0,enemy_dash_y0,enemy_dash_dx,enemy_dash_dy,enemy.x,enemy.y,epr,edash_box_a)
     end
-    if game_state!=ST_ONLINE
+    if game_state!=ST_ONLINE then
         return
     end
-    if net_slot()<0
+    if net_slot()<0 then
         return
     end
-    number s=0
-    loop s<max_players
-        number b=s*dash_fields
-        if s!=net_slot()&&arr_get(rdash_box_a,s)>0
-            number rx=arr_get(remote_dash,b+2), ry=arr_get(remote_dash,b+3)
-            number rdx=arr_get(remote_dash,b+4), rdy=arr_get(remote_dash,b+5)
-            number gone=azum_dash_speed*(azum_dash_time-arr_get(remote_dash,b+6))
-            number pr=dash_hit_radius_remote()
+    local number s=0
+    while s<max_players do
+        local number b=s*dash_fields
+        if s!=net_slot()&&arr_get(rdash_box_a,s)>0 then
+            local number rx=arr_get(remote_dash,b+2), ry=arr_get(remote_dash,b+3)
+            local number rdx=arr_get(remote_dash,b+4), rdy=arr_get(remote_dash,b+5)
+            local number gone=azum_dash_speed*(azum_dash_time-arr_get(remote_dash,b+6))
+            local number pr=dash_hit_radius_remote()
             draw_hit_dash_path(rx,ry,rdx,rdy,rx+rdx*gone,ry+rdy*gone,pr,arr_get(rdash_box_a,s))
         end
         s=s+1
     end
 end
-function draw_hit_universe_frame(number env)
-    number w=7
+public function draw_hit_universe_frame(number env)
+    local number w=7
     draw_hit_line(0,0,screen_w,0,w,hitbox_universe_rgb,env)
     draw_hit_line(0,screen_h,screen_w,screen_h,w,hitbox_universe_rgb,env)
     draw_hit_line(0,0,0,screen_h,w,hitbox_universe_rgb,env)
     draw_hit_line(screen_w,0,screen_w,screen_h,w,hitbox_universe_rgb,env)
 end
-function draw_hit_universe()
-    if universe_box_a>0
+public function draw_hit_universe()
+    if universe_box_a>0 then
         draw_hit_universe_frame(universe_box_a)
         draw_hit_circle(universe_x,universe_y,60,hitbox_universe_rgb,universe_box_a)
     end
-    if game_state!=ST_ONLINE
+    if game_state!=ST_ONLINE then
         return
     end
-    if net_slot()<0
+    if net_slot()<0 then
         return
     end
-    number s=0
-    loop s<max_players
-        number b=s*universe_fields
-        if s!=net_slot()&&arr_get(runiverse_box_a,s)>0
+    local number s=0
+    while s<max_players do
+        local number b=s*universe_fields
+        if s!=net_slot()&&arr_get(runiverse_box_a,s)>0 then
             draw_hit_universe_frame(arr_get(runiverse_box_a,s))
             draw_hit_circle(arr_get(remote_universe,b+2),arr_get(remote_universe,b+3),60,hitbox_universe_rgb,arr_get(runiverse_box_a,s))
         end
         s=s+1
     end
 end
-function draw_ability_hitboxes()
-    if show_hitboxes==0
+public function draw_ability_hitboxes()
+    if show_hitboxes==0 then
         return
     end
     draw_hit_snow()

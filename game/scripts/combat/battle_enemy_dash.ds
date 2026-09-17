@@ -1,6 +1,5 @@
-include graphics
-function enemy_start_dash()
-    number a=atan2(player.y-enemy.y,player.x-enemy.x)
+public function enemy_start_dash()
+    local number a=atan2(player.y-enemy.y,player.x-enemy.x)
     enemy_dash_dx=cos(a)
     enemy_dash_dy=sin(a)
     enemy_dash_x0=enemy.x
@@ -12,65 +11,65 @@ function enemy_start_dash()
     enemy.angle=a
     ds_log("enemy dash started")
 end
-function tick_enemy_dash()
-    if enemy_dash_cd>0
+public function tick_enemy_dash()
+    if enemy_dash_cd>0 then
         enemy_dash_cd=enemy_dash_cd-dt
-        if enemy_dash_cd<0
+        if enemy_dash_cd<0 then
             enemy_dash_cd=0
         end
     end
-    if enemy_dash_active==0
+    if enemy_dash_active==0 then
         return
     end
     enemy_dash_t=enemy_dash_t-dt
-    if enemy_dash_t<=0
+    if enemy_dash_t<=0 then
         enemy_dash_t=0
         enemy_dash_active=0
         enemy_dash_hit=0
         return
     end
-    if finished!=0
+    if finished!=0 then
         enemy_dash_active=0
         return
     end
-    if enemy.stun>0
+    if enemy.stun>0 then
         return
     end
     enemy.x=enemy.x+enemy_dash_dx*azum_dash_speed*dt
     enemy.y=enemy.y+enemy_dash_dy*azum_dash_speed*dt
-    if enemy.x<enemy.size
+    if enemy.x<enemy.size then
         enemy.x=enemy.size
         enemy_dash_active=0
         enemy_dash_t=0
         return
     end
-    if enemy.x>screen_w-enemy.size
+    if enemy.x>screen_w-enemy.size then
         enemy.x=screen_w-enemy.size
         enemy_dash_active=0
         enemy_dash_t=0
         return
     end
-    if enemy.y<enemy.size
+    if enemy.y<enemy.size then
         enemy.y=enemy.size
         enemy_dash_active=0
         enemy_dash_t=0
         return
     end
-    if enemy.y>screen_h-enemy.size
+    if enemy.y>screen_h-enemy.size then
         enemy.y=screen_h-enemy.size
         enemy_dash_active=0
         enemy_dash_t=0
         return
     end
     tick_enemy_dust(enemy_dash_dx*azum_dash_speed,enemy_dash_dy*azum_dash_speed)
-    if enemy_dash_hit==1
+    if enemy_dash_hit==1 then
         return
     end
-    number dti=0
-    loop dti<turret_max
-        if enemy_dash_hit==0&&turret_alive(dti)==1
-            number pad=enemy.size*0.65+turret_zone_half()+14
-            if fabs(enemy.x-arr_get(turret_x,dti))<=pad&&fabs(enemy.y-arr_get(turret_y,dti))<=pad
+    local number dti=0
+    while dti<turret_max do
+        if enemy_dash_hit==0&&turret_alive(dti)==1 then
+            local number pad=enemy.size*0.65+turret_zone_half()+14
+            if fabs(enemy.x-arr_get(turret_x,dti))<=pad&&fabs(enemy.y-arr_get(turret_y,dti))<=pad then
                 enemy_dash_hit=1
                 damage_turret(dti,enemy_dash_damage)
                 enemy_apply_damage(turret_counter_damage)
@@ -78,43 +77,43 @@ function tick_enemy_dash()
         end
         dti=dti+1
     end
-    if enemy_dash_hit==1||finished!=0
+    if enemy_dash_hit==1||finished!=0 then
         return
     end
-    if revive_prot>0
+    if revive_prot>0 then
         return
     end
-    number dpr=dash_hit_radius_solo()
-    if dist(enemy.x,enemy.y,player.x,player.y)<=dpr
+    local number dpr=dash_hit_radius_solo()
+    if dist(enemy.x,enemy.y,player.x,player.y)<=dpr then
         enemy_dash_hit=1
         take_damage(enemy_dash_damage)
         stun_player(azum_dash_stun)
         ds_log("enemy dash hit player")
-        if player.hp<=0
+        if player.hp<=0 then
             player.hp=0
-            if try_revive()==0
+            if try_revive()==0 then
                 finish_game(2)
             end
         end
     end
 end
-function tick_dash_solo_hit()
-    if dash_active==0||dash_hit==1||finished!=0
+public function tick_dash_solo_hit()
+    if dash_active==0||dash_hit==1||finished!=0 then
         return
     end
-    number ti=0
-    loop ti<turret_max
-        if dash_hit==0&&enemy_turret_alive(ti)==1
-            number pad=player.size*0.65+turret_zone_half()+14
-            if fabs(player.x-arr_get(enemy_turret_x,ti))<=pad&&fabs(player.y-arr_get(enemy_turret_y,ti))<=pad
+    local number ti=0
+    while ti<turret_max do
+        if dash_hit==0&&enemy_turret_alive(ti)==1 then
+            local number pad=player.size*0.65+turret_zone_half()+14
+            if fabs(player.x-arr_get(enemy_turret_x,ti))<=pad&&fabs(player.y-arr_get(enemy_turret_y,ti))<=pad then
                 dash_hit=1
                 enemy_damage_turret(ti,azum_dash_damage)
-                if revive_prot<=0
+                if revive_prot<=0 then
                     take_damage(turret_counter_damage)
                     ds_log("dash hit enemy turret")
-                    if player.hp<=0
+                    if player.hp<=0 then
                         player.hp=0
-                        if try_revive()==0
+                        if try_revive()==0 then
                             finish_game(2)
                         end
                     end
@@ -123,33 +122,33 @@ function tick_dash_solo_hit()
         end
         ti=ti+1
     end
-    if dash_hit==1||finished!=0
+    if dash_hit==1||finished!=0 then
         return
     end
-    if enemy_revive_prot>0
+    if enemy_revive_prot>0 then
         return
     end
-    number pr=dash_hit_radius_solo()
-    if dist(player.x,player.y,enemy.x,enemy.y)<=pr
+    local number pr=dash_hit_radius_solo()
+    if dist(player.x,player.y,enemy.x,enemy.y)<=pr then
         dash_hit=1
         stun_enemy(azum_dash_stun)
         ds_log("dash hit enemy, hp %g",enemy.hp)
         enemy_apply_damage(azum_dash_damage)
     end
 end
-function tick_enemy_class()
-    if game_state!=ST_SOLO
+public function tick_enemy_class()
+    if game_state!=ST_SOLO then
         return
     end
-    if enemy_super_cd>0
+    if enemy_super_cd>0 then
         enemy_super_cd=enemy_super_cd-dt
-        if enemy_super_cd<0
+        if enemy_super_cd<0 then
             enemy_super_cd=0
         end
     end
-    if enemy_revive_prot>0
+    if enemy_revive_prot>0 then
         enemy_revive_prot=enemy_revive_prot-dt
-        if enemy_revive_prot<0
+        if enemy_revive_prot<0 then
             enemy_revive_prot=0
         end
     end
@@ -157,36 +156,36 @@ function tick_enemy_class()
     tick_enemy_gift()
     tick_enemy_dash()
 end
-function enemy_tick_class_abilities()
-    if game_state!=ST_SOLO
+public function enemy_tick_class_abilities()
+    if game_state!=ST_SOLO then
         return 0
     end
-    if finished!=0
+    if finished!=0 then
         return 0
     end
-    if enemy_dash_active==1
+    if enemy_dash_active==1 then
         return 1
     end
-    if enemy_super_windup>0
+    if enemy_super_windup>0 then
         enemy_face_player()
         enemy_super_windup=enemy_super_windup-dt
-        if enemy_super_windup<=0
+        if enemy_super_windup<=0 then
             enemy_super_windup=0
-            if enemy_super_kind==1
+            if enemy_super_kind==1 then
                 enemy_start_snow()
-            else if enemy_super_kind==2
+            else if enemy_super_kind==2 then
                 enemy_place_turret()
             end
             enemy_super_kind=0
         end
         return 1
     end
-    if enemy.state==1||enemy.state==2||enemy.state==4
+    if enemy.state==1||enemy.state==2||enemy.state==4 then
         return 0
     end
-    number d=dist(enemy.x,enemy.y,player.x,player.y)
-    if enemy_class==CLASS_SANTA
-        if enemy_super_cd<=0&&d<=enemy_santa_range
+    local number d=dist(enemy.x,enemy.y,player.x,player.y)
+    if enemy_class==CLASS_SANTA then
+        if enemy_super_cd<=0&&d<=enemy_santa_range then
             enemy_super_kind=1
             enemy_super_windup=enemy_super_windup_time
             enemy_super_cd=enemy_santa_cd_time
@@ -194,8 +193,8 @@ function enemy_tick_class_abilities()
             enemy.state_time=0
             return 1
         end
-    else if enemy_class==CLASS_EBUC
-        if enemy_super_cd<=0&&enemy_turret_count_alive()<turret_max
+    else if enemy_class==CLASS_EBUC then
+        if enemy_super_cd<=0&&enemy_turret_count_alive()<turret_max then
             enemy_super_kind=2
             enemy_super_windup=enemy_super_windup_time
             enemy_super_cd=enemy_station_cd_time
@@ -203,8 +202,8 @@ function enemy_tick_class_abilities()
             enemy.state_time=0
             return 1
         end
-    else if enemy_class==CLASS_AZUM
-        if enemy_dash_cd<=0&&d>=enemy_dash_min_range&&d<=enemy_dash_max_range
+    else if enemy_class==CLASS_AZUM then
+        if enemy_dash_cd<=0&&d>=enemy_dash_min_range&&d<=enemy_dash_max_range then
             enemy.state=0
             enemy.state_time=0
             enemy_start_dash()

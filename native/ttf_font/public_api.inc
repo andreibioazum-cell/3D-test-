@@ -14,6 +14,44 @@
     }
     return 1;
 }
+
+/* --- индекс глифов: codepoint -> номер в f->glyphs --- */
+#define DS_FONT_HCAP 512
+static unsigned ds_font_hash(uint32_t cp) {
+    cp ^= cp >> 16; cp *= 0x7feb352du;
+    cp ^= cp >> 15; cp *= 0x846ca68bu;
+    cp ^= cp >> 16;
+    return cp;
+}
+static int ds_font_lookup(const DSFont *f, uint32_t cp) {
+    if (!f->hmap) return -1;
+    unsigned mask = (unsigned)f->hcap - 1;
+    unsigned i = ds_font_hash(cp) & mask;
+    for (unsigned probe = 0; probe < (unsigned)f->hcap; probe++) {
+        int v = f->hmap[i];
+        if (v == 0) return -1;
+        if (f->glyphs[v - 1].codepoint == cp) return v - 1;
+        i = (i + 1) & mask;
+    }
+    return -1;
+}
+static int ds_font_index_build(DSFont *f) {
+    free(f->hmap);
+    f->hmap = (int *)calloc(DS_FONT_HCAP, sizeof(int));
+    if (!f->hmap) { f->hcap = 0; return 0; }
+    f->hcap = DS_FONT_HCAP;
+    f->qmark = -1;
+    unsigned mask = DS_FONT_HCAP - 1;
+    for (int g = 0; g < f->gcount; g++) {
+        uint32_t cp = f->glyphs[g].codepoint;
+        if (cp == '?') f->qmark = g;
+        unsigned i = ds_font_hash(cp) & mask;
+        while (f->hmap[i] != 0) i = (i + 1) & mask;
+        f->hmap[i] = g + 1;
+    }
+    return 1;
+}
+
 DSFont *ds_font_create(const uint8_t *data, size_t size, int ph) {
     if (!data || size < 12 || ph <= 0 || ph > 256) return NULL;
     DSFont *f = (DSFont *)calloc(1, sizeof(*f));
@@ -71,20 +109,22 @@ DSFont *ds_font_create(const uint8_t *data, size_t size, int ph) {
         ax += gl->width + 1;
         if (nh > rh) rh = nh;
     }
+    /* Индекс глифов строится последним: набор codepoint'ов к этому моменту
+     * окончательный. Без индекса поиск остаётся линейным (работает, но медленнее). */
+    ds_font_index_build(f);
     return f;
 }
 void ds_font_destroy(DSFont *f) {
     if (!f) return;
-    free(f->data); free(f->alpha); free(f->glyphs); free(f);
+    free(f->data); free(f->alpha); free(f->glyphs); free(f->hmap); free(f);
 }
 const DSFontGlyph *ds_font_glyph(const DSFont *f, uint32_t cp) {
     if (!f) return NULL;
-    const DSFontGlyph *fb = NULL;
-    for (int i = 0; i < f->gcount; i++) {
-        if (f->glyphs[i].codepoint == cp) return &f->glyphs[i];
-        if (f->glyphs[i].codepoint == '?') fb = &f->glyphs[i];
-    }
-    return fb;
+    int idx = ds_font_lookup(f, cp);
+    if (idx >= 0) return &f->glyphs[idx];
+    /* Отсутствующий в наборе символ по-прежнему заменяется вопросительным. */
+    if (f->qmark >= 0) return &f->glyphs[f->qmark];
+    return NULL;
 }
 int ds_font_aw(const DSFont *f) { return f ? f->aw : 0; }
 int ds_font_ah(const DSFont *f) { return f ? f->ah : 0; }

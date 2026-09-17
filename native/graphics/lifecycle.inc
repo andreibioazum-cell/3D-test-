@@ -80,15 +80,15 @@ static int ensure_font(void) {
     if (font_tried) return 0;
     font_tried = 1;
     uint8_t *data = NULL; size_t sz = 0;
-    if (!open_asset("fonts/Inter_24pt-Medium.ttf", &data, &sz)) {
-        ds_log_err("font not loaded: fonts/Inter_24pt-Medium.ttf not found");
+    if (!open_asset(DS_FONT_ASSET, &data, &sz)) {
+        ds_log_err("font not loaded: %s not found", DS_FONT_ASSET);
         return 0;
     }
-    font = ds_font_create(data, sz, 32);
+    font = ds_font_create(data, sz, DS_FONT_PIXEL_HEIGHT);
     free(data);
     if (!font) { ds_log_err("font not loaded: could not parse TrueType font"); return 0; }
     vk_pending_font = 1; /* атлас зальётся на GPU в конце текущего кадра */
-    ds_log("font loaded: fonts/Inter_24pt-Medium.ttf");
+    ds_log("font loaded: %s", DS_FONT_ASSET);
     return 1;
 }
 
@@ -264,10 +264,22 @@ int ds_graphics_init(AAssetManager *a, ANativeWindow *window) {
     if (amgr != a) { ds_release_assets(); amgr = a; }
     return ds_vk_init_backend(window);
 }
+/* Апскейл из настроек: 1 — кадр в полном размере окна, 2..3 — оффскрин в
+ * scale раз меньше. Координаты скриптов от масштаба не зависят. */
+static int gfx_pixel_scale = 1;
+void ds_graphics_set_pixel_scale(int s) {
+    if (s < 1) s = 1;
+    if (s > 3) s = 3;
+    gfx_pixel_scale = s;
+}
 int ds_graphics_begin_frame(Buffer *b) {
     if (!b || b->width <= 0 || b->height <= 0 || b->stride < b->width) return 0;
     /* b->pixels больше не используется: рисуем через Vulkan. */
-    if (!ds_vk_begin_frame_backend((uint32_t)b->width, (uint32_t)b->height)) return 0;
+    uint32_t s = (uint32_t)gfx_pixel_scale;
+    uint32_t ow = (uint32_t)b->width / s, oh = (uint32_t)b->height / s;
+    if (ow < 1) ow = 1;
+    if (oh < 1) oh = 1;
+    if (!ds_vk_begin_frame_backend((uint32_t)b->width, (uint32_t)b->height, ow, oh)) return 0;
     discard_commands();
     cur_buf = b; frame_open = 1;
     return 1;
@@ -318,5 +330,6 @@ void ds_graphics_shutdown(void) {
     free(cmds); cmds = NULL; cmd_cap = 0; cmd_n = 0;
     free(geo_verts); geo_verts = NULL; geo_vcap = geo_vn = 0;
     free(geo_idx); geo_idx = NULL; geo_icap = geo_in = 0;
+    geo_trig_free();
 }
 #include "ttf_font.c"

@@ -1,44 +1,43 @@
-include graphics
-function start_transition(number target)
-    if t_dir != 0
+public function start_transition(number target)
+    if t_dir != 0 then
         return
     end
     t_target = target
     t_dir = 1
 end
-function leave_screen(number state)
-    if state == ST_LOGIN || state == ST_PROMO
+public function leave_screen(number state)
+    if state == ST_LOGIN || state == ST_PROMO then
         keyboard_hide()
     end
-    if state == ST_ONLINE
+    if state == ST_ONLINE then
         chat_set_open(0)
         net_disconnect()
         event_mode = 0
         event_t = 0
     end
-    if state == ST_SOLO || state == ST_ONLINE
+    if state == ST_SOLO || state == ST_ONLINE then
         save_progress()
     end
 end
-function enter_screen(number state)
-    if state == ST_SOLO
+public function enter_screen(number state)
+    if state == ST_SOLO then
         init_game()
         return 1
     end
-    if state == ST_LOGIN
+    if state == ST_LOGIN then
         login_open()
         return 1
     end
-    if state == ST_QUESTS
+    if state == ST_QUESTS then
         quest_load()
         return 1
     end
-    if state == ST_LEADERBOARD
+    if state == ST_LEADERBOARD then
         open_leaderboard()
         return 1
     end
-    if state == ST_ONLINE
-        if net_is_banned(net_login_nick()) == 1
+    if state == ST_ONLINE then
+        if net_is_banned(net_login_nick()) == 1 then
             banned_msg = tr_banned()
             game_state = ST_LOBBY
             t_dir = -1
@@ -49,37 +48,33 @@ function enter_screen(number state)
     end
     return 1
 end
-function update_transition()
-    if t_dir == 1
+public function update_transition()
+    if t_dir == 1 then
         t_fade = t_fade + dt / transition_duration
-        if t_fade >= 1
+        if t_fade >= 1 then
             t_fade = 1
             t_dir = 2
         end
         return
     end
-    if t_dir == 2
+    if t_dir == 2 then
         leave_screen(game_state)
         game_state = t_target
-        if enter_screen(t_target) == 1
+        if enter_screen(t_target) == 1 then
             t_dir = -1
         end
         return
     end
-    if t_dir == -1
+    if t_dir == -1 then
         t_fade = t_fade - dt / transition_duration
-        if t_fade <= 0
+        if t_fade <= 0 then
             t_fade = 0
             t_dir = 0
         end
     end
 end
-function load_textures()
+public function load_textures()
     png_load(GRASS)
-    snow_tex_ok = 0
-    if candy_enabled == 1
-        snow_tex_ok = png_load(SNOW_TEX)
-    end
     png_load(ORDINARY_TEX)
     png_load(PUNCH_TEX)
     azum_tex_ok = png_load(AZUM_TEX)
@@ -94,9 +89,9 @@ function load_textures()
     png_load(CANDY_TEX)
     png_load(SNOWFLAKE_TEX)
 end
-function start_music()
+public function start_music()
     music_ok = snd_load(LOBBY_MUSIC)
-    if music_ok == 0
+    if music_ok == 0 then
         ds_log("init: no lobby music")
         return
     end
@@ -105,7 +100,17 @@ function start_music()
     snd_loop(LOBBY_MUSIC)
     ds_log("init: lobby music on")
 end
-function init()
+-- Снежная плитка подгружается только для зимней темы: настройка читается из
+-- хранилища после текстур, поэтому тему применяем отдельным шагом (и повторно —
+-- на каждом тапе по «Зимней теме» в настройках).
+public function apply_winter_theme()
+    if winter_theme == 1 then
+        snow_tex_ok = png_load(SNOW_TEX)
+        return
+    end
+    snow_tex_ok = 0
+end
+public function init()
     ds_log("init: loading textures")
     load_textures()
     net_set_firebase_key(FB_KEY)
@@ -114,38 +119,39 @@ function init()
     progress_from_storage()
     settings_from_storage()
     apply_video_settings()
+    apply_winter_theme()
     ds_log("init: ready")
 end
-function update_music()
-    if music_ok == 0
+public function update_music()
+    if music_ok == 0 then
         return
     end
-    if game_state == ST_SOLO || game_state == ST_ONLINE
+    if game_state == ST_SOLO || game_state == ST_ONLINE then
         music_level = clamp(music_level - dt / music_fade_out_time, 0, 1)
         snd_volume(LOBBY_MUSIC, music_volume / 100 * music_level)
-        if music_level <= 0 && snd_playing(LOBBY_MUSIC) == 1
+        if music_level <= 0 && snd_playing(LOBBY_MUSIC) == 1 then
             snd_stop(LOBBY_MUSIC)
         end
         return
     end
-    if snd_playing(LOBBY_MUSIC) == 0
+    if snd_playing(LOBBY_MUSIC) == 0 then
         music_level = 0
         snd_loop(LOBBY_MUSIC)
     end
     music_level = clamp(music_level + dt / music_fade_in_time, 0, 1)
     snd_volume(LOBBY_MUSIC, music_volume / 100 * music_level)
 end
-function update_warning()
-    if warn_open != 1
+public function update_warning()
+    if warn_open != 1 then
         return
     end
     warn_t = warn_t + dt
-    if warn_t <= warn_hold
+    if warn_t <= warn_hold then
         warn_a = 1
         return
     end
     warn_a = 1 - (warn_t - warn_hold) / warn_fade
-    if warn_a <= 0
+    if warn_a <= 0 then
         warn_a = 0
         warn_open = 0
         studio_open = 1
@@ -154,191 +160,211 @@ function update_warning()
         studio_bg_a = 1
     end
 end
-function update_studio()
-    if studio_open != 1
+public function update_studio()
+    if studio_open != 1 then
         return
     end
     studio_t = studio_t + dt
-    if studio_t < studio_in
+    if studio_t < studio_in then
         studio_a = studio_t / studio_in
         return
     end
-    if studio_t <= studio_in + studio_hold
+    if studio_t <= studio_in + studio_hold then
         studio_a = 1
         studio_bg_a = 1
         return
     end
     studio_a = 1 - (studio_t - studio_in - studio_hold) / studio_fade
     studio_bg_a = studio_a
-    if studio_a <= 0
+    if studio_a <= 0 then
         studio_a = 0
         studio_bg_a = 0
         studio_open = 0
     end
 end
-function tick_achievement_toast()
+public function tick_achievement_toast()
     ach_toast_t = tick_down(ach_toast_t)
 end
-function achievement_toast_text()
-    if ach_toast_bit == ACH_FIRST_WIN
+-- Счётчик FPS для боя: среднее за fps_interval секунд (dt — время между
+-- кадрами, которое считает main.c), поэтому цифра не прыгает каждый кадр.
+public function tick_fps_meter()
+    if show_fps == 0 then
+        fps_acc = 0
+        fps_frames = 0
+        return
+    end
+    fps_acc = fps_acc + dt
+    fps_frames = fps_frames + 1
+    if fps_acc < fps_interval then
+        return
+    end
+    if fps_acc > 0 then
+        fps_value = fps_frames / fps_acc
+    end
+    fps_acc = 0
+    fps_frames = 0
+end
+public function achievement_toast_text()
+    if ach_toast_bit == ACH_FIRST_WIN then
         return tr_achievement_first_win()
     end
-    if ach_toast_bit == ACH_ALL_CHARACTERS
+    if ach_toast_bit == ACH_ALL_CHARACTERS then
         return tr_achievement_grass()
     end
     return tr_achievement_legends()
 end
-function draw_achievement_toast()
-    if ach_toast_bit <= 0 || ach_toast_t <= 0
+public function draw_achievement_toast()
+    if ach_toast_bit <= 0 || ach_toast_t <= 0 then
         return
     end
-    number elapsed = ACH_TOAST_DURATION - ach_toast_t
-    number w = fit_w(460)
-    number h = 70
-    number x = center_x(w)
-    number home_y = 64
-    number off = home_y + h + 8
-    number y = home_y
-    if elapsed < ACH_TOAST_FADE_IN
-        number k = elapsed / ACH_TOAST_FADE_IN
-        number ease = 1 - (1 - k) * (1 - k)
+    local number elapsed = ACH_TOAST_DURATION - ach_toast_t
+    local number w = fit_w(460)
+    local number h = 70
+    local number x = center_x(w)
+    local number home_y = 64
+    local number off = home_y + h + 8
+    local number y = home_y
+    if elapsed < ACH_TOAST_FADE_IN then
+        local number k = elapsed / ACH_TOAST_FADE_IN
+        local number ease = 1 - (1 - k) * (1 - k)
         y = home_y - off * (1 - ease)
-    else if elapsed > ACH_TOAST_FADE_IN + ACH_TOAST_HOLD
-        number k2 = (elapsed - ACH_TOAST_FADE_IN - ACH_TOAST_HOLD) / ACH_TOAST_EXIT
+    else if elapsed > ACH_TOAST_FADE_IN + ACH_TOAST_HOLD then
+        local number k2 = (elapsed - ACH_TOAST_FADE_IN - ACH_TOAST_HOLD) / ACH_TOAST_EXIT
         y = home_y - off * clamp(k2, 0, 1) * clamp(k2, 0, 1)
     end
-    if y + h <= 0
+    if y + h <= 0 then
         return
     end
     roundrect(x, y, w, h, btn_radius, ui_purple)
-    string head = tr_achievement_toast_title()
-    string body = achievement_toast_text()
-    number hs = 0.42, bs = 0.62, gap = 6
-    number hh = text_ink_height(head) * hs, ht = text_ink_top(head) * hs
-    number bh = text_ink_height(body) * bs, bt = text_ink_top(body) * bs
-    number top = y + (h - hh - gap - bh) / 2
+    local string head = tr_achievement_toast_title()
+    local string body = achievement_toast_text()
+    local number hs = 0.42, bs = 0.62, gap = 6
+    local number hh = text_ink_height(head) * hs, ht = text_ink_top(head) * hs
+    local number bh = text_ink_height(body) * bs, bt = text_ink_top(body) * bs
+    local number top = y + (h - hh - gap - bh) / 2
     ctext_scaled(head, top - ht, text_color, hs)
     ctext_scaled(body, top + hh + gap - bt, text_color, bs)
 end
-function update()
+public function update()
     update_warning()
     update_studio()
     update_transition()
     update_music()
     tick_achievement_toast()
-    if game_state == ST_SOLO
+    tick_fps_meter()
+    if game_state == ST_SOLO then
         update_game()
-    else if game_state == ST_ONLINE
+    else if game_state == ST_ONLINE then
         update_online()
-    else if game_state == ST_LOGIN
+    else if game_state == ST_LOGIN then
         update_login()
-    else if game_state == ST_PROMO
+    else if game_state == ST_PROMO then
         update_promo()
     end
     update_weather()
 end
-function draw_screen()
-    if game_state == ST_LOBBY
+public function draw_screen()
+    if game_state == ST_LOBBY then
         draw_lobby()
-    else if game_state == ST_SOLO
+    else if game_state == ST_SOLO then
         draw_game()
-    else if game_state == ST_MODES
+    else if game_state == ST_MODES then
         draw_modes()
-    else if game_state == ST_SETTINGS
+    else if game_state == ST_SETTINGS then
         draw_settings()
-    else if game_state == ST_LOGIN
+    else if game_state == ST_LOGIN then
         draw_login()
-    else if game_state == ST_CLASSES
+    else if game_state == ST_CLASSES then
         draw_classes()
-    else if game_state == ST_LEVELS
+    else if game_state == ST_LEVELS then
         draw_levels()
-    else if game_state == ST_SKINS
+    else if game_state == ST_SKINS then
         draw_skins()
-    else if game_state == ST_LEADERBOARD
+    else if game_state == ST_LEADERBOARD then
         draw_leaderboard()
-    else if game_state == ST_ACHIEVEMENTS
+    else if game_state == ST_ACHIEVEMENTS then
         draw_achievements()
-    else if game_state == ST_PROMO
+    else if game_state == ST_PROMO then
         draw_promo()
-    else if game_state == ST_QUESTS
+    else if game_state == ST_QUESTS then
         draw_quests()
     else
         draw_online()
     end
 end
-function draw()
-    if t_fade >= 1
+public function draw()
+    if t_fade >= 1 then
         rect(0, 0, screen_w, screen_h, 0xFF000000)
     else
         draw_screen()
-        if t_fade > 0
+        if t_fade > 0 then
             rect(0, 0, screen_w, screen_h, (1 + floor(t_fade * 254)) * 0x1000000)
         end
     end
-    if warn_open == 1
+    if warn_open == 1 then
         draw_warning()
     end
-    if studio_open == 1
+    if studio_open == 1 then
         draw_studio()
     end
     draw_achievement_toast()
 end
-function back_pressed()
-    if warn_open == 1 || studio_open == 1
+public function back_pressed()
+    if warn_open == 1 || studio_open == 1 then
         return 1
     end
-    if t_dir != 0
+    if t_dir != 0 then
         return 1
     end
-    if game_state == ST_ONLINE && chat_open == 1
+    if game_state == ST_ONLINE && chat_open == 1 then
         chat_set_open(0)
         return 1
     end
-    if game_state == ST_SOLO || game_state == ST_ONLINE
-        if finished != 0 && finish_t < alert_hold
+    if game_state == ST_SOLO || game_state == ST_ONLINE then
+        if finished != 0 && finish_t < alert_hold then
             return 1
         end
         start_transition(ST_LOBBY)
         return 1
     end
-    if game_state == ST_LEVELS || game_state == ST_SKINS
+    if game_state == ST_LEVELS || game_state == ST_SKINS then
         start_transition(ST_CLASSES)
         return 1
     end
-    if game_state == ST_LEADERBOARD || game_state == ST_PROMO
+    if game_state == ST_LEADERBOARD || game_state == ST_PROMO then
         start_transition(ST_MODES)
         return 1
     end
-    if game_state == ST_QUESTS
+    if game_state == ST_QUESTS then
         start_transition(ST_LOBBY)
         return 1
     end
-    if game_state == ST_LOGIN
+    if game_state == ST_LOGIN then
         keyboard_hide()
         keyboard_clear()
-        if login_after == ST_ONLINE
+        if login_after == ST_ONLINE then
             start_transition(ST_MODES)
         else
             start_transition(ST_LOBBY)
         end
         return 1
     end
-    if game_state != ST_LOBBY
+    if game_state != ST_LOBBY then
         start_transition(ST_LOBBY)
         return 1
     end
     return 0
 end
-function touch(number x, number y, number action, number id)
-    if t_dir != 0
+public function touch(number x, number y, number action, number id)
+    if t_dir != 0 then
         return
     end
-    if warn_open == 1 || studio_open == 1
+    if warn_open == 1 || studio_open == 1 then
         return
     end
-    if game_state == ST_LOBBY
+    if game_state == ST_LOBBY then
         touch_lobby(x, y, action)
-    else if game_state == ST_SOLO || game_state == ST_ONLINE
+    else if game_state == ST_SOLO || game_state == ST_ONLINE then
         touch_game(x, y, action, id)
     else
         touch_menu(x, y, action)

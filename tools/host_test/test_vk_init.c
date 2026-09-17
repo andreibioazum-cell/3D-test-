@@ -359,7 +359,17 @@ void vkDestroySemaphore(VkDevice d, VkSemaphore s, const VkAllocationCallbacks *
 
 /* Команды буфера: на хосте некуда записывать. */
 void vkCmdBindPipeline(VkCommandBuffer cb, VkPipelineBindPoint pb, VkPipeline p) { (void)cb; (void)pb; (void)p; }
-void vkCmdPushConstants(VkCommandBuffer cb, VkPipelineLayout l, VkShaderStageFlags s, uint32_t off, uint32_t size, const void *v) { (void)cb; (void)l; (void)s; (void)off; (void)size; (void)v; }
+/* Push-константы и области blit запоминаются: по ним проверяется апскейл —
+ * шейдер обязан получать ЛОГИЧЕСКИЙ размер окна, а blit тянуть маленький
+ * оффскрин на весь swapchain. */
+static float g_pc[4];
+static int g_pc_sets, g_blits, g_copies;
+static int g_blit_src_w, g_blit_src_h, g_blit_dst_w, g_blit_dst_h;
+void vkCmdPushConstants(VkCommandBuffer cb, VkPipelineLayout l, VkShaderStageFlags s, uint32_t off, uint32_t size, const void *v) {
+    (void)cb; (void)l; (void)s; (void)off;
+    if (size >= sizeof g_pc && v) memcpy(g_pc, v, sizeof g_pc);
+    g_pc_sets++;
+}
 void vkCmdBindDescriptorSets(VkCommandBuffer cb, VkPipelineBindPoint pb, VkPipelineLayout l, uint32_t first, uint32_t n, const VkDescriptorSet *sets, uint32_t din, const uint32_t *dyn) { (void)cb; (void)pb; (void)l; (void)first; (void)n; (void)sets; (void)din; (void)dyn; }
 void vkCmdBindVertexBuffers(VkCommandBuffer cb, uint32_t first, uint32_t n, const VkBuffer *bufs, const VkDeviceSize *offs) { (void)cb; (void)first; (void)n; (void)bufs; (void)offs; }
 void vkCmdBindIndexBuffer(VkCommandBuffer cb, VkBuffer b, VkDeviceSize off, VkIndexType t) { (void)cb; (void)b; (void)off; (void)t; }
@@ -370,8 +380,16 @@ void vkCmdSetViewport(VkCommandBuffer cb, uint32_t first, uint32_t n, const VkVi
 void vkCmdSetScissor(VkCommandBuffer cb, uint32_t first, uint32_t n, const VkRect2D *rc) { (void)cb; (void)first; (void)n; (void)rc; }
 void vkCmdPipelineBarrier(VkCommandBuffer cb, VkPipelineStageFlags s, VkPipelineStageFlags d, VkDependencyFlags fl, uint32_t nm, const VkMemoryBarrier *mb, uint32_t nb, const VkBufferMemoryBarrier *bb, uint32_t ni, const VkImageMemoryBarrier *ib) { (void)cb; (void)s; (void)d; (void)fl; (void)nm; (void)mb; (void)nb; (void)bb; (void)ni; (void)ib; }
 void vkCmdCopyBufferToImage(VkCommandBuffer cb, VkBuffer src, VkImage dst, VkImageLayout dl, uint32_t n, const VkBufferImageCopy *rc) { (void)cb; (void)src; (void)dst; (void)dl; (void)n; (void)rc; }
-void vkCmdBlitImage(VkCommandBuffer cb, VkImage src, VkImageLayout sl, VkImage dst, VkImageLayout dl, uint32_t n, const VkImageBlit *rc, VkFilter f) { (void)cb; (void)src; (void)sl; (void)dst; (void)dl; (void)n; (void)rc; (void)f; }
-void vkCmdCopyImage(VkCommandBuffer cb, VkImage src, VkImageLayout sl, VkImage dst, VkImageLayout dl, uint32_t n, const VkImageCopy *rc) { (void)cb; (void)src; (void)sl; (void)dst; (void)dl; (void)n; (void)rc; }
+void vkCmdBlitImage(VkCommandBuffer cb, VkImage src, VkImageLayout sl, VkImage dst, VkImageLayout dl, uint32_t n, const VkImageBlit *rc, VkFilter f) {
+    (void)cb; (void)src; (void)sl; (void)dst; (void)dl;
+    if (n == 1 && rc) {
+        g_blit_src_w = rc[0].srcOffsets[1].x; g_blit_src_h = rc[0].srcOffsets[1].y;
+        g_blit_dst_w = rc[0].dstOffsets[1].x; g_blit_dst_h = rc[0].dstOffsets[1].y;
+        if (f != VK_FILTER_NEAREST) g_violation("blit: фильтр не NEAREST (апскейл обязан быть пиксельным)");
+    }
+    g_blits++;
+}
+void vkCmdCopyImage(VkCommandBuffer cb, VkImage src, VkImageLayout sl, VkImage dst, VkImageLayout dl, uint32_t n, const VkImageCopy *rc) { (void)cb; (void)src; (void)sl; (void)dst; (void)dl; (void)n; (void)rc; g_copies++; }
 
 /* --- заглушки рантайма и Android (как в test_geometry.c) --- */
 
@@ -399,7 +417,8 @@ int AAsset_close(AAsset *a) { (void)a; return 0; }
 
 #define TEST_STACK_SIZE (1u << 20)
 static char test_stack[TEST_STACK_SIZE];
-static struct { int init_ok; int frame1_ok; int frame2_ok; } g_res;
+static struct { int init_ok; int frame1_ok; int frame2_ok; int frame3_ok;
+                unsigned off_w, off_h, log_w, log_h; } g_res;
 
 static void *test_thread(void *arg) {
     (void)arg;
@@ -421,6 +440,16 @@ static void *test_thread(void *arg) {
     g_res.frame2_ok = ds_graphics_begin_frame(&b);
     rect(0, 0, 10, 10, 0xff654321);
     ds_graphics_end_frame();
+    /* Третий кадр: апскейл 2x из настроек. Оффскрин обязан стать вдвое меньше
+     * окна, а логический размер (его получает вершинный шейдер) — остаться
+     * равным окну: иначе интерфейс вырастал бы в scale раз («супер огромный»). */
+    ds_graphics_set_pixel_scale(2);
+    g_res.frame3_ok = ds_graphics_begin_frame(&b);
+    rect(0, 0, 10, 10, 0xff123456);
+    ds_graphics_end_frame();
+    g_res.off_w = vk_off_w; g_res.off_h = vk_off_h;
+    g_res.log_w = vk_log_w; g_res.log_h = vk_log_h;
+    ds_graphics_set_pixel_scale(1);
     ds_graphics_shutdown();
     return 0;
 }
@@ -441,9 +470,26 @@ int main(void) {
     if (!g_res.frame2_ok) { fail = 1; printf("FAIL: begin_frame второго кадра (смена формата) вернул 0\n"); }
     if (g_swapchain_creates < 2) { fail = 1; printf("FAIL: ожидалось 2+ пересоздания swapchain, было %d\n", g_swapchain_creates); }
     if (g_pipeline_creates < 8) { fail = 1; printf("FAIL: ожидалось 8+ созданий конвейеров (4 init + 4 после смены формата), было %d\n", g_pipeline_creates); }
+    if (!g_res.frame3_ok) { fail = 1; printf("FAIL: begin_frame кадра с апскейлом 2x вернул 0\n"); }
+    if (g_res.off_w != 360 || g_res.off_h != 640) {
+        fail = 1; printf("FAIL: апскейл 2x: оффскрин %ux%u, ожидалось 360x640\n", g_res.off_w, g_res.off_h);
+    }
+    if (g_res.log_w != 720 || g_res.log_h != 1280) {
+        fail = 1; printf("FAIL: апскейл 2x: логический размер %ux%u, ожидалось 720x1280\n", g_res.log_w, g_res.log_h);
+    }
+    if (fabsf(g_pc[0] - 2.0f / 720.0f) > 1e-9f || fabsf(g_pc[1] - 2.0f / 1280.0f) > 1e-9f) {
+        fail = 1; printf("FAIL: push-константы кадра с апскейлом %g %g, ожидалось %g %g (шейдер должен делить на окно, не на оффскрин)\n",
+                         g_pc[0], g_pc[1], 2.0f / 720.0f, 2.0f / 1280.0f);
+    }
+    if (g_blit_src_w != 360 || g_blit_src_h != 640 || g_blit_dst_w != 720 || g_blit_dst_h != 1280) {
+        fail = 1; printf("FAIL: blit с апскейлом %dx%d -> %dx%d, ожидалось 360x640 -> 720x1280\n",
+                         g_blit_src_w, g_blit_src_h, g_blit_dst_w, g_blit_dst_h);
+    }
+    if (g_blits < 3) { fail = 1; printf("FAIL: blit не вызывался на каждом кадре (было %d)\n", g_blits); }
     if (g_violations) { fail = 1; printf("FAIL: строгий драйвер поймал невалидный create-info: %s\n", g_violation_msg); }
     if (!fail) {
-        printf("PASS: init + 2 кадра + смена формата swapchain; pNext/flags чистые, конвейеров создано %d\n", g_pipeline_creates);
+        printf("PASS: init + 3 кадра (последний - апскейл 2x: оффскрин 360x640, шейдер и blit на окно 720x1280) "
+               "+ смена формата swapchain; pNext/flags чистые, конвейеров создано %d\n", g_pipeline_creates);
     }
     return fail;
 }

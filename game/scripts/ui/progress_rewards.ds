@@ -1,13 +1,13 @@
-function has_achievement(number bit)
-    number shifted = floor(achievement_mask / bit)
+public function has_achievement(number bit)
+    local number shifted = floor(achievement_mask / bit)
     return shifted - floor(shifted * 0.5) * 2
 end
-function show_achievement_toast(number bit)
+public function show_achievement_toast(number bit)
     ach_toast_bit = bit
     ach_toast_t = ACH_TOAST_DURATION
 end
-function grant_achievement(number bit)
-    if has_achievement(bit) == 1
+public function grant_achievement(number bit)
+    if has_achievement(bit) == 1 then
         return 0
     end
     achievement_mask = achievement_mask + bit
@@ -15,15 +15,15 @@ function grant_achievement(number bit)
     show_achievement_toast(bit)
     return 1
 end
-function check_achievements()
-    if class_owned_of(CLASS_AZUM) == 1 && class_owned_of(CLASS_SANTA) == 1 && class_owned_of(CLASS_EBUC) == 1
+public function check_achievements()
+    if class_owned_of(CLASS_AZUM) == 1 && class_owned_of(CLASS_SANTA) == 1 && class_owned_of(CLASS_EBUC) == 1 then
         grant_achievement(ACH_ALL_CHARACTERS)
     end
 end
-function save_progress()
-    // Батл пасс удалён из игры, но его поле в прогрессе храним как было,
-    // чтобы старые сохранения читались без сдвига остальных полей.
-    number bp_lv = net_load_bp_level()
+public function save_progress()
+    -- Батл пасс удалён из игры, но его поле в прогрессе храним как было,
+    -- чтобы старые сохранения читались без сдвига остальных полей.
+    local number bp_lv = net_load_bp_level()
     net_save_progress_all(cups, candies, player_class,
         class_owned_of(CLASS_AZUM), class_owned_of(CLASS_SANTA), class_owned_of(CLASS_EBUC),
         player_level, levels_unlocked,
@@ -34,37 +34,37 @@ function save_progress()
         bp_lv, azum_skin)
     progress_push_to_net()
 end
-function progress_push_to_net()
+public function progress_push_to_net()
     net_set_class(player_class)
     net_set_level(player_level)
     net_set_skin(azum_skin)
 end
-function progress_normalize()
-    if azum_skin < SKIN_NORMAL || azum_skin >= SKIN_COUNT
+public function progress_normalize()
+    if azum_skin < SKIN_NORMAL || azum_skin >= SKIN_COUNT then
         azum_skin = SKIN_NORMAL
     end
-    if azum_skin == SKIN_ZOMBIE && has_achievement(ACH_LEGENDS) == 0
+    if azum_skin == SKIN_ZOMBIE && has_achievement(ACH_LEGENDS) == 0 then
         azum_skin = SKIN_NORMAL
     end
-    number cls = CLASS_ORDINARY
-    loop cls < class_count
-        number un = clamp(class_unlocked_of(cls), 0, max_level)
-        number lv = class_level_of(cls)
-        if lv < 0 || lv > un
+    local number cls = CLASS_ORDINARY
+    while cls < class_count do
+        local number un = clamp(class_unlocked_of(cls), 0, max_level)
+        local number lv = class_level_of(cls)
+        if lv < 0 || lv > un then
             lv = 0
         end
         set_class_progress(cls, lv, un)
         cls = cls + 1
     end
-    if player_class < 0 || player_class >= class_count || class_owned_of(player_class) == 0
+    if player_class < 0 || player_class >= class_count || class_owned_of(player_class) == 0 then
         player_class = CLASS_ORDINARY
     end
     levels_unlocked = clamp(levels_unlocked, 0, max_level)
-    if player_level < 0 || player_level > levels_unlocked
+    if player_level < 0 || player_level > levels_unlocked then
         player_level = 0
     end
 end
-function progress_from_storage()
+public function progress_from_storage()
     cups = net_load_cups()
     candies = net_load_candies()
     achievement_mask = net_load_achievement_flags()
@@ -80,7 +80,7 @@ function progress_from_storage()
     set_class_progress(CLASS_SANTA, net_load_santa_level(), net_load_santa_levels_unlocked())
     set_class_progress(CLASS_EBUC, net_load_ebuc_level(), net_load_ebuc_levels_unlocked())
     azum_skin = net_load_azum_skin()
-    if azum_skin == SKIN_ZOMBIE && has_achievement(ACH_LEGENDS) == 0
+    if azum_skin == SKIN_ZOMBIE && has_achievement(ACH_LEGENDS) == 0 then
         grant_achievement(ACH_LEGENDS)
     end
     progress_normalize()
@@ -89,26 +89,30 @@ function progress_from_storage()
     check_achievements()
     quest_load()
 end
-function settings_from_storage()
+public function settings_from_storage()
     language = net_load_language()
     show_hitboxes = net_load_hitboxes()
     music_volume = net_load_music_volume()
     fps_cap = net_load_fps_cap()
     render_scale = net_load_render_scale()
+    winter_theme = net_load_winter_theme()
+    show_fps = net_load_fps_meter()
 end
-function save_settings()
+public function save_settings()
     net_save_settings(language, show_hitboxes)
     net_save_fps_cap(fps_cap)
     net_save_render_scale(render_scale)
+    net_save_winter_theme(winter_theme)
+    net_save_fps_meter(show_fps)
 end
-function apply_video_settings()
+public function apply_video_settings()
     ds_set_fps_cap(fps_cap)
     ds_set_render_scale(render_scale)
 end
-function music_volume_step(number d)
+public function music_volume_step(number d)
     music_volume = clamp(music_volume + d, 0, 100)
     net_save_music_volume(music_volume)
-    if music_ok == 1
+    if music_ok == 1 then
         snd_volume(LOBBY_MUSIC, music_volume / 100 * music_level)
     end
 end

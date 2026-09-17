@@ -1,149 +1,162 @@
-include graphics
-function shade(number rgb, number k)
-    number a = floor(rgb / 16777216)
-    number body = rgb - a * 16777216
-    number r = floor(body / 65536)
-    number g = floor(body / 256) - r * 256
-    number b = body - floor(body / 256) * 256
+public function shade(number rgb, number k)
+    local number a = floor(rgb / 16777216)
+    local number body = rgb - a * 16777216
+    local number r = floor(body / 65536)
+    local number g = floor(body / 256) - r * 256
+    local number b = body - floor(body / 256) * 256
     return a * 16777216 + floor(r * k) * 65536 + floor(g * k) * 256 + floor(b * k)
 end
-function locked_bg()
+public function locked_bg()
     return shade(ui_purple, locked_shade)
 end
-function locked_text()
+public function locked_text()
     return locked_text_alpha * 16777216 + text_color
 end
-function fade_color(number rgb, number t, number fade)
-    number a = clamp(t / fade, 0, 1)
+public function fade_color(number rgb, number t, number fade)
+    local number a = clamp(t / fade, 0, 1)
     return (1 + floor(a * 254)) * 0x1000000 + rgb
 end
-function hit_rect(number px, number py, number x, number y, number w, number h)
-    if px >= x && px <= x + w && py >= y && py <= y + h
+public function hit_rect(number px, number py, number x, number y, number w, number h)
+    if px >= x && px <= x + w && py >= y && py <= y + h then
         return 1
     end
     return 0
 end
-function hit_rect_pad(number px, number py, number x, number y, number w, number h)
+public function hit_rect_pad(number px, number py, number x, number y, number w, number h)
     return hit_rect(px, py, x - touch_pad_x, y - touch_pad_y, w + 2 * touch_pad_x, h + 2 * touch_pad_y)
 end
-function ctext(string s, number y, color c)
+public function ctext(string s, number y, color c)
     text(s, (screen_w - text_ink_width(s)) / 2, y, c)
 end
-function ctext_scaled(string s, number y, color c, number scale)
+public function ctext_scaled(string s, number y, color c, number scale)
     text_scaled(s, (screen_w - text_ink_width(s) * scale) / 2, y, c, scale)
 end
-function ctext_fade(string s, number y, color rgb, number t, number fade)
+public function ctext_fade(string s, number y, color rgb, number t, number fade)
     ctext(s, y, fade_color(rgb, t, fade))
 end
-function text_in_box(string label, number x, number y, number w, number h, color c, number scale)
-    number tw = text_ink_width(label) * scale
-    number th = text_ink_height(label) * scale
-    number tt = text_ink_top(label) * scale
+public function text_in_box(string label, number x, number y, number w, number h, color c, number scale)
+    local number tw = text_ink_width(label) * scale
+    local number th = text_ink_height(label) * scale
+    local number tt = text_ink_top(label) * scale
     text_scaled(label, x + (w - tw) / 2, y + (h - th) / 2 - tt + 1.5, c, scale)
 end
-function text_in_field(string label, number x, number y, number h, color c, number scale)
-    number th = text_ink_height(label) * scale
-    number tt = text_ink_top(label) * scale
+public function text_in_field(string label, number x, number y, number h, color c, number scale)
+    local number th = text_ink_height(label) * scale
+    local number tt = text_ink_top(label) * scale
     text_scaled(label, x, y + (h - th) / 2 - tt + 1.5, c, scale)
 end
-function centered_text(string label, number x, number w, number y, color c, number scale)
-    number tw = text_ink_width(label) * scale
+-- Длинная надпись не должна вылезать за отведённую ширину: масштаб считается по
+-- фактической ширине текста (как в поле промокода), но не больше max_scale —
+-- короткие надписи остаются своего размера.
+public function fit_text_scale(string s, number w, number max_scale)
+    local number tw = text_ink_width(s)
+    if tw <= 0 || w <= 0 then
+        return max_scale
+    end
+    local number sc = w / tw
+    if sc > max_scale then
+        sc = max_scale
+    end
+    return sc
+end
+public function centered_text(string label, number x, number w, number y, color c, number scale)
+    local number tw = text_ink_width(label) * scale
     text_scaled(label, x + (w - tw) / 2, y, c, scale)
 end
-function rtext_in_box(string label, number x, number y, number w, number pad, color c, number scale)
-    number tw = text_ink_width(label) * scale
+public function rtext_in_box(string label, number x, number y, number w, number pad, color c, number scale)
+    local number tw = text_ink_width(label) * scale
     text_scaled(label, x + w - pad - tw, y, c, scale)
 end
-function money_pair(string left, string right, number y, number scale, number gap)
-    number lw = text_ink_width(left) * scale
-    number rw = text_ink_width(right) * scale
-    number x = (screen_w - lw - rw - gap) / 2
+public function money_pair(string left, string right, number y, number scale, number gap)
+    local number lw = text_ink_width(left) * scale
+    local number rw = text_ink_width(right) * scale
+    local number x = (screen_w - lw - rw - gap) / 2
     text_scaled(left, x, y, text_color, scale)
     text_scaled(right, x + lw + gap, y, text_color, scale)
 end
-function draw_nick_msg(string nick, string rest, number x, number y, color base, number scale)
-    number nw = text_ink_width(nick) * scale
+public function draw_nick_msg(string nick, string rest, number x, number y, color base, number scale)
+    local number nw = text_ink_width(nick) * scale
     text_scaled(nick, x, y, admin_color_of(nick, base), scale)
     text_scaled(rest, x + nw, y, base, scale)
 end
-function button(string label, number x, number y, number w, number h)
+public function button(string label, number x, number y, number w, number h)
     roundrect(x, y, w, h, btn_radius, ui_purple)
     text_in_box(label, x, y, w, h, text_color, 1)
 end
-function button_scaled(string label, number x, number y, number w, number h, number scale)
+public function button_scaled(string label, number x, number y, number w, number h, number scale)
     roundrect(x, y, w, h, btn_radius, ui_purple)
     text_in_box(label, x, y, w, h, text_color, scale)
 end
-function draw_back()
+public function draw_back()
     button(tr_back(), (screen_w - btn_w) / 2, back_y, btn_w, btn_h)
 end
-function back_hit(number x, number y)
+public function back_hit(number x, number y)
     return hit_rect_pad(x, y, (screen_w - btn_w) / 2, back_y, btn_w, btn_h)
 end
-function screen_fill()
+public function screen_fill()
     rect(0, 0, screen_w, screen_h, bg_screen)
 end
-function card_state(number x, number y, number w, number h, number selected, number locked)
-    if selected == 1
+public function card_state(number x, number y, number w, number h, number selected, number locked)
+    if selected == 1 then
         roundrect(x - card_ring_pad, y - card_ring_pad, w + 2 * card_ring_pad, h + 2 * card_ring_pad, btn_radius + 4, card_ring)
     end
-    if locked == 1
+    if locked == 1 then
         roundrect(x, y, w, h, btn_radius, shade(card_bg, locked_shade))
         return
     end
     roundrect(x, y, w, h, btn_radius, card_bg)
 end
-function card(number x, number y, number w, number h, number selected)
+public function card(number x, number y, number w, number h, number selected)
     card_state(x, y, w, h, selected, 0)
 end
-function panel(number x, number y, number w, number h, number locked)
-    if locked == 1
+public function panel(number x, number y, number w, number h, number locked)
+    if locked == 1 then
         roundrect(x, y, w, h, btn_radius, locked_bg())
         return
     end
     roundrect(x, y, w, h, btn_radius, ui_purple)
 end
-function panel_text(number locked)
-    if locked == 1
+public function panel_text(number locked)
+    if locked == 1 then
         return locked_text()
     end
     return text_color
 end
-function hud_bar(number bx, number by, number w, number h, number cur, number max, color c, number from_right)
+public function hud_bar(number bx, number by, number w, number h, number cur, number max, color c, number from_right)
     roundrect(bx, by, w, h, h / 2, 0xDD171923)
-    number shown = clamp(cur, 0, max)
-    number pad = 4
-    if h <= 12
+    local number shown = clamp(cur, 0, max)
+    local number pad = 4
+    if h <= 12 then
         pad = 1
     end
-    number fh = h - 2 * pad
-    if fh < 1
+    local number fh = h - 2 * pad
+    if fh < 1 then
         fh = 1
     end
-    if max <= 0
+    if max <= 0 then
         return
     end
-    number fill_w = (w - 2 * pad) * shown / max
-    if fill_w <= 0
+    local number fill_w = (w - 2 * pad) * shown / max
+    if fill_w <= 0 then
         return
     end
-    if from_right == 1
+    if from_right == 1 then
         roundrect(bx + w - pad - fill_w, by + pad, fill_w, fh, fh / 2, c)
     else
         roundrect(bx + pad, by + pad, fill_w, fh, fh / 2, c)
     end
 end
-function tick_down(number t)
-    if t <= 0
+public function tick_down(number t)
+    if t <= 0 then
         return 0
     end
-    if t - dt <= 0
+    if t - dt <= 0 then
         return 0
     end
     return t - dt
 end
-function draw_msg(string label, number y, number t)
-    if t > 0
+public function draw_msg(string label, number y, number t)
+    if t > 0 then
         ctext_fade(label, y, text_color, t, msg_fade)
     end
 end

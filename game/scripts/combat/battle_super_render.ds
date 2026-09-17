@@ -1,73 +1,72 @@
-include graphics
-// Луч виден, пока живы турель и её хозяин и пока бой не закончен: как только
-// условие пропадает, луч гаснет один раз и больше не возвращается. Альфа и
-// толщина постоянны, а короткий луч не обрезается резко, а плавно укорачивается
-// под спрайтами — поэтому миганий «виден/пропал» и скачков прозрачности нет.
-function station_beam_visible(number owner_hp)
-    if finished!=0
+-- Луч виден, пока живы турель и её хозяин и пока бой не закончен: как только
+-- условие пропадает, луч гаснет один раз и больше не возвращается. Альфа и
+-- толщина постоянны, а короткий луч не обрезается резко, а плавно укорачивается
+-- под спрайтами — поэтому миганий «виден/пропал» и скачков прозрачности нет.
+public function station_beam_visible(number owner_hp)
+    if finished!=0 then
         return 0
     end
-    if owner_hp<=0
+    if owner_hp<=0 then
         return 0
     end
     return 1
 end
-function draw_station_beam(number sx, number sy, number px, number py)
-    number dx=px-sx, dy=py-sy
-    number d=sqrt(dx*dx+dy*dy)
-    if d<station_beam_min
+public function draw_station_beam(number sx, number sy, number px, number py)
+    local number dx=px-sx, dy=py-sy
+    local number d=sqrt(dx*dx+dy*dy)
+    if d<station_beam_min then
         return
     end
-    number nx=dx/d, ny=dy/d
-    number pull=station_beam_pull
-    if pull>d*0.5
+    local number nx=dx/d, ny=dy/d
+    local number pull=station_beam_pull
+    if pull>d*0.5 then
         pull=d*0.5
     end
-    number x1=sx, y1=sy
-    number x2=px-nx*pull, y2=py-ny*pull
-    color outer=(((unsigned)(int)station_beam_alpha)<<24)|((unsigned)(int)station_beam_rgb)
-    color core=(((unsigned)(int)station_beam_core_alpha)<<24)|((unsigned)(int)station_beam_core_rgb)
+    local number x1=sx, y1=sy
+    local number x2=px-nx*pull, y2=py-ny*pull
+    local color outer=(((unsigned)(int)station_beam_alpha)<<24)|((unsigned)(int)station_beam_rgb)
+    local color core=(((unsigned)(int)station_beam_core_alpha)<<24)|((unsigned)(int)station_beam_core_rgb)
     line(x1,y1,x2,y2,station_beam_w,outer)
     line(x1,y1,x2,y2,station_beam_core_w,core)
 end
-function draw_turret_shadow_at(number x, number y, number spawn)
-    number scale=station_scale
-    if spawn>0
-        number sp=clamp(spawn/station_spawn_time,0,1)
+public function draw_turret_shadow_at(number x, number y, number spawn)
+    local number scale=station_scale
+    if spawn>0 then
+        local number sp=clamp(spawn/station_spawn_time,0,1)
         scale=station_scale*(1.0+0.25*sp)
     end
-    number hw=25*scale
+    local number hw=25*scale
     tex_tint(x-hw-shadow_off,y-hw+shadow_off,DESPENSER_TEX,0,scale,(((unsigned)(int)shadow_alpha)<<24))
 end
-function draw_turret_shadows()
-    number i=0
-    loop i<turret_max
-        if turret_alive(i)==1
+public function draw_turret_shadows()
+    local number i=0
+    while i<turret_max do
+        if turret_alive(i)==1 then
             draw_turret_shadow_at(arr_get(turret_x,i),arr_get(turret_y,i),arr_get(turret_spawn_t,i))
         end
         i=i+1
     end
-    if game_state==ST_SOLO
+    if game_state==ST_SOLO then
         i=0
-        loop i<turret_max
-            if enemy_turret_alive(i)==1
+        while i<turret_max do
+            if enemy_turret_alive(i)==1 then
                 draw_turret_shadow_at(arr_get(enemy_turret_x,i),arr_get(enemy_turret_y,i),arr_get(enemy_turret_spawn_t,i))
             end
             i=i+1
         end
     end
-    if game_state!=ST_ONLINE
+    if game_state!=ST_ONLINE then
         return
     end
-    if net_slot()<0
+    if net_slot()<0 then
         return
     end
-    number s=0
-    loop s<max_players
-        if s!=net_slot()
-            number b=s*station_fields, o=b+1, k=0
-            loop k<turret_max
-                if arr_get(remote_station,o)==1
+    local number s=0
+    while s<max_players do
+        if s!=net_slot() then
+            local number b=s*station_fields, o=b+1, k=0
+            while k<turret_max do
+                if arr_get(remote_station,o)==1 then
                     draw_turret_shadow_at(arr_get(remote_station,o+1),arr_get(remote_station,o+2),0)
                 end
                 o=o+5
@@ -77,62 +76,62 @@ function draw_turret_shadows()
         s=s+1
     end
 end
-function draw_turret_at(number x, number y, number hp, number max_hp, number spawn)
-    number scale=station_scale
-    if spawn>0
-        number sp=clamp(spawn/station_spawn_time,0,1)
+public function draw_turret_at(number x, number y, number hp, number max_hp, number spawn)
+    local number scale=station_scale
+    if spawn>0 then
+        local number sp=clamp(spawn/station_spawn_time,0,1)
         scale=station_scale*(1.0+0.25*sp)
     end
-    number hw=25*scale
+    local number hw=25*scale
     tex(x-hw,y-hw,DESPENSER_TEX,0,scale)
-    number bw=46*scale, bh=7
+    local number bw=46*scale, bh=7
     hud_bar(x-bw/2, y-hw-12, bw, bh, hp, max_hp, 0x7ED321, 0)
 end
-function draw_turret_boom(number x, number y, number bt)
-    if bt<=0
+public function draw_turret_boom(number x, number y, number bt)
+    if bt<=0 then
         return
     end
-    number p=1-bt/station_boom_time
-    if p<0
+    local number p=1-bt/station_boom_time
+    if p<0 then
         p=0
     end
-    if p>1
+    if p>1 then
         p=1
     end
-    number fade_in=clamp(p/boom_fade_in,0,1)
-    number fade_out=clamp(bt/(station_boom_time*boom_fade_out),0,1)
-    number a=floor(fade_in*fade_out*240)
-    if a<=0
+    local number fade_in=clamp(p/boom_fade_in,0,1)
+    local number fade_out=clamp(bt/(station_boom_time*boom_fade_out),0,1)
+    local number a=floor(fade_in*fade_out*240)
+    if a<=0 then
         return
     end
-    number r=30+95*p
+    local number r=30+95*p
     ring(x,y,r,9,(((unsigned)(int)a)<<24)|0x0000E676)
     ring(x,y,r*0.66,6,(((unsigned)(int)floor(a*0.85))<<24)|0x00B9F6CA)
     ring(x,y,r*0.36,5,(((unsigned)(int)floor(a*0.65))<<24)|0x0076FF03)
     circle(x,y,r*0.22+6*(1-p),(((unsigned)(int)floor(a*0.7))<<24)|0x0000E676)
-    number i=0
-    loop i<18
-        number h1=hash01(i*37+11)
-        number h2=hash01(i*61+7)
-        number ang=h1*2*pi
-        number rr=r*(0.5+0.5*h2)
-        number px=x+cos(ang)*rr
-        number py=y+sin(ang)*rr
-        number sz=2+4*(1-p)
-        number aa=floor(a*(0.7+0.3*h2))
+    local number i=0
+    while i<18 do
+        local number h1=hash01(i*37+11)
+        local number h2=hash01(i*61+7)
+        local number ang=h1*2*pi
+        local number rr=r*(0.5+0.5*h2)
+        local number px=x+cos(ang)*rr
+        local number py=y+sin(ang)*rr
+        local number sz=2+4*(1-p)
+        local number aa=floor(a*(0.7+0.3*h2))
         circle(px,py,sz,(((unsigned)(int)aa)<<24)|0x0000E676)
         i=i+1
     end
 end
-function draw_station()
-    number beam=-1
-    if station_beam_visible(player.hp)==1
-        if turret_alive(last_turret_slot)==1
+public function draw_station()
+    local number beam=-1
+    if station_beam_visible(player.hp)==1 then
+        if turret_alive(last_turret_slot)==1 then
             beam=last_turret_slot
         else
-            number j=0
-            loop j<turret_max
-                if turret_alive(j)==1
+            local number j=0
+            while j<turret_max do
+                if turret_alive(j)==1 then
                     beam=j
                     j=turret_max
                 end
@@ -140,127 +139,127 @@ function draw_station()
             end
         end
     end
-    if beam>=0
+    if beam>=0 then
         draw_station_beam(arr_get(turret_x,beam),arr_get(turret_y,beam),player.x,player.y)
     end
-    number i=0
-    loop i<turret_max
-        if turret_alive(i)==1
+    local number i=0
+    while i<turret_max do
+        if turret_alive(i)==1 then
             draw_turret_at(arr_get(turret_x,i),arr_get(turret_y,i),arr_get(turret_hp,i),arr_get(turret_maxhp,i),arr_get(turret_spawn_t,i))
         end
         i=i+1
     end
-    number bi=0
-    loop bi<arr_len(station_boom_ts)
-        number bt=arr_get(station_boom_ts,bi)
-        if bt>0
+    local number bi=0
+    while bi<arr_len(station_boom_ts) do
+        local number bt=arr_get(station_boom_ts,bi)
+        if bt>0 then
             draw_turret_boom(arr_get(station_boom_xs,bi),arr_get(station_boom_ys,bi),bt)
         end
         bi=bi+1
     end
 end
-function universe_particle_color(number i, number a)
-    number m=(int)i%4
-    if m==0
+public function universe_particle_color(number i, number a)
+    local number m=(int)i%4
+    if m==0 then
         return (((unsigned)(int)a)<<24)|0x0000E676
     end
-    if m==1
+    if m==1 then
         return (((unsigned)(int)a)<<24)|0x0000E5FF
     end
-    if m==2
+    if m==2 then
         return (((unsigned)(int)a)<<24)|0x00FFFFFF
     end
     return (((unsigned)(int)a)<<24)|0x0076FF03
 end
-function draw_universe_at(number cx, number cy, number seed, number t, number fade)
-    if t<=0||fade<=0
+public function draw_universe_at(number cx, number cy, number seed, number t, number fade)
+    if t<=0||fade<=0 then
         return
     end
-    number p=clamp(t/ebuc_universe_collapse_time,0,1)
-    number collapsed=0
-    if p>=1
+    local number p=clamp(t/ebuc_universe_collapse_time,0,1)
+    local number collapsed=0
+    if p>=1 then
         collapsed=1
     end
-    if collapsed==0
-        number i=0
-        loop i<ebuc_universe_particles
-            number h1=hash01(seed*13+i*91+7)
-            number h2=hash01(seed*17+i*131+19)
-            number h3=hash01(seed*23+i*173+31)
-            number h4=hash01(seed*29+i*211+47)
-            number sx=40+h1*(screen_w-80)
-            number sy=40+h2*(screen_h-80)
-            number k=p*p
-            number px=lerp(sx,cx,k)
-            number py=lerp(sy,cy,k)
-            number size=2+6*h3*(1-p)
-            number a=floor((120+120*p)*fade)
-            if a>0
+    if collapsed==0 then
+        local number i=0
+        while i<ebuc_universe_particles do
+            local number h1=hash01(seed*13+i*91+7)
+            local number h2=hash01(seed*17+i*131+19)
+            local number h3=hash01(seed*23+i*173+31)
+            local number h4=hash01(seed*29+i*211+47)
+            local number sx=40+h1*(screen_w-80)
+            local number sy=40+h2*(screen_h-80)
+            local number k=p*p
+            local number px=lerp(sx,cx,k)
+            local number py=lerp(sy,cy,k)
+            local number size=2+6*h3*(1-p)
+            local number a=floor((120+120*p)*fade)
+            if a>0 then
                 circle(px,py,size,universe_particle_color(i,a))
             end
-            if h4>0.86
-                number trail=floor(a*0.55)
-                if trail>0
+            if h4>0.86 then
+                local number trail=floor(a*0.55)
+                if trail>0 then
                     circle(px,py,size*2.1,universe_particle_color(i+1,trail))
                 end
             end
             i=i+1
         end
     end
-    if collapsed==1
-        number core=floor(240*fade)
-        if core>0
+    if collapsed==1 then
+        local number core=floor(240*fade)
+        if core>0 then
             circle(cx,cy,10,universe_particle_color(2,core))
         end
     end
-    number ep=(p-0.78)/0.22
-    if ep>1
+    local number ep=(p-0.78)/0.22
+    if ep>1 then
         ep=1
     end
-    if ep>0
-        number r=(80+120*ep)*1.0
-        number af=floor(240*ep*fade)
-        if af>0
+    if ep>0 then
+        local number r=(80+120*ep)*1.0
+        local number af=floor(240*ep*fade)
+        if af>0 then
             ring(cx,cy,r,10,(((unsigned)(int)af)<<24)|0x0000E676)
         end
-        if ep>0.45
-            number a2=floor(160*(ep-0.45)/0.55*fade)
-            if a2>0
+        if ep>0.45 then
+            local number a2=floor(160*(ep-0.45)/0.55*fade)
+            if a2>0 then
                 ring(cx,cy,r*0.62,8,(((unsigned)(int)a2)<<24)|0x0076FF03)
             end
         end
     end
 end
-function draw_universe()
-    if universe_fx_a<=0
+public function draw_universe()
+    if universe_fx_a<=0 then
         return
     end
     draw_universe_at(universe_x,universe_y,universe_id,universe_t,universe_fx_a)
 end
-function draw_remote_station()
-    if net_slot()<0
+public function draw_remote_station()
+    if net_slot()<0 then
         return
     end
-    number s=0
-    loop s<max_players
-        number b=s*station_fields
-        if s!=net_slot()
-            number rb=s*remote_fields
-            number owner_alive=arr_get(remotes,rb+5)
-            number ox=arr_get(remotes,rb+1)
-            number oy=arr_get(remotes,rb+2)
-            number beam=-1
-            number i=0
-            if station_beam_visible(arr_get(remotes,rb+4))==1&&owner_alive==1
-                number lslot=arr_get(remote_station,b)
-                if lslot>=1&&lslot<=turret_max
-                    if arr_get(remote_station,b+1+(lslot-1)*5)==1
+    local number s=0
+    while s<max_players do
+        local number b=s*station_fields
+        if s!=net_slot() then
+            local number rb=s*remote_fields
+            local number owner_alive=arr_get(remotes,rb+5)
+            local number ox=arr_get(remotes,rb+1)
+            local number oy=arr_get(remotes,rb+2)
+            local number beam=-1
+            local number i=0
+            if station_beam_visible(arr_get(remotes,rb+4))==1&&owner_alive==1 then
+                local number lslot=arr_get(remote_station,b)
+                if lslot>=1&&lslot<=turret_max then
+                    if arr_get(remote_station,b+1+(lslot-1)*5)==1 then
                         beam=lslot-1
                     end
                 end
-                if beam<0
-                    loop i<turret_max
-                        if arr_get(remote_station,b+1+i*5)==1
+                if beam<0 then
+                    while i<turret_max do
+                        if arr_get(remote_station,b+1+i*5)==1 then
                             beam=i
                             i=turret_max
                         end
@@ -268,18 +267,18 @@ function draw_remote_station()
                     end
                 end
             end
-            if beam>=0
-                number bo=b+1+beam*5
+            if beam>=0 then
+                local number bo=b+1+beam*5
                 draw_station_beam(arr_get(remote_station,bo+1),arr_get(remote_station,bo+2),ox,oy)
             end
-            number o=b+1, st=0
+            local number o=b+1, st=0
             i=0
-            loop i<turret_max
+            while i<turret_max do
                 st=arr_get(remote_station,o)
-                if st==1
-                    number rl=net_player_level(s)
+                if st==1 then
+                    local number rl=net_player_level(s)
                     draw_turret_at(arr_get(remote_station,o+1),arr_get(remote_station,o+2),arr_get(remote_station,o+3),ebuc_station_hp_for(rl),0)
-                else if st==2
+                else if st==2 then
                     draw_turret_boom(arr_get(remote_station,o+1),arr_get(remote_station,o+2),arr_get(remote_station,o+4))
                 end
                 o=o+5
@@ -289,14 +288,14 @@ function draw_remote_station()
         s=s+1
     end
 end
-function draw_remote_universe()
-    if net_slot()<0
+public function draw_remote_universe()
+    if net_slot()<0 then
         return
     end
-    number s=0
-    loop s<max_players
-        number b=s*universe_fields
-        if s!=net_slot()&&arr_get(runiverse_fx_a,s)>0
+    local number s=0
+    while s<max_players do
+        local number b=s*universe_fields
+        if s!=net_slot()&&arr_get(runiverse_fx_a,s)>0 then
             draw_universe_at(arr_get(remote_universe,b+2),arr_get(remote_universe,b+3),arr_get(remote_universe,b),arr_get(remote_universe,b+4),arr_get(runiverse_fx_a,s))
         end
         s=s+1

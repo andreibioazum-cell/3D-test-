@@ -1,40 +1,39 @@
-include graphics
-function take_damage(number dmg)
-    if player_class==CLASS_EBUC
+public function take_damage(number dmg)
+    if player_class==CLASS_EBUC then
         dmg=player_shield_absorb(dmg)
     end
-    number reduction=0
-    if player_class==CLASS_AZUM&&azum_revived==1&&player_level>=1
+    local number reduction=0
+    if player_class==CLASS_AZUM&&azum_revived==1&&player_level>=1 then
         reduction=azum_second_life_damage_reduction
     end
-    if reduction<0
+    if reduction<0 then
         reduction=0
     end
-    if reduction>0.9
+    if reduction>0.9 then
         reduction=0.9
     end
-    number real=dmg*(1-reduction)
+    local number real=dmg*(1-reduction)
     player.hp=player.hp-real
-    if player.hp<0
+    if player.hp<0 then
         player.hp=0
     end
 end
-function heal_after_attack()
-    number amount=0
-    if player_class==CLASS_AZUM&&player_level>=3
+public function heal_after_attack()
+    local number amount=0
+    if player_class==CLASS_AZUM&&player_level>=3 then
         amount=azum_attack_heal
-    else if player_class==CLASS_ORDINARY&&player_level>=3
+    else if player_class==CLASS_ORDINARY&&player_level>=3 then
         amount=ordinary_attack_heal
     end
-    if amount>0
+    if amount>0 then
         player.hp=clamp(player.hp+amount,0,player.max_hp)
     end
 end
-function stun_enemy(number t)
-    if t>enemy.stun
+public function stun_enemy(number t)
+    if t>enemy.stun then
         enemy.stun=t
     end
-    if enemy.state>=1&&enemy.state<=3
+    if enemy.state>=1&&enemy.state<=3 then
         enemy.state=0
         enemy.state_time=0
         enemy.cooldown=0.25
@@ -43,28 +42,28 @@ function stun_enemy(number t)
     enemy_super_windup=0
     enemy_super_kind=0
 end
-function stun_player(number t)
-    if t>player_stun
+public function stun_player(number t)
+    if t>player_stun then
         player_stun=t
     end
 end
-function try_revive()
-    if player.hp>0
+public function try_revive()
+    if player.hp>0 then
         return 0
     end
-    if player_class!=1
+    if player_class!=1 then
         return 0
     end
-    if azum_revived==1
+    if azum_revived==1 then
         return 0
     end
     azum_revived=1
     player.hp=player.max_hp
     revive_prot=1.2
-    number k=0
-    loop k<50
-        number rx=70+rand()%(screen_w-140), ry=70+rand()%(screen_h-140)
-        if dist(rx,ry,enemy.x,enemy.y)>200
+    local number k=0
+    while k<50 do
+        local number rx=70+rand()%(screen_w-140), ry=70+rand()%(screen_h-140)
+        if dist(rx,ry,enemy.x,enemy.y)>200 then
             k=50
             player.x=rx
             player.y=ry
@@ -75,23 +74,23 @@ function try_revive()
     azum_revive_count=azum_revive_count+1
     net_save_azum_revives(azum_revive_count)
     ds_log("azum revived (%g/%g)",azum_revive_count,ACH_LEGENDS_NEED)
-    if azum_revive_count>=ACH_LEGENDS_NEED
+    if azum_revive_count>=ACH_LEGENDS_NEED then
         grant_achievement(ACH_LEGENDS)
     end
     return 1
 end
-function tick_revive()
-    if revive_prot>0
+public function tick_revive()
+    if revive_prot>0 then
         revive_prot=revive_prot-dt
-        if revive_prot<0
+        if revive_prot<0 then
             revive_prot=0
         end
     end
 end
-function tick_alert_hold()
-    if finished!=0&&finish_t<alert_hold
+public function tick_alert_hold()
+    if finished!=0&&finish_t<alert_hold then
         finish_t=finish_t+dt
-        if finish_t>alert_hold
+        if finish_t>alert_hold then
             finish_t=alert_hold
         end
     end

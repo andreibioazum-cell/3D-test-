@@ -93,7 +93,7 @@ static struct {
     double cups, candies, cls, azum, santa, ebuc, level, levels;
     double ol, ou, al, au, sl, su, el, eu, bp, skin;
     double flags, revives;
-    double language, hitboxes, musicvol;
+    double language, hitboxes, musicvol, winter, showfps;
 } store;
 
 void net_save_progress_all(double cups, double candies, double cls, double azum, double santa,
@@ -144,6 +144,10 @@ double net_load_fps_cap(void) { return 0; }
 void net_save_fps_cap(double v) { (void)v; }
 double net_load_render_scale(void) { return 1; }
 void net_save_render_scale(double v) { (void)v; }
+double net_load_winter_theme(void) { return store.winter; }
+void net_save_winter_theme(double v) { store.winter = v; }
+double net_load_fps_meter(void) { return store.showfps; }
+void net_save_fps_meter(double v) { store.showfps = v; }
 void ds_set_fps_cap(int v) { (void)v; }
 void ds_set_render_scale(int v) { (void)v; }
 
@@ -162,6 +166,8 @@ static void fresh_device(void) {
     memset(&store, 0, sizeof(store));
     store.hitboxes = 1;  /* как в settings.dat по умолчанию */
     store.musicvol = 70; /* громкость музыки по умолчанию */
+    store.winter = 1;    /* зимняя тема по умолчанию включена */
+    store.showfps = 0;   /* счётчик FPS в бою по умолчанию выключен */
     reset();
 }
 
@@ -244,7 +250,25 @@ static void test_settings_save(void) {
     ds_fn_music_volume_step(150);
     near("music_volume, 100", music_volume, 100);
     near("store.musicvol, 100", store.musicvol, 100);
-    puts("settings: language, hitboxes and music volume survive a restart");
+
+    /* Зимняя тема и счётчик FPS: свои ключи файла, тот же путь чтения/записи. */
+    reset();
+    ds_fn_settings_from_storage();
+    near("winter_theme, 1", winter_theme, 1);
+    near("show_fps, 0", show_fps, 0);
+    winter_theme = 0;
+    show_fps = 1;
+    ds_fn_save_settings();
+    near("store.winter, 0", store.winter, 0);
+    near("store.showfps, 1", store.showfps, 1);
+    /* Перезапуск: тема и счётчик читаются обратно из сохранённого. */
+    reset();
+    near("winter_theme, 1", winter_theme, 1);
+    near("show_fps, 0", show_fps, 0);
+    ds_fn_settings_from_storage();
+    near("winter_theme, 0", winter_theme, 0);
+    near("show_fps, 1", show_fps, 1);
+    puts("settings: language, hitboxes, music, winter theme and FPS meter survive a restart");
 }
 
 /* Стартовый путь целиком: init() обязан поднять и прогресс, и настройки. */
@@ -259,7 +283,10 @@ static void test_init_loads_everything(void) {
     store.skin = 1;
     store.flags = ACH_LEGENDS;
     store.language = 1;
+    store.winter = 1;
     ds_fn_init();
+    near("winter_theme, 1", winter_theme, 1);
+    near("snow_tex_ok, 1", snow_tex_ok, 1);
     near("candies, 77", candies, 77);
     near("cups, 12", cups, 12);
     near("player_class, CLASS_EBUC", player_class, CLASS_EBUC);
@@ -267,6 +294,12 @@ static void test_init_loads_everything(void) {
     near("ds_fn_class_level_of(CLASS_EBUC), 2", ds_fn_class_level_of(CLASS_EBUC), 2);
     near("achievement_mask, ACH_LEGENDS", achievement_mask, ACH_LEGENDS);
     near("language, 1", language, 1);
+    /* Тема выключена — снежная плитка не грузится, арена остаётся в траве. */
+    store.winter = 0;
+    reset();
+    ds_fn_init();
+    near("winter_theme, 0", winter_theme, 0);
+    near("snow_tex_ok, 0", snow_tex_ok, 0);
     puts("init: startup reads progress and settings from the device");
 }
 
@@ -306,7 +339,7 @@ def main():
 
         # ── Проводка: сохранение действительно вызывается из игры ──
         fns = compiler.functions
-        save_body = "".join(fns["save_progress"][1])
+        save_body = "".join(fns["save_progress"][2])
         assert "net_save_progress_all(" in save_body, (
             "save_progress() must call net_save_progress_all — the whole "
             "progress write (device + cloud) lives in that one call"
@@ -320,7 +353,7 @@ def main():
                          ("leave_screen", "save_progress()"),
                          ("login_do", "settings_from_storage()"),
                          ("init", "settings_from_storage()")):
-            assert hook in "".join(fns[fn][1]), f"{fn} must call {hook}"
+            assert hook in "".join(fns[fn][2]), f"{fn} must call {hook}"
 
         android = temp / "android"
         android.mkdir()

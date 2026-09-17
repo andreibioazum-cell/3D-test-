@@ -26,6 +26,11 @@ struct DSFont {
     int aw, ah;
     uint8_t *alpha;
     DSFontGlyph *glyphs; int gcount;
+    /* Индекс codepoint -> номер глифа (функции индекса — в public_api.inc).
+     * Глиф ищется на каждый символ каждой строки по нескольку раз за кадр
+     * (метрики текста и раскладка), и линейный перебор 168 глифов был одной из
+     * самых горячих петель интерфейса. hmap хранит номер+1, 0 — пусто. */
+    int *hmap; int hcap, qmark;
 };
 static int in_r(const DSFont *f, size_t o, size_t l) {
     return f && o <= f->size && l <= f->size - o;

@@ -1,4 +1,4 @@
-function reset_battle()
+public function reset_battle()
     player.x=screen_w/2
     player.y=screen_h/2
     player.angle=0
@@ -98,8 +98,8 @@ function reset_battle()
     arr_clear(turret_maxhp)
     arr_clear(turret_spawn_t)
     arr_clear(turret_box_a)
-    number i=0
-    loop i<turret_max
+    local number i=0
+    while i<turret_max do
         arr_push(turret_x,0)
         arr_push(turret_y,0)
         arr_push(turret_hp,0)
@@ -153,37 +153,37 @@ function reset_battle()
     arr_clear(runiverse_fx_a)
     arr_clear(rstation_box_a)
     i=0
-    loop i<max_players*remote_fields
+    while i<max_players*remote_fields do
         arr_push(remotes,0)
         i=i+1
     end
     i=0
-    loop i<max_players*punch_fields
+    while i<max_players*punch_fields do
         arr_push(remote_punches,0)
         i=i+1
     end
     i=0
-    loop i<max_players*snow_fields
+    while i<max_players*snow_fields do
         arr_push(remote_snow,0)
         i=i+1
     end
     i=0
-    loop i<max_players*station_fields
+    while i<max_players*station_fields do
         arr_push(remote_station,0)
         i=i+1
     end
     i=0
-    loop i<max_players*universe_fields
+    while i<max_players*universe_fields do
         arr_push(remote_universe,0)
         i=i+1
     end
     i=0
-    loop i<max_players*dash_fields
+    while i<max_players*dash_fields do
         arr_push(remote_dash,0)
         i=i+1
     end
     i=0
-    loop i<max_players
+    while i<max_players do
         arr_push(rpunch_a,0)
         arr_push(rdash_box_a,0)
         arr_push(rsnow_ball_a,0)
@@ -193,7 +193,7 @@ function reset_battle()
         i=i+1
     end
     i=0
-    loop i<max_players*turret_max
+    while i<max_players*turret_max do
         arr_push(rstation_box_a,0)
         i=i+1
     end
@@ -201,32 +201,32 @@ function reset_battle()
     dust_cd=0
     enemy_dust_cd=0
     i=0
-    loop i<dust_max*dust_fields
+    while i<dust_max*dust_fields do
         arr_push(dust,0)
         i=i+1
     end
     arr_clear(remote_dust_cd)
     i=0
-    loop i<max_players
+    while i<max_players do
         arr_push(remote_dust_cd,0)
         i=i+1
     end
     thud_seq=0
     arr_clear(remote_thuds)
     i=0
-    loop i<max_players
+    while i<max_players do
         arr_push(remote_thuds,0)
         i=i+1
     end
 end
-function init_game()
+public function init_game()
     reset_battle()
     card_roll()
     enemy.hp=enemy.max_hp
     spawn_enemy()
     spawn_all_candies()
 end
-function init_online()
+public function init_online()
     reset_battle()
     chat_set_open(0)
     chat_bubbles_reset()
@@ -236,18 +236,18 @@ function init_online()
     progress_push_to_net()
     net_connect(FIREBASE,ROOM)
 end
-function place_online()
-    number s=net_slot(), row=floor(s/2), col=s-row*2
+public function place_online()
+    local number s=net_slot(), row=floor(s/2), col=s-row*2
     player.x=screen_w*(0.3+0.4*col)
     player.y=screen_h*(0.35+0.3*row)
     online_ready=1
 end
-function spawn_enemy()
-    number margin=70, i=0
-    loop i<50
+public function spawn_enemy()
+    local number margin=70, i=0
+    while i<50 do
         enemy.x=margin+rand()%(screen_w-140)
         enemy.y=margin+rand()%(screen_h-140)
-        if dist(enemy.x,enemy.y,player.x,player.y)>300
+        if dist(enemy.x,enemy.y,player.x,player.y)>300 then
             i=50
         else
             i=i+1
@@ -269,7 +269,7 @@ function spawn_enemy()
     enemy.react=enemy_human_react_min + (rand()%100)/100.0*(enemy_human_react_max-enemy_human_react_min)
     enemy.speed_var=0.9 + (rand()%40)/100.0
     enemy.aim_err=0
-    if rand()%2==0
+    if rand()%2==0 then
         enemy.strafe=-1
     else
         enemy.strafe=1
@@ -277,59 +277,59 @@ function spawn_enemy()
     enemy_pick_random_class()
     ds_log("enemy spawned instantly")
 end
-function candy_rand_pos(number i)
-    // Финал в рандомной точке в рандомном направлении от центра, чтобы не было одинакового направления
-    number m=candy_margin, k=0
-    number cx=0, cy=0, ang=0, rad=0, ang_deg=0
-    number max_r=screen_w
-    if screen_h < max_r
+public function candy_rand_pos(number i)
+    -- Финал в рандомной точке в рандомном направлении от центра, чтобы не было одинакового направления
+    local number m=candy_margin, k=0
+    local number cx=0, cy=0, ang=0, rad=0, ang_deg=0
+    local number max_r=screen_w
+    if screen_h < max_r then
         max_r=screen_h
     end
     max_r=max_r/2 - m - 10
-    if max_r < 100
+    if max_r < 100 then
         max_r=100
     end
-    loop k<40
-        // Каждый вызов rand() даёт новое направление, используем только int для %
+    while k<40 do
+        -- Каждый вызов rand() даёт новое направление, используем только int для %
         ang_deg=(rand()%360 + rand()%180 + (int)(i*137) + (int)(k*53)) % 360
         ang=ang_deg * pi / 180
         rad=60 + rand()%(int)(max_r-60+1)
         cx=screen_w/2 + cos(ang)*rad
         cy=screen_h/2 + sin(ang)*rad
-        if cx < m
+        if cx < m then
             cx=m
         end
-        if cx > screen_w - m
+        if cx > screen_w - m then
             cx=screen_w - m
         end
-        if cy < m
+        if cy < m then
             cy=m
         end
-        if cy > screen_h - m
+        if cy > screen_h - m then
             cy=screen_h - m
         end
-        if dist(cx,cy,player.x,player.y)<80||dist(cx,cy,enemy.x,enemy.y)<80
+        if dist(cx,cy,player.x,player.y)<80||dist(cx,cy,enemy.x,enemy.y)<80 then
             k=k+1
         else
             k=40
         end
     end
-    // Сохраняем угол для возможного использования, но появление — просто к середине
+    -- Сохраняем угол для возможного использования, но появление — просто к середине
     arr_set(candy_x,i,cx)
     arr_set(candy_y,i,cy)
     arr_set(candy_ang,i,ang)
     arr_set(candy_t,i,0)
 end
-function spawn_all_candies()
-    if candy_enabled==0
+public function spawn_all_candies()
+    if candy_enabled==0 then
         return
     end
-    number i=0
-    loop i<candy_count
+    local number i=0
+    while i<candy_count do
         candy_rand_pos(i)
         i=i+1
     end
 end
-function sprite_a(number a)
+public function sprite_a(number a)
     return a+pi/2
 end
