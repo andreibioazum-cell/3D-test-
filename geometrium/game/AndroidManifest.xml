@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.cb4"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+    <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="true" />
+
+    <application
+        android:label="Enjoer"
+        android:hasCode="true"
+        android:allowBackup="false"
+        android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+
+        <activity
+            android:name="com.cb4.GameActivity"
+            android:label="Enjoer"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:screenOrientation="sensorLandscape"
+            android:windowSoftInputMode="adjustResize|stateHidden"
+            android:exported="true">
+            <meta-data android:name="android.app.lib_name" android:value="ds_game" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

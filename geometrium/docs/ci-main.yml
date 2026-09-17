@@ -1,0 +1,52 @@
+name: Build Enjoer APK
+
+on: [push, workflow_dispatch]
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: android-actions/setup-android@v3
+      with:
+        packages: "platforms;android-34 build-tools;34.0.0"
+    - uses: nttld/setup-ndk@v1
+      with:
+        ndk-version: r25c
+
+    - name: Build native libraries
+      run: |
+        set -e
+        for ABI in arm64-v8a armeabi-v7a; do
+          cmake -B build-$ABI \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=$ABI -DANDROID_PLATFORM=android-29 \
+            -DANDROID_NDK=$ANDROID_NDK_ROOT \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-$ABI -j
+          mkdir -p staging/lib/$ABI
+          cp build-$ABI/libds_game.so staging/lib/$ABI/
+        done
+
+    - name: Stage assets and activity
+      run: python3 stage_assets.py game/assets staging/assets
+
+    - name: Package APK
+      run: |
+        set -e
+        BT=$ANDROID_HOME/build-tools/34.0.0
+        $BT/aapt package -f -M game/AndroidManifest.xml \
+          -I $ANDROID_HOME/platforms/android-34/android.jar \
+          -F unsigned.apk staging/
+        $BT/zipalign -v 4 unsigned.apk aligned.apk
+        keytool -genkey -v -keystore d.ks -storepass android -alias a \
+          -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Enjoer"
+        $BT/apksigner sign --ks d.ks --ks-pass pass:android --key-pass pass:android \
+          --out Enjoer.apk aligned.apk
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Enjoer-APK-Android10-14-arm64-arm32
+        path: Enjoer.apk

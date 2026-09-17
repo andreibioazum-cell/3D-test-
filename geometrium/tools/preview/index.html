@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Enjoer — engine preview</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;overscroll-behavior:none}
+.game{position:fixed;inset:0;display:grid;place-items:center}
+canvas{display:block;touch-action:none;user-select:none;outline:none;cursor:grab}
+canvas:active{cursor:grabbing}
+</style>
+</head>
+<body>
+<main class="game"><canvas id="c" tabindex="0" aria-label="Enjoer preview. Main menu: arrows or W/S select, Enter or click selects a button. In the world: WASD and arrows move, Space rises, Shift sinks, hold C to crouch, drag the camera, the round button or Escape or M opens the menu."></canvas></main>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+let W=960,H=540;
+function fit(){const s=Math.min(innerWidth/W,innerHeight/H);cv.style.width=W*s+'px';cv.style.height=H*s+'px'}
+fetch('/info').then(r=>r.json()).then(async j=>{
+  W=j.w;H=j.h;cv.width=W;cv.height=H;fit();
+  await fetch('/event',{method:'POST',body:'t=cancel'});loop();
+});
+let nextFrame=null;
+async function requestFrame(){
+  try{const r=await fetch('/frame.jpg',{cache:'no-store'});return r.ok?await r.blob():null}
+  catch(error){return null}
+}
+async function loop(){
+  try{
+    if(!document.hidden){
+      const blob=await(nextFrame||requestFrame());nextFrame=null;
+      if(!document.hidden){
+        // At most one frame ahead: overlap transfer with decoding/vsync.
+        nextFrame=requestFrame();
+        if(blob){const image=await createImageBitmap(blob);ctx.drawImage(image,0,0);image.close()}
+      }
+    }else nextFrame=null;
+  }catch(error){console.warn('Preview frame unavailable',error)}
+  requestAnimationFrame(loop);
+}
+// Keep event ordering while coalescing redundant moves of the same finger.
+const queue=[];
+let sending=false;
+function ev(body){
+  if(body.t==='move'){
+    for(let i=queue.length-1;i>=0&&queue[i].t==='move';i--){
+      if(queue[i].id===body.id){queue[i]=body;return}
+    }
+  }
+  queue.push(body);flushEvents();
+}
+async function flushEvents(){
+  if(sending||!queue.length)return;
+  sending=true;
+  const batch=queue.splice(0,64);let retryDelay=0;
+  try{await fetch('/event',{method:'POST',body:batch.map(b=>new URLSearchParams(b).toString()).join('\n'),keepalive:true})}
+  catch(error){queue.length=0;queue.push({t:'cancel'});retryDelay=250}
+  finally{sending=false;if(queue.length)setTimeout(flushEvents,retryDelay)}
+}
+function xy(e){const r=cv.getBoundingClientRect();return{x:Math.round((e.clientX-r.left)*W/r.width),y:Math.round((e.clientY-r.top)*H/r.height)}}
+const pointers=new Set(),pressed=new Map();
+function held(k){return [...pressed.values()].includes(k)}
+function startPointer(e){
+  cv.focus({preventScroll:true});pointers.add(e.pointerId);cv.setPointerCapture(e.pointerId);
+  ev({t:'down',id:e.pointerId,...xy(e)});
+}
+// A second mouse button emits pointermove, not pointerdown. Track the buttons
+// bitmask so right-drag keeps orbiting the camera while the left button is held.
+function mousePointer(e){
+  if(e.pointerType!=='mouse')return false;
+  const left=Boolean(e.buttons&1);let began=false;
+  if(left&&!pointers.has(e.pointerId)){startPointer(e);began=true}
+  else if(!left&&pointers.delete(e.pointerId))ev({t:'up',id:e.pointerId,...xy(e)});
+  if(e.buttons&3){cv.focus({preventScroll:true});if(!cv.hasPointerCapture(e.pointerId))cv.setPointerCapture(e.pointerId)}
+  if(e.type==='pointermove'&&left&&!began)ev({t:'move',id:e.pointerId,...xy(e)});
+  e.preventDefault();return true;
+}
+cv.addEventListener('pointerdown',e=>{if(!mousePointer(e)){startPointer(e);e.preventDefault()}});
+cv.addEventListener('pointermove',e=>{if(!mousePointer(e)&&pointers.has(e.pointerId))ev({t:'move',id:e.pointerId,...xy(e)})});
+cv.addEventListener('pointerup',e=>{if(!mousePointer(e)&&pointers.delete(e.pointerId))ev({t:'up',id:e.pointerId,...xy(e)})});
+function cancelPointer(e){
+  if(e.pointerType==='mouse'){if(pointers.has(e.pointerId))releaseAll();return}
+  if(pointers.delete(e.pointerId))ev({t:'cancel-pointer',id:e.pointerId});
+}
+cv.addEventListener('pointercancel',cancelPointer);
+cv.addEventListener('lostpointercapture',cancelPointer);
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',Space:'space',Enter:'Enter',ShiftLeft:'Shift',ShiftRight:'Shift',ArrowLeft:'ArrowLeft',ArrowRight:'ArrowRight',ArrowUp:'ArrowUp',ArrowDown:'ArrowDown',Escape:'Escape',KeyM:'m',KeyC:'c',KeyF:'f',KeyE:'e',KeyR:'r'};
+window.addEventListener('keydown',e=>{
+  const k=keyMap[e.code];if(!k||e.ctrlKey||e.metaKey||e.altKey)return;
+  e.preventDefault();if(e.repeat||pressed.has(e.code))return;
+  const was=held(k);pressed.set(e.code,k);if(!was)ev({t:'key',k,d:1});
+});
+window.addEventListener('keyup',e=>{
+  const k=pressed.get(e.code);if(!k)return;
+  pressed.delete(e.code);e.preventDefault();if(!held(k))ev({t:'key',k,d:0});
+});
+function releaseAll(){
+  const ids=[...pointers];pointers.clear();pressed.clear();queue.length=0;ev({t:'cancel'});
+  for(const id of ids)if(cv.hasPointerCapture(id))cv.releasePointerCapture(id);
+}
+window.addEventListener('blur',releaseAll);
+window.addEventListener('resize',()=>{releaseAll();fit()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll()});
+</script>
+</body>
+</html>
