@@ -1,0 +1,6 @@
+# local preview and build data — not in git
+/data/
+*.dat
+/build*/
+/preview
+/staging/

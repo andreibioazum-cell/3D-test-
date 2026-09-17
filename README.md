@@ -488,6 +488,35 @@ Firebase CLI). Это не формальность: у узлов правил 
 она сравнивает ключи JSON-тел в `native/net/*.inc` с объявленными полями
 правил. Подробная настройка базы описана в [FIREBASE.md](FIREBASE.md).
 
+## Geometrium — недо-майнкрафт (восстановленный прототип)
+
+В `geometrium/` лежит ранний блоковый мир от первого лица, который
+разрабатывался параллельно с Cubic Battle и позже был удалён из истории:
+меню Play / Servers / Options / Quit, стримящийся мир из травы, камня, песка,
+воды, брёвен и листвы, копание/строительство, полёт, присед и ползание,
+пещеры и 3D-рука. Это не режим Cubic Battle, а отдельное приложение на C99
+со своим софтверным воксельным рендером и без внешних зависимостей.
+
+Снимок восстановлен из репозитория `Project-Enjoer`, коммит `c69a634`
+(11.09.2026, «Minecraft-style menu, FPS-focused options, pockmarked terrain
+and crouch/crawl»), то есть ровно то состояние, в котором недо-майнкрафт
+существовал до удаления (`fcd4fe2`, 13.09.2026). Подробности и полный
+провенанс — в `geometrium/RESTORED.md`.
+
+Запуск на ПК/в браузере (обычный gcc, без CMake и Android SDK):
+
+```sh
+cd geometrium
+sh tools/preview/build.sh
+./preview --port 8090 --assets assets
+# http://localhost:8090 — меню, кнопка Play
+```
+
+Сборка под Android (NDK + CMake, пакет `com.cb4`, метка `Enjoer`) и тесты
+мира описаны в `geometrium/README.md`. Сборка Cubic Battle из этого README
+ниже не меняется: `gen.py`, скрипты в `game/scripts` и workflow
+`.github/workflows/main.yml` работают только с Cubic Battle.
+
 ## Быстрый старт для разработки
 
 Сначала сгенерируй C из скриптов:
