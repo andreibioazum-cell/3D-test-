@@ -15,6 +15,13 @@
  * пересоздание swapchain со СМЕНОЙ ФОРМАТА (поворот) - путь пересборки
  * render pass/конвейеров (vk_rp_format) в ds_vk_begin_frame_backend.
  *
+ * Фейковый драйвер моделирует реалистичный Android: окно в ландшафте на
+ * портретном дисплее (currentTransform = ROTATE_90). Поэтому же проверяется
+ * preTransform swapchain: игра рисует в координатах окна, и правильный
+ * preTransform — IDENTITY (поворот окна к дисплею делает система).
+ * preTransform = currentTransform — классическая ошибка, при которой в
+ * ландшафте вся картинка оказывается повёрнутой на 90° и растянутой.
+ *
  * Сборка и запуск (из корня репозитория; нужны Vulkan-заголовки,
  * например клон KhronosGroup/Vulkan-Headers):
  *   gcc -std=gnu99 -O1 -o /tmp/test_vk_init \
@@ -148,6 +155,14 @@ VkResult vkQueuePresentKHR(VkQueue q, const VkPresentInfoKHR *pi) {
 VkResult vkCreateSwapchainKHR(VkDevice d, const VkSwapchainCreateInfoKHR *ci, const VkAllocationCallbacks *ac, VkSwapchainKHR *out) {
     (void)d; (void)ac;
     if (ci->imageExtent.width == 0 || ci->imageExtent.height == 0) { g_violation("swapchain: пустой extent"); return VK_ERROR_INITIALIZATION_FAILED; }
+    /* Android: буфер живёт в системе координат ОКНА, поворот окна к дисплею
+     * делает системный композитор. Поэтому единственно правильный preTransform
+     * для игры, рисующей в координатах окна, — IDENTITY. currentTransform
+     * (ROTATE_90 в ландшафте) проворачивает картинку на 90° ещё раз. */
+    if (ci->preTransform != VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) {
+        g_violation("swapchain: preTransform != IDENTITY (картинка будет повёрнута на 90° в ландшафте)");
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
     g_swapchain_creates++;
     *out = (VkSwapchainKHR)g_next();
     return VK_SUCCESS;
@@ -170,8 +185,10 @@ VkResult vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice d, VkSurface
     memset(c, 0, sizeof *c);
     c->currentExtent.width = 720; c->currentExtent.height = 1280;
     c->minImageCount = 2; c->maxImageCount = 0; c->maxImageArrayLayers = 1;
-    c->supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-    c->currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    /* Реалистичный Android: портретный дисплей, окно в ландшафте —
+     * система поворачивает окно на 90° (currentTransform = ROTATE_90). */
+    c->supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR | VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR;
+    c->currentTransform = VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR;
     c->supportedCompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     return VK_SUCCESS;
 }

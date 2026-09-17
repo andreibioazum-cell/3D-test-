@@ -595,7 +595,16 @@ static int ds_vk_recreate_swapchain(void) {
     si.imageArrayLayers = 1;
     si.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     si.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    si.preTransform = caps.currentTransform;
+    /* preTransform = IDENTITY — обязательно на Android. Изображения swapchain
+     * живут в системе координат ОКНА (ландшафт, как видит пользователь), а
+     * поворот окна относительно дисплея уже применяет системный композитор —
+     * этот поворот и есть caps.currentTransform (ROTATE_90 в ландшафте).
+     * Если задать preTransform = currentTransform (как в некоторых примерах),
+     * движок презентации проворачивает изображение ЕЩЁ на 90°: в ландшафте
+     * игра оказывается «вертикальной» и растянутой. */
+    si.preTransform = (caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+        ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
+        : caps.currentTransform;
     si.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     si.presentMode = VK_PRESENT_MODE_FIFO_KHR; /* поддерживается всегда, бережёт батарею */
     si.clipped = VK_TRUE;
