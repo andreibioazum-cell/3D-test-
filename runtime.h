@@ -10,7 +10,7 @@
 #include <android/log.h>
 #include <android/native_window.h>
 typedef struct {
-    uint32_t *pixels;
+    uint32_t *pixels; /* больше не используется: рендер идёт через Vulkan */
     int width;
     int height;
     int stride;
@@ -127,7 +127,9 @@ int text_height(const char *string);
 int text_ink_width(const char *string);
 int text_ink_height(const char *string);
 int text_ink_top(const char *string);
-int ds_graphics_init(AAssetManager *assets);
+/* Создание Vulkan-рендера: менеджер активов плюс окно (для поверхности
+ * VK_KHR_android_surface). Возвращает 1 при успехе; при 0 кадры не рисуются. */
+int ds_graphics_init(AAssetManager *assets, ANativeWindow *window);
 int ds_graphics_begin_frame(Buffer *buffer);
 void ds_graphics_end_frame(void);
 void ds_graphics_cancel_frame(void);

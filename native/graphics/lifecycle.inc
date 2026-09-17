@@ -1,31 +1,99 @@
-    float hw = t->w*0.5f*sc, hh = t->h*0.5f*sc;
-    float cx = x+hw, cy = y+hh, ca = cosf(ang), sa = sinf(ang);
-    float dx = fabsf(hw*ca) + fabsf(hh*sa), dy = fabsf(hw*sa) + fabsf(hh*ca);
-    int l = cl_floor(floorf(cx-dx), b->width), t0 = cl_floor(floorf(cy-dy), b->height);
-    int r = cl_ceil(ceilf(cx+dx), b->width),   bo = cl_ceil(ceilf(cy+dy), b->height);
-    uint32_t tr = tint & 0xff, tg = (tint >> 8) & 0xff, tb = (tint >> 16) & 0xff, ta = (tint >> 24) & 0xff;
-    for (int sy = t0; sy < bo; sy++) {
-        float py = (float)sy + 0.5f - cy;
-        for (int sx = l; sx < r; sx++) {
-            float px = (float)sx + 0.5f - cx;
-            int tx = (int)floorf((px*ca + py*sa)/sc + t->w*0.5f);
-            int ty = (int)floorf((-px*sa + py*ca)/sc + t->h*0.5f);
-            if (tx < 0 || tx >= t->w || ty < 0 || ty >= t->h) continue;
-            uint32_t p = t->pixels[ty*t->w + tx];
-            uint32_t sa = (p >> 24) & 0xff;
-            if (!sa) continue;
-            uint32_t a = (sa * ta) / 255;
-            if (!a) continue;
-            uint32_t s = tr | (tg << 8) | (tb << 16) | (a << 24);
-            b->pixels[sy*b->stride + sx] = blend(b->pixels[sy*b->stride + sx], s);
-        }
+/* Публичный API графики для скриптов и main.c: загрузка текстур и шрифта,
+ * команды рисования (rect/roundrect/circle/ring/line/tex/tex_tint/text),
+ * кадры begin/end/cancel и экран ошибки DimScript.
+ *
+ * Команды только накапливаются: всю отрисовку делает Vulkan-бэкенд
+ * (vulkan_backend.inc) в конце кадра. Растеризация на CPU больше не
+ * выполняется вовсе. */
+static Texture *find_tx(const char *n) {
+    for (Texture *t = textures; t; t = t->next) if (strcmp(t->name, n) == 0) return t;
+    return NULL;
+}
+static const char *norm_name(const char *n) {
+    if (!n) return NULL;
+    while (strncmp(n, "./", 2) == 0) n += 2;
+    if (strncmp(n, "game/assets/", 12) == 0) n += 12;
+    else if (strncmp(n, "assets/", 7) == 0) n += 7;
+    if (!*n || *n == '/' || strchr(n, '\\')) return NULL;
+    for (const char *c = n; *c;) {
+        const char *s = c; while (*c && *c != '/') c++;
+        if (c-s == 2 && s[0]=='.' && s[1]=='.') return NULL;
+        if (*c == '/') c++;
     }
+    return n;
 }
-static void draw_tx_tint(Buffer *b, const Texture *t, float x, float y, float a, float sc, uint32_t tint) {
-    if (!b || !t || !t->pixels || !isfinite(x+y+a+sc) || sc <= 0) return;
-    if (fabsf(a) < 0.0005f) { draw_tx_unrot_tint(b, t, x, y, sc, tint); return; }
-    draw_tx_rot_tint(b, t, x, y, a, sc, tint);
+static int open_asset(const char *n, uint8_t **out, size_t *sz) {
+    if (!n || !out || !sz || !amgr) return 0;
+    AAsset *a = AAssetManager_open(amgr, n, AASSET_MODE_BUFFER);
+    if (!a) return 0;
+    off_t len = AAsset_getLength(a);
+    if (len <= 0 || (uint64_t)len > SIZE_MAX) { AAsset_close(a); return 0; }
+    uint8_t *buf = (uint8_t *)malloc((size_t)len);
+    if (!buf) { AAsset_close(a); return 0; }
+    size_t off = 0;
+    while (off < (size_t)len) {
+        int nr = AAsset_read(a, buf+off, (size_t)len-off);
+        if (nr <= 0) break; off += nr;
+    }
+    AAsset_close(a);
+    if (off != (size_t)len) { free(buf); return 0; }
+    *out = buf; *sz = (size_t)len; return 1;
 }
+static Texture *load_png(const char *req) {
+    const char *n = norm_name(req);
+    if (!n) { ds_log_err("texture not loaded: invalid PNG asset path '%s'", req ? req : "(null)"); return NULL; }
+    Texture *t = find_tx(n);
+    if (t) return t->pixels ? t : NULL;
+    if (!amgr) { ds_log_err("texture not loaded: no asset manager for '%s'", n); return NULL; }
+    t = (Texture *)calloc(1, sizeof(*t));
+    if (!t) { ds_log_err("texture not loaded: out of memory caching '%s'", n); return NULL; }
+    t->name = strdup_safe(n);
+    if (!t->name) { free(t); ds_log_err("texture not loaded: out of memory caching name '%s'", n); return NULL; }
+    t->next = textures; textures = t;
+    uint8_t *enc = NULL; size_t enc_sz = 0;
+    if (!open_asset(n, &enc, &enc_sz) || enc_sz > (size_t)INT_MAX) {
+        free(enc); ds_log_err("texture not loaded: asset not found or unreadable: '%s'", n); return NULL;
+    }
+    int ch = 0;
+    stbi_uc *dec = stbi_load_from_memory(enc, (int)enc_sz, &t->w, &t->h, &ch, STBI_rgb_alpha);
+    free(enc);
+    if (!dec || t->w <= 0 || t->h <= 0) {
+        ds_log_err("texture not loaded: could not decode PNG '%s': %s", n, stbi_failure_reason() ? stbi_failure_reason() : "unknown");
+        stbi_image_free(dec); return NULL;
+    }
+    size_t pc = (size_t)t->w * t->h;
+    t->pixels = (uint32_t *)malloc(pc * sizeof(*t->pixels));
+    if (!t->pixels) { stbi_image_free(dec); ds_log_err("texture not loaded: out of memory uploading PNG '%s'", n); return NULL; }
+    t->opaque = 1;
+    for (size_t i = 0; i < pc; i++) {
+        uint8_t a = dec[i*4+3];
+        t->pixels[i] = dec[i*4] | ((uint32_t)dec[i*4+1] << 8) | ((uint32_t)dec[i*4+2] << 16) | ((uint32_t)a << 24);
+        if (a != 255) t->opaque = 0;
+    }
+    stbi_image_free(dec);
+    ds_vk_pending_texture(t); /* зальётся на GPU в конце текущего кадра */
+    ds_log("texture loaded: %s (%dx%d)", n, t->w, t->h);
+    return t;
+}
+static int ensure_font(void) {
+    if (font) return 1;
+    if (font_tried) return 0;
+    font_tried = 1;
+    uint8_t *data = NULL; size_t sz = 0;
+    if (!open_asset("fonts/Inter_24pt-Medium.ttf", &data, &sz)) {
+        ds_log_err("font not loaded: fonts/Inter_24pt-Medium.ttf not found");
+        return 0;
+    }
+    font = ds_font_create(data, sz, 32);
+    free(data);
+    if (!font) { ds_log_err("font not loaded: could not parse TrueType font"); return 0; }
+    vk_pending_font = 1; /* атлас зальётся на GPU в конце текущего кадра */
+    ds_log("font loaded: fonts/Inter_24pt-Medium.ttf");
+    return 1;
+}
+
+/* --- список команд кадра --- */
+
 static DSCmd *push(DSCommand t) {
     if (!frame_open) return NULL;
     if (cmd_n == cmd_cap) {
@@ -38,25 +106,6 @@ static DSCmd *push(DSCommand t) {
     DSCmd *c = &cmds[cmd_n++];
     memset(c, 0, sizeof(*c)); c->t = t; return c;
 }
-static void flush(void) {
-    if (!cur_buf) return;
-    for (size_t i = 0; i < cmd_n; i++) {
-        DSCmd *c = &cmds[i];
-        switch (c->t) {
-            case DS_CMD_RECT:  render_rect(cur_buf, c->v.rc.x, c->v.rc.y, c->v.rc.w, c->v.rc.h, c->v.rc.c); break;
-            case DS_CMD_ROUND: render_roundrect(cur_buf, c->v.rr.x, c->v.rr.y, c->v.rr.w, c->v.rr.h, c->v.rr.r, c->v.rr.c); break;
-            case DS_CMD_CIRCLE: render_circle(cur_buf, c->v.ci.x, c->v.ci.y, c->v.ci.r, c->v.ci.c); break;
-            case DS_CMD_RING:   render_ring(cur_buf, c->v.rg.x, c->v.rg.y, c->v.rg.r, c->v.rg.th, c->v.rg.c); break;
-            case DS_CMD_LINE:   render_line(cur_buf, c->v.ln.x1, c->v.ln.y1, c->v.ln.x2, c->v.ln.y2, c->v.ln.th, c->v.ln.c); break;
-            case DS_CMD_TEX:    draw_tx(cur_buf, c->v.tx.tx, c->v.tx.x, c->v.tx.y, c->v.tx.a, c->v.tx.sc); break;
-            case DS_CMD_TEX_TINT: draw_tx_tint(cur_buf, c->v.tx2.tx, c->v.tx2.x, c->v.tx2.y, c->v.tx2.a, c->v.tx2.sc, c->v.tx2.c); break;
-            case DS_CMD_TEXT:
-                render_text_now(cur_buf, c->v.tt.s, c->v.tt.x, c->v.tt.y, c->v.tt.c, c->v.tt.sc);
-                free(c->v.tt.s); c->v.tt.s = NULL;
-                break;
-        }
-    }
-}
 static void discard_commands(void) {
     for (size_t i = 0; i < cmd_n; i++) {
         if (cmds[i].t == DS_CMD_TEXT) {
@@ -66,7 +115,14 @@ static void discard_commands(void) {
     }
     cmd_n = 0;
 }
+
+/* --- активы --- */
+
 void ds_release_assets(void) {
+    /* GPU-копии (если были) - под чистую: зальются заново при загрузке. */
+    for (Texture *t = textures; t; t = t->next) ds_vk_texture_gpu_release(t);
+    ds_vk_pending_reset();
+    ds_vk_font_gpu_release();
     Texture *t = textures;
     while (t) { Texture *n = t->next; free(t->pixels); free(t->name); free(t); t = n; }
     textures = NULL;
@@ -78,6 +134,9 @@ void ds_set_asset_manager(AAssetManager *a) {
     if (!amgr) ds_runtime_error("Android asset manager is unavailable");
 }
 int png_load(const char *n) { return load_png(n) != NULL; }
+
+/* --- команды рисования (API скриптов, не меняется) --- */
+
 void rect(float x, float y, float w, float h, uint32_t c) {
     DSCmd *p = push(DS_CMD_RECT); if (!p) return;
     p->v.rc.x=x; p->v.rc.y=y; p->v.rc.w=w; p->v.rc.h=h; p->v.rc.c=pack_c(c);
@@ -141,6 +200,9 @@ void text_scaled(const char *s, float x, float y, uint32_t c, float sc) {
     p->v.tt.x=x; p->v.tt.y=y; p->v.tt.sc=sc; p->v.tt.c=pack_c(text_force_white(c));
 }
 void text(const char *s, float x, float y, uint32_t c) { text_scaled(s, x, y, c, 1.0f); }
+
+/* --- метрики текста (остаются на CPU, как и были) --- */
+
 int text_ink_width(const char *s) {
     if (!s || !ensure_font()) return 0;
     const DSFontGlyph *ref = ds_font_glyph(font, 'S');
@@ -195,46 +257,66 @@ int text_ink_top(const char *s) {
     }
     return first ? 0 : (int)floorf(minT);
 }
-int ds_graphics_init(AAssetManager *a) { if (amgr != a) { ds_release_assets(); amgr = a; } return 1; }
+
+/* --- кадры --- */
+
+int ds_graphics_init(AAssetManager *a, ANativeWindow *window) {
+    if (amgr != a) { ds_release_assets(); amgr = a; }
+    return ds_vk_init_backend(window);
+}
 int ds_graphics_begin_frame(Buffer *b) {
-    if (!b || !b->pixels || b->width <= 0 || b->height <= 0 || b->stride < b->width) return 0;
-    discard_commands(); cur_buf = b; frame_open = 1;
-    clear_buf(b, pack_c(0x00000000));
+    if (!b || b->width <= 0 || b->height <= 0 || b->stride < b->width) return 0;
+    /* b->pixels больше не используется: рисуем через Vulkan. */
+    if (!ds_vk_begin_frame_backend((uint32_t)b->width, (uint32_t)b->height)) return 0;
+    discard_commands();
+    cur_buf = b; frame_open = 1;
     return 1;
 }
 void ds_graphics_end_frame(void) {
     if (!frame_open) return;
-    flush(); cmd_n = 0; frame_open = 0; cur_buf = NULL;
+    ds_vk_end_frame_backend();
+    cmd_n = 0; frame_open = 0; cur_buf = NULL;
 }
-void ds_graphics_cancel_frame(void) { discard_commands(); frame_open = 0; cur_buf = NULL; }
+void ds_graphics_cancel_frame(void) {
+    discard_commands();
+    frame_open = 0; cur_buf = NULL;
+    /* Захваченный кадр Vulkan оставляет держаться: следующий begin_frame
+     * переиспользует его без повторного acquire. */
+}
 void ds_graphics_error_screen(const char *m) {
-    if (!cur_buf) return;
-    clear_buf(cur_buf, pack_c(0xff1c0b10));
-    if (!font) return;
+    if (!frame_open) return;
+    /* Экран ошибки рисуется теми же командами и тем же Vulkan-конвейером. */
+    discard_commands();
+    rect(0.0f, 0.0f, (float)(cur_buf ? cur_buf->width : screen_w),
+         (float)(cur_buf ? cur_buf->height : screen_h), pack_c(0xff1c0b10));
+    if (!ensure_font()) return;
     int y = 12;
-    render_text_now(cur_buf, "=== DIMSCRIPT ERROR ===", 16, y, pack_c(0xffffffff), 0.7f);
+    text_scaled("=== DIMSCRIPT ERROR ===", 16, (float)y, pack_c(0xffffffff), 0.7f);
     y += 30;
     if (m && *m) {
-        render_text_now(cur_buf, m, 16, y, pack_c(0xffffb0b0), 0.6f);
+        text_scaled(m, 16, (float)y, pack_c(0xffffb0b0), 0.6f);
         y += 28;
     }
     y += 4;
-    render_text_now(cur_buf, "--- console (last lines) ---", 16, y, pack_c(0xff9aa0b0), 0.55f);
+    text_scaled("--- console (last lines) ---", 16, (float)y, pack_c(0xff9aa0b0), 0.55f);
     y += 24;
     int n = console_count();
     int start = n > 16 ? n - 16 : 0;
     for (int i = start; i < n; i++) {
-        const char *line = console_line(i);
-        if (!line || !*line) { y += 19; continue; }
+        const char *ln = console_line(i);
+        if (!ln || !*ln) { y += 19; continue; }
         uint32_t col = console_type(i) ? pack_c(0xffff8a80) : pack_c(0xffc8d0dc);
-        render_text_now(cur_buf, line, 16, y, col, 0.55f);
+        text_scaled(ln, 16, (float)y, col, 0.55f);
         y += 19;
-        if (y > cur_buf->height - 8) break;
+        if (y > (cur_buf ? cur_buf->height : screen_h) - 8) break;
     }
 }
 void ds_graphics_shutdown(void) {
     ds_graphics_cancel_frame();
+    ds_vk_shutdown_backend(); /* GPU уходит первым; CPU-пиксели остаются */
     ds_release_assets();
     free(cmds); cmds = NULL; cmd_cap = 0; cmd_n = 0;
+    free(geo_verts); geo_verts = NULL; geo_vcap = geo_vn = 0;
+    free(geo_idx); geo_idx = NULL; geo_icap = geo_in = 0;
 }
 #include "ttf_font.c"

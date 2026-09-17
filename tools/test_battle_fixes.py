@@ -1115,7 +1115,7 @@ def main():
         android.mkdir()
         (android / "asset_manager.h").write_text("typedef struct AAssetManager AAssetManager;\n")
         (android / "log.h").touch()
-        (android / "native_window.h").touch()
+        (android / "native_window.h").write_text("typedef struct ANativeWindow ANativeWindow;\n")
         (temp / "test.c").write_text(HARNESS)
         subprocess.run([
             *shlex.split(os.environ.get("CC", "cc")), "-std=c99", "-O0",
