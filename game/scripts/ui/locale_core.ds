@@ -330,7 +330,7 @@ function tr_class_ordinary_desc()
     return "I was the first"
 end
 function tr_class_azum_desc()
-    return "NEVER GIVE UP!"
+    return "Lived once, buried twice..."
 end
 function tr_class_santa()
     if language == 1
@@ -348,7 +348,7 @@ function tr_class_ebuc()
     return "ebuC"
 end
 function tr_class_ebuc_desc()
-    return "The universe's chaos!"
+    return "You thought I was a regular cube, but it was me, buC!"
 end
 function tr_music_vol()
     if language == 1

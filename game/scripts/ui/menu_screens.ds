@@ -93,7 +93,10 @@ function draw_class_card(number vi)
         tex(sx, class_sprite_y(), class_idle_tex(cls), 0, scale)
     end
     centered_text(class_name_of(cls), x, w, class_title_y(), text_color, class_title_scale())
-    centered_text(class_desc_of(cls), x, w, class_desc_y(), text_color, 0.5)
+    // Девиз у буК длинный («You thought I was a regular cube...»), поэтому
+    // масштаб подбираем по ширине карточки: надпись всегда внутри неё.
+    string motto = class_desc_of(cls)
+    centered_text(motto, x, w, class_desc_y(), text_color, fit_text_scale(motto, w - 16, 0.5))
     centered_text(tr_level() + " " + class_level_of(cls), x, w, class_level_y(), text_color, 0.45)
     button_scaled(class_pick_label(cls), x + class_pick_inset(), class_pick_y(), class_pick_w(), class_pick_h, 0.55)
 end
@@ -106,7 +109,9 @@ function draw_class_stats()
     number x = center_x(w)
     number hp = class_hp_of(player_class)
     number power = class_power_of(player_class)
-    ctext_scaled(class_desc_of(player_class), stat_motto_y(), text_color, 0.8)
+    string smotto = class_desc_of(player_class)
+    ctext_scaled(smotto, stat_motto_y(), text_color,
+        fit_text_scale(smotto, screen_w - 2 * screen_margin, 0.8))
     draw_stat_row(tr_hp() + ": " + hp, x, stat_hp_y(), w, stat_bar_h(), hp, 20, stat_hp_color)
     draw_stat_row(tr_strength() + ": " + power, x, stat_power_y(), w, stat_bar_h(), power, 2, stat_power_color)
 end

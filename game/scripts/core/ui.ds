@@ -46,6 +46,20 @@ function text_in_field(string label, number x, number y, number h, color c, numb
     number tt = text_ink_top(label) * scale
     text_scaled(label, x, y + (h - th) / 2 - tt + 1.5, c, scale)
 end
+// Длинная надпись не должна вылезать за отведённую ширину: масштаб считается по
+// фактической ширине текста (как в поле промокода), но не больше max_scale —
+// короткие надписи остаются своего размера.
+function fit_text_scale(string s, number w, number max_scale)
+    number tw = text_ink_width(s)
+    if tw <= 0 || w <= 0
+        return max_scale
+    end
+    number sc = w / tw
+    if sc > max_scale
+        sc = max_scale
+    end
+    return sc
+end
 function centered_text(string label, number x, number w, number y, color c, number scale)
     number tw = text_ink_width(label) * scale
     text_scaled(label, x + (w - tw) / 2, y, c, scale)

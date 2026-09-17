@@ -224,6 +224,27 @@ static void test_video_settings(void) {
     puts("video settings: fps/scale cycling and settings screen fit OK");
 }
 
+static void test_class_mottos(void) {
+    /* Девизы классов: Азум и буК говорят свои фразы, а длинная фраза буК
+     * вписывается в карточку и в экран характеристик подбором масштаба. */
+    assert(strcmp(ds_fn_tr_class_azum_desc(), "Lived once, buried twice...") == 0);
+    const char *ebuc = ds_fn_tr_class_ebuc_desc();
+    assert(strcmp(ebuc, "You thought I was a regular cube, but it was me, buC!") == 0);
+    double cw = ds_fn_classes_card_w();
+    near(ds_fn_fit_text_scale("I was the first", cw - 16, 0.5), 0.5);
+    double sc = ds_fn_fit_text_scale(ebuc, cw - 16, 0.5);
+    assert(sc > 0.1 && sc <= 0.5);
+    near(sc * ink_width(ebuc), cw - 16);          /* ровно в доступную ширину */
+    int saved_w = screen_w;
+    screen_w = 1600;
+    near(ds_fn_fit_text_scale(ebuc, screen_w - 2 * screen_margin, 0.8), 0.8);
+    screen_w = 400;   /* узкое окно: девиз обязан ужаться под поля экрана */
+    double ss = ds_fn_fit_text_scale(ebuc, screen_w - 2 * screen_margin, 0.8);
+    assert(ss < 0.8 && ss * ink_width(ebuc) <= screen_w - 2 * screen_margin + 0.001);
+    screen_w = saved_w;
+    puts("class mottos: Azum/buC text and fit-to-width scaling OK");
+}
+
 static void test_render(void) {
     /* История: стикеры рисуются картинкой в своей строке, текст — текстом. */
     game_state = ST_ONLINE;
@@ -264,6 +285,7 @@ int main(void) {
     test_parsing();
     test_send_and_touch();
     test_video_settings();
+    test_class_mottos();
     test_render();
     return 0;
 }
