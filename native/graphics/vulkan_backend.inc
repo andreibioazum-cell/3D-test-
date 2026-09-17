@@ -48,6 +48,7 @@ static uint32_t vk_sw_index;
 static int vk_image_held; /* кадр захвачен, но ещё не показан (cancel_frame) */
 
 static VkRenderPass vk_renderpass;
+static VkFormat vk_rp_format; /* формат swapchain, под который собраны render pass и конвейеры */
 static VkPipelineLayout vk_layout_solid;
 static VkPipelineLayout vk_layout_image;
 static VkPipelineLayout vk_layout_tint;
@@ -384,7 +385,14 @@ static int ds_vk_create_shader_module(const uint32_t *code, size_t words, VkShad
 }
 
 static int ds_vk_create_pipeline(VkShaderModule frag, VkPipelineLayout layout, int blend, VkPipeline *out) {
-    VkPipelineShaderStageCreateInfo stages[2];
+    /* Массив ОБЯЗАН быть нулевым: по спецификации Vulkan pNext = NULL и
+     * flags = 0 (reserved for future use). Без инициализации в этих полях
+     * остаётся мусор стека, а загрузчик и драйвер GPU обходят цепочку pNext
+     * каждого stage'а: мусор-указатель приводит к разыменованию несуществующего
+     * адреса прямо внутри драйвера (на Mali — SIGSEGV в libGLES_mali.so,
+     * tombstone «null pointer dereference» при создании конвейера в
+     * ds_graphics_init - игра вылетала при запуске). */
+    VkPipelineShaderStageCreateInfo stages[2] = { 0 };
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
     stages[0].module = VK_NULL_HANDLE;
@@ -393,6 +401,9 @@ static int ds_vk_create_pipeline(VkShaderModule frag, VkPipelineLayout layout, i
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
     stages[1].module = frag;
     stages[1].pName = "main";
+    /* При ошибке vkCreateGraphicsPipelines значение хендла по спецификации
+     * НЕ ОПРЕДЕЛЕНО: гоняем его в NULL, чтобы выключение не уничтожало мусор. */
+    *out = VK_NULL_HANDLE;
     if (!ds_vk_create_shader_module(ds_spirv_sprite_vert,
                                     sizeof(ds_spirv_sprite_vert) / sizeof(uint32_t), &stages[0].module))
         return 0;
@@ -584,7 +595,16 @@ static int ds_vk_recreate_swapchain(void) {
     si.imageArrayLayers = 1;
     si.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     si.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    si.preTransform = caps.currentTransform;
+    /* preTransform = IDENTITY — обязательно на Android. Изображения swapchain
+     * живут в системе координат ОКНА (ландшафт, как видит пользователь), а
+     * поворот окна относительно дисплея уже применяет системный композитор —
+     * этот поворот и есть caps.currentTransform (ROTATE_90 в ландшафте).
+     * Если задать preTransform = currentTransform (как в некоторых примерах),
+     * движок презентации проворачивает изображение ЕЩЁ на 90°: в ландшафте
+     * игра оказывается «вертикальной» и растянутой. */
+    si.preTransform = (caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+        ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
+        : caps.currentTransform;
     si.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     si.presentMode = VK_PRESENT_MODE_FIFO_KHR; /* поддерживается всегда, бережёт батарею */
     si.clipped = VK_TRUE;
@@ -890,7 +910,50 @@ static int ds_vk_create_renderpass(void) {
     ri.attachmentCount = 1; ri.pAttachments = &att;
     ri.subpassCount = 1; ri.pSubpasses = &sub;
     ri.dependencyCount = 1; ri.pDependencies = &dep;
-    return ds_vk_check_result(vkCreateRenderPass(vk_device, &ri, NULL, &vk_renderpass), "vkCreateRenderPass");
+    int ok = ds_vk_check_result(vkCreateRenderPass(vk_device, &ri, NULL, &vk_renderpass), "vkCreateRenderPass");
+    if (ok) vk_rp_format = vk_sw_format;
+    return ok;
+}
+
+/* Создание всех четырёх конвейеров под текущий render pass. SPIR-V спечён,
+ * поэтому модули можно пересоздавать в любой момент (при смене формата). */
+static int ds_vk_create_all_pipelines(void) {
+    VkShaderModule frag_solid = VK_NULL_HANDLE, frag_image = VK_NULL_HANDLE, frag_tint = VK_NULL_HANDLE;
+    int ok = ds_vk_create_shader_module(ds_spirv_solid_frag,
+                                        sizeof(ds_spirv_solid_frag) / sizeof(uint32_t), &frag_solid) &&
+             ds_vk_create_shader_module(ds_spirv_image_frag,
+                                        sizeof(ds_spirv_image_frag) / sizeof(uint32_t), &frag_image) &&
+             ds_vk_create_shader_module(ds_spirv_tint_frag,
+                                        sizeof(ds_spirv_tint_frag) / sizeof(uint32_t), &frag_tint) &&
+             ds_vk_create_pipeline(frag_solid, vk_layout_solid, 1, &vk_pipe_solid) &&
+             ds_vk_create_pipeline(frag_solid, vk_layout_solid, 0, &vk_pipe_replace) &&
+             ds_vk_create_pipeline(frag_image, vk_layout_image, 1, &vk_pipe_image) &&
+             ds_vk_create_pipeline(frag_tint, vk_layout_tint, 1, &vk_pipe_tint);
+    /* Модули больше не нужны при любом исходе - конвейеры их скопировали. */
+    if (frag_solid != VK_NULL_HANDLE) vkDestroyShaderModule(vk_device, frag_solid, NULL);
+    if (frag_image != VK_NULL_HANDLE) vkDestroyShaderModule(vk_device, frag_image, NULL);
+    if (frag_tint != VK_NULL_HANDLE) vkDestroyShaderModule(vk_device, frag_tint, NULL);
+    return ok;
+}
+
+/* Пересборка render pass и конвейеров после смены формата swapchain
+ * (поворот/пересоздание окна может дать другой формат). Покадровый оффскрин
+ * подтянется под новый формат в ds_vk_ensure_offscreen; если этого не сделать,
+ * формат привязки framebuffer не совпадёт с форматом render pass - драйвер
+ * (особенно бюджетные Mali) на этом роняет device или падает с SIGSEGV. */
+static int ds_vk_rebuild_pipelines(void) {
+    if (vk_device) vkDeviceWaitIdle(vk_device);
+    if (vk_pipe_solid != VK_NULL_HANDLE) vkDestroyPipeline(vk_device, vk_pipe_solid, NULL);
+    if (vk_pipe_replace != VK_NULL_HANDLE) vkDestroyPipeline(vk_device, vk_pipe_replace, NULL);
+    if (vk_pipe_image != VK_NULL_HANDLE) vkDestroyPipeline(vk_device, vk_pipe_image, NULL);
+    if (vk_pipe_tint != VK_NULL_HANDLE) vkDestroyPipeline(vk_device, vk_pipe_tint, NULL);
+    vk_pipe_solid = vk_pipe_replace = vk_pipe_image = vk_pipe_tint = VK_NULL_HANDLE;
+    if (vk_renderpass != VK_NULL_HANDLE) vkDestroyRenderPass(vk_device, vk_renderpass, NULL);
+    vk_renderpass = VK_NULL_HANDLE;
+    ds_vk_destroy_offscreen();
+    if (!ds_vk_create_renderpass()) return 0;
+    if (!ds_vk_create_all_pipelines()) return 0;
+    return 1;
 }
 
 /* --- инициализация и выключение --- */
@@ -1037,22 +1100,7 @@ static int ds_vk_init_backend(ANativeWindow *window) {
     if (!ds_vk_check_result(vkCreatePipelineLayout(vk_device, &pli, NULL, &vk_layout_tint),
                             "vkCreatePipelineLayout(tint)")) { ds_vk_shutdown_backend(); return 0; }
 
-    VkShaderModule frag_solid = VK_NULL_HANDLE, frag_image = VK_NULL_HANDLE, frag_tint = VK_NULL_HANDLE;
-    int ok = ds_vk_create_shader_module(ds_spirv_solid_frag,
-                                        sizeof(ds_spirv_solid_frag) / sizeof(uint32_t), &frag_solid) &&
-             ds_vk_create_shader_module(ds_spirv_image_frag,
-                                        sizeof(ds_spirv_image_frag) / sizeof(uint32_t), &frag_image) &&
-             ds_vk_create_shader_module(ds_spirv_tint_frag,
-                                        sizeof(ds_spirv_tint_frag) / sizeof(uint32_t), &frag_tint) &&
-             ds_vk_create_pipeline(frag_solid, vk_layout_solid, 1, &vk_pipe_solid) &&
-             ds_vk_create_pipeline(frag_solid, vk_layout_solid, 0, &vk_pipe_replace) &&
-             ds_vk_create_pipeline(frag_image, vk_layout_image, 1, &vk_pipe_image) &&
-             ds_vk_create_pipeline(frag_tint, vk_layout_tint, 1, &vk_pipe_tint);
-    /* Модули больше не нужны при любом исходе - конвейеры их скопировали. */
-    if (frag_solid != VK_NULL_HANDLE) vkDestroyShaderModule(vk_device, frag_solid, NULL);
-    if (frag_image != VK_NULL_HANDLE) vkDestroyShaderModule(vk_device, frag_image, NULL);
-    if (frag_tint != VK_NULL_HANDLE) vkDestroyShaderModule(vk_device, frag_tint, NULL);
-    if (!ok) { ds_vk_shutdown_backend(); return 0; }
+    if (!ds_vk_create_all_pipelines()) { ds_vk_shutdown_backend(); return 0; }
 
     if (!ds_vk_create_frame_resources()) { ds_vk_shutdown_backend(); return 0; }
 
@@ -1153,6 +1201,10 @@ static int ds_vk_begin_frame_backend(uint32_t w, uint32_t h) {
             }
         }
     }
+    /* Если новый swapchain оказался другого формата, чем тот, под который
+     * собраны render pass и конвейеры, пересобираем их: framebuffer оффскрина
+     * строится в формате swapchain, а render pass собран под старый. */
+    if (vk_sw_format != vk_rp_format && !ds_vk_rebuild_pipelines()) return 0;
     /* Заливки текстур ждём на хосте ДО записи команд кадра: к моменту
      * submit'а кадра transfer уже завершён (фенс), гонок отправок нет. */
     ds_vk_process_pending_uploads();
