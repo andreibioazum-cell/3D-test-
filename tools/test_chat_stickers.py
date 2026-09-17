@@ -357,19 +357,19 @@ def main():
         assert compiler.compile(find_ds_files(str(ROOT / "game/scripts")), str(temp / "game.c"))
         assert not compiler.errors and not compiler.warnings
         # Wiring: в открытом чате рисуется стикер-кнопка и меню, в истории — картинки.
-        draw_body = "".join(compiler.functions["draw_chat"][1])
+        draw_body = "".join(compiler.functions["draw_chat"][2])
         assert "draw_sticker_face(" in draw_body and "draw_sticker_tile(" in draw_body
         assert "sticker_menu_open == 1" in draw_body
-        touch_body = "".join(compiler.functions["touch_chat"][1])
+        touch_body = "".join(compiler.functions["touch_chat"][2])
         assert "chat_send_sticker(" in touch_body
         # Настройки: FPS и апскейл меняются из экрана настроек.
-        settings_body = "".join(compiler.functions["draw_settings"][1])
+        settings_body = "".join(compiler.functions["draw_settings"][2])
         assert "tr_fps_label()" in settings_body and "tr_scale_label()" in settings_body
         assert "settings_row_y(7)" in settings_body
-        touch_settings_body = "".join(compiler.functions["touch_settings"][1])
+        touch_settings_body = "".join(compiler.functions["touch_settings"][2])
         assert "ds_set_fps_cap(" in touch_settings_body
         assert "ds_set_render_scale(" in touch_settings_body
-        bubble_body = "".join(compiler.functions["draw_chat_bubble_at"][1])
+        bubble_body = "".join(compiler.functions["draw_chat_bubble_at"][2])
         assert "chat_sticker_tex(" in bubble_body
         android = temp / "android"
         android.mkdir()

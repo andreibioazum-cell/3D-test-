@@ -1,14 +1,13 @@
-include graphics
-number plates_phase=0, plates_t=0, plates_prev_mode=0
-number plate_a_lit=0, plate_b_lit=0
-number plates_santa_t=0, plates_santa_angle=0, plates_throw_cd=0, plates_next_candy=0
-number plates_thrown=0, plates_santa_out=0, plates_santa_gone=0
-number plates_collect_t=0, plates_vanish_cd=0, plates_dirty=0, plates_save_cd=0
-// Уход Деда Мороза: смещение вверх, скорость, угол в начале разворота и прогресс поворота.
-number plates_santa_dy=0, plates_santa_vy=0, plates_santa_ang0=0, plates_santa_up=0
-array plates_candies=arr_new()
-function plates_event_reset()
-    if plates_dirty==1
+public number plates_phase=0, plates_t=0, plates_prev_mode=0
+public number plate_a_lit=0, plate_b_lit=0
+public number plates_santa_t=0, plates_santa_angle=0, plates_throw_cd=0, plates_next_candy=0
+public number plates_thrown=0, plates_santa_out=0, plates_santa_gone=0
+public number plates_collect_t=0, plates_vanish_cd=0, plates_dirty=0, plates_save_cd=0
+-- Уход Деда Мороза: смещение вверх, скорость, угол в начале разворота и прогресс поворота.
+public number plates_santa_dy=0, plates_santa_vy=0, plates_santa_ang0=0, plates_santa_up=0
+public array plates_candies=arr_new()
+public function plates_event_reset()
+    if plates_dirty==1 then
         plates_dirty=0
         save_progress()
     end
@@ -33,39 +32,39 @@ function plates_event_reset()
     plates_santa_up=0
     plates_lock_me=0
     arr_clear(plates_candies)
-    number i=0
-    loop i<plates_candy_max*plates_candy_fields
+    local number i=0
+    while i<plates_candy_max*plates_candy_fields do
         arr_push(plates_candies,0)
         i=i+1
     end
 end
-function plate_ax()
+public function plate_ax()
     return screen_w*plates_xa
 end
-function plate_ay()
+public function plate_ay()
     return screen_h*plates_yy
 end
-function plate_bx()
+public function plate_bx()
     return screen_w*plates_xb
 end
-function plate_by()
+public function plate_by()
     return screen_h*plates_yy
 end
-function me_on_plate(number px, number py)
-    if player.hp>0&&dist(player.x,player.y,px,py)<plates_stand_r
+public function me_on_plate(number px, number py)
+    if player.hp>0&&dist(player.x,player.y,px,py)<plates_stand_r then
         return 1
     end
     return 0
 end
-function fighter_on_plate(number px, number py)
-    if me_on_plate(px,py)==1
+public function fighter_on_plate(number px, number py)
+    if me_on_plate(px,py)==1 then
         return 1
     end
-    number s=0
-    loop s<max_players
-        number b=s*remote_fields
-        if s!=net_slot()&&arr_get(remotes,b+5)==1
-            if dist(arr_get(remotes,b+1),arr_get(remotes,b+2),px,py)<plates_stand_r
+    local number s=0
+    while s<max_players do
+        local number b=s*remote_fields
+        if s!=net_slot()&&arr_get(remotes,b+5)==1 then
+            if dist(arr_get(remotes,b+1),arr_get(remotes,b+2),px,py)<plates_stand_r then
                 return 1
             end
         end
@@ -73,16 +72,16 @@ function fighter_on_plate(number px, number py)
     end
     return 0
 end
-function plates_throw_candy()
-    if plates_next_candy>=plates_candy_max
+public function plates_throw_candy()
+    if plates_next_candy>=plates_candy_max then
         return
     end
-    number b=plates_next_candy*plates_candy_fields
-    // Леденец летит из-под Деда Мороза в случайную точку экрана — направление
-    // полёта у каждого броска своё (rand() сидится в main.c при запуске).
-    number m=candy_margin+16
-    number tx=m+rand()%(int)(screen_w-2*m)
-    number ty=m+rand()%(int)(screen_h-2*m)
+    local number b=plates_next_candy*plates_candy_fields
+    -- Леденец летит из-под Деда Мороза в случайную точку экрана — направление
+    -- полёта у каждого броска своё (rand() сидится в main.c при запуске).
+    local number m=candy_margin+16
+    local number tx=m+rand()%(int)(screen_w-2*m)
+    local number ty=m+rand()%(int)(screen_h-2*m)
     arr_set(plates_candies,b,1)
     arr_set(plates_candies,b+1,0)
     arr_set(plates_candies,b+2,screen_w/2)
@@ -94,39 +93,39 @@ function plates_throw_candy()
     plates_next_candy=plates_next_candy+1
     plates_thrown=plates_thrown+1
 end
-function plates_candies_left()
-    number n=0, i=0
-    loop i<plates_candy_max
-        if arr_get(plates_candies,i*plates_candy_fields)==1
+public function plates_candies_left()
+    local number n=0, i=0
+    while i<plates_candy_max do
+        if arr_get(plates_candies,i*plates_candy_fields)==1 then
             n=n+1
         end
         i=i+1
     end
     return n
 end
-function plates_collect_candies()
-    number i=0
-    loop i<plates_candy_max
-        number b=i*plates_candy_fields
-        if arr_get(plates_candies,b)==1
-            number t=arr_get(plates_candies,b+1)
-            number v=arr_get(plates_candies,b+6)
-            number pt=arr_get(plates_candies,b+7)
-            if pt>0
-                // Старая анимация сбора больше не нужна — сразу исчезает
+public function plates_collect_candies()
+    local number i=0
+    while i<plates_candy_max do
+        local number b=i*plates_candy_fields
+        if arr_get(plates_candies,b)==1 then
+            local number t=arr_get(plates_candies,b+1)
+            local number v=arr_get(plates_candies,b+6)
+            local number pt=arr_get(plates_candies,b+7)
+            if pt>0 then
+                -- Старая анимация сбора больше не нужна — сразу исчезает
                 arr_set(plates_candies,b,0)
-            else if t<plates_candy_flight
+            else if t<plates_candy_flight then
                 arr_set(plates_candies,b+1,t+dt)
-            else if v>0
+            else if v>0 then
                 v=v+dt
                 arr_set(plates_candies,b+6,v)
-                if v>=plates_candy_vanish_time
+                if v>=plates_candy_vanish_time then
                     arr_set(plates_candies,b,0)
                 end
-            else if dist(arr_get(plates_candies,b+4),arr_get(plates_candies,b+5),player.x,player.y)<player.size*0.65+18
+            else if dist(arr_get(plates_candies,b+4),arr_get(plates_candies,b+5),player.x,player.y)<player.size*0.65+18 then
                 candies=candies+candy_give
                 plates_dirty=1
-                // Пропадает сразу, без анимации
+                -- Пропадает сразу, без анимации
                 arr_set(plates_candies,b,0)
                 quest_on_candy()
                 ds_log("event candy picked -> %g",candies)
@@ -135,11 +134,11 @@ function plates_collect_candies()
         i=i+1
     end
 end
-function plates_start_vanish_one()
-    number i=0
-    loop i<plates_candy_max
-        number b=i*plates_candy_fields
-        if arr_get(plates_candies,b)==1&&arr_get(plates_candies,b+6)<=0&&arr_get(plates_candies,b+7)<=0&&arr_get(plates_candies,b+1)>=plates_candy_flight
+public function plates_start_vanish_one()
+    local number i=0
+    while i<plates_candy_max do
+        local number b=i*plates_candy_fields
+        if arr_get(plates_candies,b)==1&&arr_get(plates_candies,b+6)<=0&&arr_get(plates_candies,b+7)<=0&&arr_get(plates_candies,b+1)>=plates_candy_flight then
             arr_set(plates_candies,b+6,0.0001)
             return 1
         end
@@ -147,49 +146,49 @@ function plates_start_vanish_one()
     end
     return 0
 end
-function plates_time_left()
-    number left=plates_collect_time-plates_collect_t
-    if left<0
+public function plates_time_left()
+    local number left=plates_collect_time-plates_collect_t
+    if left<0 then
         left=0
     end
     return left
 end
-function plates_wrap_angle(number a)
-    number w=a
-    loop w>pi
+public function plates_wrap_angle(number a)
+    local number w=a
+    while w>pi do
         w=w-2*pi
     end
-    loop w<0-pi
+    while w<0-pi do
         w=w+2*pi
     end
     return w
 end
-function plates_santa_exit_dy()
+public function plates_santa_exit_dy()
     return screen_h/2+plates_santa_size
 end
-function tick_event_santa()
+public function tick_event_santa()
     plates_santa_t=plates_santa_t+dt
     plates_collect_t=plates_collect_t+dt
-    if plates_santa_gone==0
-        if plates_santa_out>0
-            // Уход: Дед Мороз не уменьшается — он поворачивается вверх и улетает за экран.
+    if plates_santa_gone==0 then
+        if plates_santa_out>0 then
+            -- Уход: Дед Мороз не уменьшается — он поворачивается вверх и улетает за экран.
             plates_santa_out=plates_santa_out+dt
             plates_santa_up=clamp(plates_santa_out/plates_santa_turn_time,0,1)
             plates_santa_angle=plates_santa_ang0*(1-plates_santa_up)
             plates_santa_vy=plates_santa_vy+plates_santa_fly_acc*dt
-            if plates_santa_vy>plates_santa_fly_speed
+            if plates_santa_vy>plates_santa_fly_speed then
                 plates_santa_vy=plates_santa_fly_speed
             end
             plates_santa_dy=plates_santa_dy-plates_santa_vy*dt
-            if plates_santa_dy<=0-plates_santa_exit_dy()||plates_santa_out>=plates_santa_out_time
+            if plates_santa_dy<=0-plates_santa_exit_dy()||plates_santa_out>=plates_santa_out_time then
                 plates_santa_gone=1
                 ds_log("plates event: Santa flew up and left")
             end
         else
             plates_santa_angle=plates_santa_angle+dt*(plates_santa_spin+0.9*sin(plates_santa_t*1.7))
-            if plates_thrown<plates_candy_total
+            if plates_thrown<plates_candy_total then
                 plates_throw_cd=plates_throw_cd-dt
-                if plates_throw_cd<=0
+                if plates_throw_cd<=0 then
                     plates_throw_cd=plates_throw_interval
                     plates_throw_candy()
                 end
@@ -199,66 +198,66 @@ function tick_event_santa()
             end
         end
     end
-    if plates_collect_t>=plates_collect_time
+    if plates_collect_t>=plates_collect_time then
         plates_vanish_cd=plates_vanish_cd-dt
-        if plates_vanish_cd<=0
+        if plates_vanish_cd<=0 then
             plates_vanish_cd=plates_candy_vanish_stagger
             plates_start_vanish_one()
         end
     end
     plates_collect_candies()
     plates_save_cd=plates_save_cd-dt
-    if plates_dirty==1&&plates_save_cd<=0
+    if plates_dirty==1&&plates_save_cd<=0 then
         plates_dirty=0
         plates_save_cd=plates_save_interval
         save_progress()
     end
-    if plates_santa_gone==1&&plates_candies_left()==0
+    if plates_santa_gone==1&&plates_candies_left()==0 then
         ds_log("plates event: round over, finished one-time")
         plates_finished=1
         plates_phase=4
-        if plates_dirty==1
+        if plates_dirty==1 then
             plates_dirty=0
             save_progress()
         end
     end
 end
-function tick_plates_event()
-    if event_mode!=3
-        if plates_prev_mode==3
+public function tick_plates_event()
+    if event_mode!=3 then
+        if plates_prev_mode==3 then
             plates_event_reset()
         end
         plates_prev_mode=event_mode
         return
     end
-    if plates_prev_mode!=3
+    if plates_prev_mode!=3 then
         plates_event_reset()
     end
     plates_prev_mode=3
-    if plates_phase==0
+    if plates_phase==0 then
         plate_a_lit=fighter_on_plate(plate_ax(),plate_ay())
         plate_b_lit=fighter_on_plate(plate_bx(),plate_by())
-        if plate_a_lit==1&&plate_b_lit==1
+        if plate_a_lit==1&&plate_b_lit==1 then
             plates_phase=1
             plates_t=0
-            if me_on_plate(plate_ax(),plate_ay())==1||me_on_plate(plate_bx(),plate_by())==1
+            if me_on_plate(plate_ax(),plate_ay())==1||me_on_plate(plate_bx(),plate_by())==1 then
                 plates_lock_me=1
                 drop_joy()
             end
             ds_log("plates event: both plates occupied, charging")
         end
-    else if plates_phase==1
-        // «Заряд»: плиты подсвечены, бойцы зафиксированы. Луча тут больше нет.
+    else if plates_phase==1 then
+        -- «Заряд»: плиты подсвечены, бойцы зафиксированы. Луча тут больше нет.
         plates_t=plates_t+dt
-        if plates_t>=plates_charge_time
+        if plates_t>=plates_charge_time then
             plates_phase=2
             plates_t=0
             plates_lock_me=0
             ds_log("plates event: charge done, shrinking")
         end
-    else if plates_phase==2
+    else if plates_phase==2 then
         plates_t=plates_t+dt
-        if plates_t>=plates_shrink_time
+        if plates_t>=plates_shrink_time then
             plates_phase=3
             plates_santa_t=0
             plates_santa_angle=0
@@ -274,66 +273,66 @@ function tick_plates_event()
         tick_event_santa()
     end
 end
-function draw_plate(number cx, number cy, number k, number lit)
-    if k<=0
+public function draw_plate(number cx, number cy, number k, number lit)
+    if k<=0 then
         return
     end
-    number half=plates_size/2*k
-    number r=20*k
-    number pulse=0.5+0.5*sin(event_t*5)
-    number aa=floor(clamp(k*1.4,0,1)*235)
-    color dark=(((unsigned)(int)floor(aa*0.85))<<24)|0x007F1414
-    color tr=0x00E53935
-    if lit==1
+    local number half=plates_size/2*k
+    local number r=20*k
+    local number pulse=0.5+0.5*sin(event_t*5)
+    local number aa=floor(clamp(k*1.4,0,1)*235)
+    local color dark=(((unsigned)(int)floor(aa*0.85))<<24)|0x007F1414
+    local color tr=0x00E53935
+    if lit==1 then
         tr=0x00FF6E63
     end
-    color top=(((unsigned)(int)aa)<<24)|tr
+    local color top=(((unsigned)(int)aa)<<24)|tr
     roundrect(cx-half-5*k,cy-half-5*k,half*2+10*k,half*2+10*k,r+5*k,dark)
     roundrect(cx-half,cy-half,half*2,half*2,r,top)
-    number rr=half*0.45+2*pulse*k
-    color hint=(((unsigned)(int)floor(aa*0.55))<<24)|0x00FFFFFF
+    local number rr=half*0.45+2*pulse*k
+    local color hint=(((unsigned)(int)floor(aa*0.55))<<24)|0x00FFFFFF
     ring(cx,cy,rr,3*k,hint)
 end
-function draw_event_plates()
-    if event_mode!=3||plates_phase>=3
+public function draw_event_plates()
+    if event_mode!=3||plates_phase>=3 then
         return
     end
-    number k=1
-    if plates_phase==2
+    local number k=1
+    if plates_phase==2 then
         k=1-plates_t/plates_shrink_time
     end
     draw_plate(plate_ax(),plate_ay(),k,plate_a_lit)
     draw_plate(plate_bx(),plate_by(),k,plate_b_lit)
 end
-function draw_event_candies()
-    if event_mode!=3||plates_phase!=3
+public function draw_event_candies()
+    if event_mode!=3||plates_phase!=3 then
         return
     end
-    number i=0, t=0, k=0, v=1, e=0, xx=0, yy=0, pt=0, p=0, pop=0, q=0, sc=0, hw=0
-    loop i<plates_candy_max
-        number b=i*plates_candy_fields
-        if arr_get(plates_candies,b)==1
+    local number i=0, t=0, k=0, v=1, e=0, xx=0, yy=0, pt=0, p=0, pop=0, q=0, sc=0, hw=0
+    while i<plates_candy_max do
+        local number b=i*plates_candy_fields
+        if arr_get(plates_candies,b)==1 then
             t=arr_get(plates_candies,b+1)
             k=t/plates_candy_flight
-            if k>1
+            if k>1 then
                 k=1
             end
             v=1
-            if arr_get(plates_candies,b+6)>0
+            if arr_get(plates_candies,b+6)>0 then
                 v=1-arr_get(plates_candies,b+6)/plates_candy_vanish_time
             end
             e=1-(1-k)*(1-k)
             xx=arr_get(plates_candies,b+2)+(arr_get(plates_candies,b+4)-arr_get(plates_candies,b+2))*e
             yy=arr_get(plates_candies,b+3)+(arr_get(plates_candies,b+5)-arr_get(plates_candies,b+3))*e
             pt=arr_get(plates_candies,b+7)
-            if pt>0
-                // При сборе пропадает сразу — не рисуем
-            else if v>0.02
-                // Появление: просто увеличивается к своей середине, без закрутки, летит в рандомном направлении из центра
+            if pt>0 then
+                -- При сборе пропадает сразу — не рисуем
+            else if v>0.02 then
+                -- Появление: просто увеличивается к своей середине, без закрутки, летит в рандомном направлении из центра
                 p=clamp(t/plates_candy_pop_time,0,1)
                 pop=1-(1-p)*(1-p)
                 sc=candy_scale*pop*v
-                if sc>0.02
+                if sc>0.02 then
                     hw=25*sc
                     tex(xx-hw,yy-hw,CANDY_TEX,0,sc)
                 end
@@ -342,38 +341,38 @@ function draw_event_candies()
         i=i+1
     end
 end
-function draw_event_santa()
-    if event_mode!=3||plates_phase!=3||plates_santa_gone==1
+public function draw_event_santa()
+    if event_mode!=3||plates_phase!=3||plates_santa_gone==1 then
         return
     end
-    // Появление без серого кольца; уход — поворотом вверх и полётом, а не ужиманием.
-    number cx=screen_w/2, cy=screen_h/2+plates_santa_dy
-    number pop=1
-    if plates_santa_t<0.4
-        number p=plates_santa_t/0.4
+    -- Появление без серого кольца; уход — поворотом вверх и полётом, а не ужиманием.
+    local number cx=screen_w/2, cy=screen_h/2+plates_santa_dy
+    local number pop=1
+    if plates_santa_t<0.4 then
+        local number p=plates_santa_t/0.4
         pop=1-(1-p)*(1-p)
     end
-    number sc=plates_santa_size/50*pop
-    if sc<=0.01
+    local number sc=plates_santa_size/50*pop
+    if sc<=0.01 then
         return
     end
-    number wob=6*pop*sin(plates_santa_t*3)*(1-plates_santa_up)
-    number hw=25*sc
+    local number wob=6*pop*sin(plates_santa_t*3)*(1-plates_santa_up)
+    local number hw=25*sc
     tex_tint(cx-hw+10,cy-hw+wob+12,SANTA_TEX,plates_santa_angle,sc,0x55000000)
     tex(cx-hw,cy-hw+wob,SANTA_TEX,plates_santa_angle,sc)
 end
-function draw_plates_hud()
-    if event_mode!=3||plates_phase!=3
+public function draw_plates_hud()
+    if event_mode!=3||plates_phase!=3 then
         return
     end
-    number left=plates_candies_left()
-    if left==0&&plates_santa_gone==1
+    local number left=plates_candies_left()
+    if left==0&&plates_santa_gone==1 then
         return
     end
-    number secs=floor(plates_time_left()+0.999)
-    string s=tr_candy_timer()+": "+secs
-    color c=0xFFFFFFFF
-    if secs<=10
+    local number secs=floor(plates_time_left()+0.999)
+    local string s=tr_candy_timer()+": "+secs
+    local color c=0xFFFFFFFF
+    if secs<=10 then
         c=0xFFFF6E63
     end
     ctext_scaled(s,back_y+btn_h+6,c,0.5)

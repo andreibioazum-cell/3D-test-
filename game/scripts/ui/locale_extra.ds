@@ -1,43 +1,42 @@
-include graphics
-function tr_top()
-    if language == 1
+public function tr_top()
+    if language == 1 then
         return "Топ"
     end
     return "Top"
 end
-function tr_quests()
-    if language == 1
+public function tr_quests()
+    if language == 1 then
         return "Задания"
     end
     return "Quests"
 end
-function tr_quest_win_solo()
-    if language == 1
+public function tr_quest_win_solo()
+    if language == 1 then
         return "Выиграй соло"
     end
     return "Win solo"
 end
-function tr_quest_win_online()
-    if language == 1
+public function tr_quest_win_online()
+    if language == 1 then
         return "Выиграй онлайн"
     end
     return "Win online"
 end
-function tr_quest_collect_candy()
-    if language == 1
+public function tr_quest_collect_candy()
+    if language == 1 then
         return "Собери леденцы"
     end
     return "Collect candies"
 end
-function tr_quest_play_matches()
-    if language == 1
+public function tr_quest_play_matches()
+    if language == 1 then
         return "Сыграй боев"
     end
     return "Play matches"
 end
-function tr_quest_reward(number c, number cd)
-    string out = ""
-    if language == 1
+public function tr_quest_reward(number c, number cd)
+    local string out = ""
+    if language == 1 then
         out = "+" + c + " кубков, +" + cd + " леденцов"
     else
         out = "+" + c + " cups, +" + cd + " candies"

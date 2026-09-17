@@ -1,18 +1,18 @@
-function start_enemy_attack()
-    number ta=atan2(player.y-enemy.y,player.x-enemy.x), da=ta-enemy.angle
-    if da>pi
+public function start_enemy_attack()
+    local number ta=atan2(player.y-enemy.y,player.x-enemy.x), da=ta-enemy.angle
+    if da>pi then
         da=da-2*pi
     end
-    if da<0-pi
+    if da<0-pi then
         da=da+2*pi
     end
-    number err = (rand()%100-50)/100.0 * enemy_human_wobble * pi/180
-    if rand()%100 < enemy_human_miss*100
+    local number err = (rand()%100-50)/100.0 * enemy_human_wobble * pi/180
+    if rand()%100 < enemy_human_miss*100 then
         err = err + (rand()%100-50)/100.0 * 0.35
     end
     enemy.aim_err = err
-    number turn_budget = enemy_attack_turn_speed * (enemy_windup - enemy_lock_time)
-    if fabs(da) > turn_budget
+    local number turn_budget = enemy_attack_turn_speed * (enemy_windup - enemy_lock_time)
+    if fabs(da) > turn_budget then
         return 0
     end
     enemy.state=1
@@ -21,171 +21,171 @@ function start_enemy_attack()
     enemy.react=enemy_human_react_min + (rand()%100)/100.0*(enemy_human_react_max-enemy_human_react_min)
     return 1
 end
-function enemy_face_player()
+public function enemy_face_player()
     enemy_predict(enemy_lead)
-    number ta=atan2(aim_ty-enemy.y,aim_tx-enemy.x), da=ta-enemy.angle
-    if da>pi
+    local number ta=atan2(aim_ty-enemy.y,aim_tx-enemy.x), da=ta-enemy.angle
+    if da>pi then
         da=da-2*pi
     end
-    if da<0-pi
+    if da<0-pi then
         da=da+2*pi
     end
-    number step=enemy_attack_turn_speed*dt
+    local number step=enemy_attack_turn_speed*dt
     enemy.angle=enemy.angle+clamp(da,0-step,step)
 end
-function enemy_engage(number desired)
-    number dx=aim_tx-enemy.x, dy=aim_ty-enemy.y, d=sqrt(dx*dx+dy*dy)
-    if d<1
+public function enemy_engage(number desired)
+    local number dx=aim_tx-enemy.x, dy=aim_ty-enemy.y, d=sqrt(dx*dx+dy*dy)
+    if d<1 then
         d=1
     end
     enemy.wobble_t = enemy.wobble_t + dt* (1.2 + (rand()%100)/100.0)
-    number wobble_off = sin(enemy.wobble_t*2.7)*14 + cos(enemy.wobble_t*1.3)*9
+    local number wobble_off = sin(enemy.wobble_t*2.7)*14 + cos(enemy.wobble_t*1.3)*9
     desired = desired + (rand()%100-50)/100.0*18
-    number radial=clamp((d-desired)*enemy_close_gain,-bot_speed,bot_speed)
-    number orbit=bot_strafe_speed*enemy.strafe*0.5
-    if d>desired+110
+    local number radial=clamp((d-desired)*enemy_close_gain,-bot_speed,bot_speed)
+    local number orbit=bot_strafe_speed*enemy.strafe*0.5
+    if d>desired+110 then
         orbit=orbit*0.4
     end
-    number perp_x = 0 - dy/d * wobble_off
-    number perp_y = dx/d * wobble_off
-    number vx=dx/d*radial - dy/d*orbit + perp_x*0.3
-    number vy=dy/d*radial + dx/d*orbit + perp_y*0.3
-    number cap=bot_speed*enemy.speed_var
-    number sp=sqrt(vx*vx+vy*vy)
-    if sp>cap&&sp>0.001
+    local number perp_x = 0 - dy/d * wobble_off
+    local number perp_y = dx/d * wobble_off
+    local number vx=dx/d*radial - dy/d*orbit + perp_x*0.3
+    local number vy=dy/d*radial + dx/d*orbit + perp_y*0.3
+    local number cap=bot_speed*enemy.speed_var
+    local number sp=sqrt(vx*vx+vy*vy)
+    if sp>cap&&sp>0.001 then
         vx=vx/sp*cap
         vy=vy/sp*cap
     end
-    if rand()%1000 < 8
+    if rand()%1000 < 8 then
         vx = vx*0.4
         vy = vy*0.4
         enemy.hesit = 0.08 + (rand()%100)/1000.0
     end
-    if enemy.hesit>0
+    if enemy.hesit>0 then
         enemy.hesit = enemy.hesit - dt
         vx = vx*0.55
         vy = vy*0.55
-        if enemy.hesit<0
+        if enemy.hesit<0 then
             enemy.hesit=0
         end
     end
-    number ms=clamp(dt*enemy_move_smooth,0,1)
+    local number ms=clamp(dt*enemy_move_smooth,0,1)
     enemy.svx=lerp(enemy.svx,vx,ms)
     enemy.svy=lerp(enemy.svy,vy,ms)
     enemy_move(enemy.svx,enemy.svy)
 end
-function update_enemy()
+public function update_enemy()
     enemy_track_player()
     enemy.mvx=0
     enemy.mvy=0
     enemy.wobble_t = enemy.wobble_t + dt
-    if enemy.freeze>0
+    if enemy.freeze>0 then
         enemy.freeze=enemy.freeze-dt
-        if enemy.freeze<0
+        if enemy.freeze<0 then
             enemy.freeze=0
         end
     end
-    if enemy.cooldown>0
+    if enemy.cooldown>0 then
         enemy.cooldown=enemy.cooldown-dt*enemy_freeze_factor()
-        if enemy.cooldown<0
+        if enemy.cooldown<0 then
             enemy.cooldown=0
         end
     end
-    if enemy.dodge_cd>0
+    if enemy.dodge_cd>0 then
         enemy.dodge_cd=enemy.dodge_cd-dt
-        if enemy.dodge_cd<0
+        if enemy.dodge_cd<0 then
             enemy.dodge_cd=0
         end
     end
-    if enemy.flank>0
+    if enemy.flank>0 then
         enemy.flank=enemy.flank-dt
     end
-    if enemy.react>0
+    if enemy.react>0 then
         enemy.react=enemy.react-dt
-        if enemy.react<0
+        if enemy.react<0 then
             enemy.react=0
         end
     end
-    if enemy.poison>0
-        if enemy.poison_tick<=0
+    if enemy.poison>0 then
+        if enemy.poison_tick<=0 then
             enemy.poison_tick=santa_poison_tick_interval
         end
         enemy.poison=enemy.poison-dt
         enemy.poison_tick=enemy.poison_tick-dt
-        if enemy.poison_tick<=0
-            number tick_dmg=santa_poison_damage_for(player_level)
-            if player_level>=3&&enemy.poison_damage>0
+        if enemy.poison_tick<=0 then
+            local number tick_dmg=santa_poison_damage_for(player_level)
+            if player_level>=3&&enemy.poison_damage>0 then
                 tick_dmg=enemy.poison_damage
             end
             enemy.poison=0
             enemy.poison_tick=0
             enemy.poison_damage=0
-            if enemy_apply_damage(tick_dmg)==1
+            if enemy_apply_damage(tick_dmg)==1 then
                 return
             end
         end
-        if enemy.poison<=0
+        if enemy.poison<=0 then
             enemy.poison=0
             enemy.poison_tick=0
             enemy.poison_damage=0
         end
     end
-    if enemy.stun>0
+    if enemy.stun>0 then
         enemy.stun=enemy.stun-dt
-        if enemy.stun<0
+        if enemy.stun<0 then
             enemy.stun=0
         end
         return
     end
-    if enemy_tick_class_abilities()==1
+    if enemy_tick_class_abilities()==1 then
         return
     end
-    number dx=player.x-enemy.x, dy=player.y-enemy.y, d=sqrt(dx*dx+dy*dy)
-    if d<1
+    local number dx=player.x-enemy.x, dy=player.y-enemy.y, d=sqrt(dx*dx+dy*dy)
+    if d<1 then
         d=1
     end
-    number pr=player.size*0.65, reach=enemy_punch_reach+pr
-    if enemy.state==1
+    local number pr=player.size*0.65, reach=enemy_punch_reach+pr
+    if enemy.state==1 then
         enemy.state_time=enemy.state_time-dt
-        if enemy.state_time>enemy_lock_time
+        if enemy.state_time>enemy_lock_time then
             enemy_turn_prediction()
         end
         enemy_predict(enemy_lead)
-        number adx=aim_tx-enemy.x, ady=aim_ty-enemy.y, ad=sqrt(adx*adx+ady*ady)
-        if ad<1
+        local number adx=aim_tx-enemy.x, ady=aim_ty-enemy.y, ad=sqrt(adx*adx+ady*ady)
+        if ad<1 then
             ad=1
         end
-        if ad>reach-enemy_hit_margin
+        if ad>reach-enemy_hit_margin then
             enemy_move(adx/ad*bot_speed*0.85,ady/ad*bot_speed*0.85)
         end
-        if enemy.state_time<=0
+        if enemy.state_time<=0 then
             enemy.state=2
             enemy.state_time=enemy_punch_time
             enemy.hit=0
         end
         return
     end
-    if enemy.state==2
+    if enemy.state==2 then
         enemy.state_time=enemy.state_time-dt
-        if enemy.hit==0
-            number target=punch_resolve_target(enemy.x,enemy.y,cos(enemy.angle),sin(enemy.angle),player.size*0.65)
-            if target==0||(target>=1&&target<=turret_max)
-                if rand()%100 >= enemy_human_miss*100 || rand()%100 < 30
+        if enemy.hit==0 then
+            local number target=punch_resolve_target(enemy.x,enemy.y,cos(enemy.angle),sin(enemy.angle),player.size*0.65)
+            if target==0||(target>=1&&target<=turret_max) then
+                if rand()%100 >= enemy_human_miss*100 || rand()%100 < 30 then
                     enemy.hit=1
-                    if target==0
-                        if revive_prot<=0
+                    if target==0 then
+                        if revive_prot<=0 then
                             take_damage(class_punch_damage_for(enemy_class,enemy_level))
-                            if enemy_class==CLASS_SANTA
-                                if player_poison<=0
+                            if enemy_class==CLASS_SANTA then
+                                if player_poison<=0 then
                                     player_poison_tick=santa_poison_tick_interval
                                 end
                                 player_poison=santa_poison_time_for(enemy_level)
                                 player_poison_damage=santa_poison_damage_for(enemy_level)
                             end
                             ds_log("enemy punch! hp %g",player.hp)
-                            if player.hp<=0
+                            if player.hp<=0 then
                                 player.hp=0
-                                if try_revive()==0
+                                if try_revive()==0 then
                                     finish_game(2)
                                     return
                                 end
@@ -193,7 +193,7 @@ function update_enemy()
                         end
                     else
                         damage_turret(target-1,class_punch_damage_for(enemy_class,enemy_level))
-                        if enemy_apply_damage(turret_counter_damage)==1
+                        if enemy_apply_damage(turret_counter_damage)==1 then
                             return
                         end
                         ds_log("enemy punch! turret hp %g",arr_get(turret_hp,target-1))
@@ -203,11 +203,11 @@ function update_enemy()
                 end
             end
         end
-        if enemy.state_time<=0
+        if enemy.state_time<=0 then
             enemy.state=3
             enemy.state_time=enemy_recovery
             enemy.cooldown=enemy_roll_cooldown()
-            if enemy.hit==1&&enemy_free_window()==1
+            if enemy.hit==1&&enemy_free_window()==1 then
                 enemy.cooldown=enemy_cooldown_min*0.7
                 enemy.think=0
             else
@@ -216,31 +216,31 @@ function update_enemy()
         end
         return
     end
-    if enemy.state==3
+    if enemy.state==3 then
         enemy.state_time=enemy.state_time-dt
-        if enemy_free_window()==0&&d<reach*0.85
+        if enemy_free_window()==0&&d<reach*0.85 then
             enemy_predict(0)
             enemy_engage(reach*0.95)
         end
         enemy_face_player()
-        if enemy.state_time<=0
+        if enemy.state_time<=0 then
             enemy.state=0
-            if enemy.flank<=0
+            if enemy.flank<=0 then
                 enemy_pick_flank()
                 enemy.flank=enemy_flank_time + (rand()%100)/100.0*0.4
             end
         end
         return
     end
-    if enemy.state==4
+    if enemy.state==4 then
         enemy.state_time=enemy.state_time-dt
-        number dpx=cos(player.angle), dpy=sin(player.angle)
-        number dodge_err = (rand()%100-50)/100.0*0.6
-        number dvx=-dpy*enemy.strafe*bot_dodge_speed*(0.7+dodge_err)-dpx*bot_speed*0.25
-        number dvy=dpx*enemy.strafe*bot_dodge_speed*(0.7+dodge_err)-dpy*bot_speed*0.25
+        local number dpx=cos(player.angle), dpy=sin(player.angle)
+        local number dodge_err = (rand()%100-50)/100.0*0.6
+        local number dvx=-dpy*enemy.strafe*bot_dodge_speed*(0.7+dodge_err)-dpx*bot_speed*0.25
+        local number dvy=dpx*enemy.strafe*bot_dodge_speed*(0.7+dodge_err)-dpy*bot_speed*0.25
         enemy_move(dvx,dvy)
         enemy_face_motion()
-        if enemy.state_time<=0
+        if enemy.state_time<=0 then
             enemy.state=0
             enemy.dodge_cd=enemy_dodge_cooldown + (rand()%100)/100.0*0.3
             enemy.cooldown=0
@@ -248,18 +248,18 @@ function update_enemy()
         end
         return
     end
-    if punch_left>0&&punch_left<=punch_time-enemy.react&&enemy.dodge_cd<=0&&enemy_in_danger()==1
-        if enemy.react<=0
-            if rand()%100 < enemy_human_dodge_fail*100
+    if punch_left>0&&punch_left<=punch_time-enemy.react&&enemy.dodge_cd<=0&&enemy_in_danger()==1 then
+        if enemy.react<=0 then
+            if rand()%100 < enemy_human_dodge_fail*100 then
                 ds_log("enemy dodge fail (human)")
             else
-                number side=(enemy.y-player.y)*cos(player.angle)-(enemy.x-player.x)*sin(player.angle)
-                if side>=0
+                local number side=(enemy.y-player.y)*cos(player.angle)-(enemy.x-player.x)*sin(player.angle)
+                if side>=0 then
                     enemy.strafe=1
                 else
                     enemy.strafe=-1
                 end
-                if rand()%100 < 18
+                if rand()%100 < 18 then
                     enemy.strafe = 0 - enemy.strafe
                 end
                 enemy.state=4
@@ -269,10 +269,10 @@ function update_enemy()
             end
         end
     end
-    if enemy_free_window()==1
+    if enemy_free_window()==1 then
         enemy.think=0
-        if enemy.cooldown<=0&&(d<=reach||enemy_would_hit()==1)
-            if rand()%100 < 12
+        if enemy.cooldown<=0&&(d<=reach||enemy_would_hit()==1) then
+            if rand()%100 < 12 then
                 enemy_pick_flank()
                 enemy.flank=enemy_flank_time
                 enemy.think=0.12
@@ -280,7 +280,7 @@ function update_enemy()
                 enemy_face_motion()
                 return
             end
-            if start_enemy_attack()==1
+            if start_enemy_attack()==1 then
                 return
             end
             enemy_predict(enemy_lead)
@@ -290,34 +290,34 @@ function update_enemy()
         end
         enemy_predict(enemy_lead)
         enemy_engage(reach*0.55)
-        if d<=reach
+        if d<=reach then
             enemy_face_player()
         else
             enemy_face_motion()
         end
         return
     end
-    if enemy.cooldown<=0&&enemy.think<=0&&(d<=reach*0.95||enemy_would_hit()==1)
-        if enemy.react<=0
-            if start_enemy_attack()==1
+    if enemy.cooldown<=0&&enemy.think<=0&&(d<=reach*0.95||enemy_would_hit()==1) then
+        if enemy.react<=0 then
+            if start_enemy_attack()==1 then
                 return
             end
         end
     end
-    if enemy.think>0
+    if enemy.think>0 then
         enemy.think=enemy.think-dt
     end
-    if enemy.flank<=0
+    if enemy.flank<=0 then
         enemy_pick_flank()
         enemy.flank=enemy_flank_time
     end
-    number desired=reach*0.62
-    if d<enemy_min_distance*0.75
+    local number desired=reach*0.62
+    if d<enemy_min_distance*0.75 then
         desired=enemy_min_distance*0.75
     end
     enemy_predict(enemy_lead)
     enemy_engage(desired)
-    if d<=reach
+    if d<=reach then
         enemy_face_player()
     else
         enemy_face_motion()

@@ -1,18 +1,18 @@
-function draw_candies()
-    if candy_enabled==0
+public function draw_candies()
+    if candy_enabled==0 then
         return
     end
-    number i=0, cp=0, p=0, pop=0, sc=0, hw=0
-    loop i<candy_count
+    local number i=0, cp=0, p=0, pop=0, sc=0, hw=0
+    while i<candy_count do
         cp=arr_get(candy_pick,i)
-        if cp>0
-            // При сборе пропадает сразу — не рисуем
+        if cp>0 then
+            -- При сборе пропадает сразу — не рисуем
         else
-            // Появление: просто увеличивается к своей середине, без закрутки и без движения к игроку
+            -- Появление: просто увеличивается к своей середине, без закрутки и без движения к игроку
             p=clamp(arr_get(candy_t,i)/candy_pop_time,0,1)
             pop=1-(1-p)*(1-p)
             sc=candy_scale*pop
-            if sc>0.02
+            if sc>0.02 then
                 hw=25*sc
                 tex(arr_get(candy_x,i)-hw,arr_get(candy_y,i)-hw,CANDY_TEX,0,sc)
             end
@@ -20,115 +20,115 @@ function draw_candies()
         i=i+1
     end
 end
-function draw_stun()
-    if stun_a<=0
+public function draw_stun()
+    if stun_a<=0 then
         return
     end
-    number fa=stun_a*255
-    number af=floor(fa*0.3)
-    if af<=0
+    local number fa=stun_a*255
+    local number af=floor(fa*0.3)
+    if af<=0 then
         return
     end
-    number half=enemy.size+14
-    number fill=(((unsigned)(int)af)<<24)|0x00F9A825
-    number ar=floor(fa*0.7)
-    number rim=(((unsigned)(int)ar)<<24)|0x00FFD54F
+    local number half=enemy.size+14
+    local number fill=(((unsigned)(int)af)<<24)|0x00F9A825
+    local number ar=floor(fa*0.7)
+    local number rim=(((unsigned)(int)ar)<<24)|0x00FFD54F
     circle(enemy.x,enemy.y,half,fill)
     ring(enemy.x,enemy.y,half,2,rim)
 end
-function draw_player_stun()
-    if pstun_a<=0
+public function draw_player_stun()
+    if pstun_a<=0 then
         return
     end
-    number af=floor(pstun_a*255*0.3)
-    if af<=0
+    local number af=floor(pstun_a*255*0.3)
+    if af<=0 then
         return
     end
-    number half=player.size+14
-    number fill=(((unsigned)(int)af)<<24)|0x00F9A825
-    number ar=floor(pstun_a*255*0.7)
-    number rim=(((unsigned)(int)ar)<<24)|0x00FFD54F
+    local number half=player.size+14
+    local number fill=(((unsigned)(int)af)<<24)|0x00F9A825
+    local number ar=floor(pstun_a*255*0.7)
+    local number rim=(((unsigned)(int)ar)<<24)|0x00FFD54F
     circle(player.x,player.y,half,fill)
     ring(player.x,player.y,half,2,rim)
 end
-function draw_freeze()
-    if freeze_a<=0
+public function draw_freeze()
+    if freeze_a<=0 then
         return
     end
-    number fa=freeze_a*255
-    number af=floor(fa*0.3)
-    if af<=0
+    local number fa=freeze_a*255
+    local number af=floor(fa*0.3)
+    if af<=0 then
         return
     end
-    number half=enemy.size+14
-    number fill=(((unsigned)(int)af)<<24)|0x001E88E5
-    number ar=floor(fa*0.7)
-    number rim=(((unsigned)(int)ar)<<24)|0x004FC3F7
+    local number half=enemy.size+14
+    local number fill=(((unsigned)(int)af)<<24)|0x001E88E5
+    local number ar=floor(fa*0.7)
+    local number rim=(((unsigned)(int)ar)<<24)|0x004FC3F7
     circle(enemy.x,enemy.y,half,fill)
     ring(enemy.x,enemy.y,half,2,rim)
 end
-function draw_poison()
-    if poison_a<=0
+public function draw_poison()
+    if poison_a<=0 then
         return
     end
-    number fa=poison_a*255
-    number af=floor(fa*0.3)
-    if af<=0
+    local number fa=poison_a*255
+    local number af=floor(fa*0.3)
+    if af<=0 then
         return
     end
-    number half=enemy.size+14
-    number fill=(((unsigned)(int)af)<<24)|0x0000C853
-    number ar=floor(fa*0.7)
-    number rim=(((unsigned)(int)ar)<<24)|0x0069F0AE
+    local number half=enemy.size+14
+    local number fill=(((unsigned)(int)af)<<24)|0x0000C853
+    local number ar=floor(fa*0.7)
+    local number rim=(((unsigned)(int)ar)<<24)|0x0069F0AE
     circle(enemy.x,enemy.y,half,fill)
     ring(enemy.x,enemy.y,half,2,rim)
 end
-function draw_player_freeze()
-    if pfreeze_a<=0
+public function draw_player_freeze()
+    if pfreeze_a<=0 then
         return
     end
-    number af=floor(pfreeze_a*255*0.3)
-    if af<=0
+    local number af=floor(pfreeze_a*255*0.3)
+    if af<=0 then
         return
     end
-    number half=player.size+14
-    number fill=(((unsigned)(int)af)<<24)|0x001E88E5
-    number ar=floor(pfreeze_a*255*0.7)
-    number rim=(((unsigned)(int)ar)<<24)|0x004FC3F7
+    local number half=player.size+14
+    local number fill=(((unsigned)(int)af)<<24)|0x001E88E5
+    local number ar=floor(pfreeze_a*255*0.7)
+    local number rim=(((unsigned)(int)ar)<<24)|0x004FC3F7
     circle(player.x,player.y,half,fill)
     ring(player.x,player.y,half,2,rim)
 end
-function draw_player_poison()
-    if ppoison_a<=0
+public function draw_player_poison()
+    if ppoison_a<=0 then
         return
     end
-    number af=floor(ppoison_a*255*0.3)
-    if af<=0
+    local number af=floor(ppoison_a*255*0.3)
+    if af<=0 then
         return
     end
-    number half=player.size+14
-    number fill=(((unsigned)(int)af)<<24)|0x0000C853
-    number ar=floor(ppoison_a*255*0.7)
-    number rim=(((unsigned)(int)ar)<<24)|0x0069F0AE
+    local number half=player.size+14
+    local number fill=(((unsigned)(int)af)<<24)|0x0000C853
+    local number ar=floor(ppoison_a*255*0.7)
+    local number rim=(((unsigned)(int)ar)<<24)|0x0069F0AE
     circle(player.x,player.y,half,fill)
     ring(player.x,player.y,half,2,rim)
 end
-function draw_remote_snow()
-    number s=0
-    loop s<max_players
-        number b=s*snow_fields
-        if arr_get(remote_snow,b+1)==1
-            number x=arr_get(remote_snow,b+3), y=arr_get(remote_snow,b+4), t=arr_get(remote_snow,b+2)
-            number hw=16
+public function draw_remote_snow()
+    local number s=0
+    while s<max_players do
+        local number b=s*snow_fields
+        if arr_get(remote_snow,b+1)==1 then
+            local number x=arr_get(remote_snow,b+3), y=arr_get(remote_snow,b+4), t=arr_get(remote_snow,b+2)
+            local number hw=16
             tex(x-hw,y-hw,SNOWFLAKE_TEX,t*3,0.5)
         end
-        if arr_get(remote_snow,b+5)>0
+        if arr_get(remote_snow,b+5)>0 then
             draw_boom_at(arr_get(remote_snow,b+6),arr_get(remote_snow,b+7),arr_get(remote_snow,b+5))
         end
         s=s+1
     end
 end
-function finish_game(number result)
+public function finish_game(number result)
     finished=result
     aim_id=-1
     super_id=-1
@@ -156,30 +156,30 @@ function finish_game(number result)
     universe_active=0
     universe_a=0
     keyboard_hide()
-    number i=0
-    loop i<max_players
-        number sb=i*snow_fields
+    local number i=0
+    while i<max_players do
+        local number sb=i*snow_fields
         arr_set(remote_snow,sb,0)
         arr_set(remote_snow,sb+1,0)
         arr_set(remote_snow,sb+5,0)
-        number tb=i*station_fields
-        number k=0
-        loop k<turret_max
+        local number tb=i*station_fields
+        local number k=0
+        while k<turret_max do
             arr_set(remote_station,tb+1+k*5,0)
             k=k+1
         end
-        number ub=i*universe_fields
+        local number ub=i*universe_fields
         arr_set(remote_universe,ub,0)
         arr_set(remote_universe,ub+1,0)
-        number db=i*dash_fields
+        local number db=i*dash_fields
         arr_set(remote_dash,db,0)
         arr_set(remote_dash,db+1,0)
         i=i+1
     end
-    if result==1&&cups_awarded==0
+    if result==1&&cups_awarded==0 then
         cups_awarded=1
         cups=cups+cup_win
-        if candy_enabled==1
+        if candy_enabled==1 then
             candies=candies+candy_win
         end
         save_progress()
@@ -187,10 +187,10 @@ function finish_game(number result)
         quest_on_win(result)
         ds_log("win +%g cups +%g candies",cup_win,candy_win)
     end
-    if result==2&&cups_awarded==0
+    if result==2&&cups_awarded==0 then
         cups_awarded=1
         cups=cups-cup_lose
-        if cups<0
+        if cups<0 then
             cups=0
         end
         save_progress()
@@ -198,123 +198,123 @@ function finish_game(number result)
         ds_log("lose -%g cups",cup_lose)
     end
 end
-function draw_punch_box(number x, number y, number dx, number dy, number reach, number width, number alpha)
-    number aa=floor(clamp(alpha,0,1)*aim_max_alpha)
-    if aa>0
+public function draw_punch_box(number x, number y, number dx, number dy, number reach, number width, number alpha)
+    local number aa=floor(clamp(alpha,0,1)*aim_max_alpha)
+    if aa>0 then
         line(x,y,x+dx*reach,y+dy*reach,width,(((unsigned)(int)aa)<<24)|((unsigned)(int)hitbox_rgb))
     end
 end
-function fighter_sprite(number cls, number punching, number skin)
-    if skin_is_active(cls,skin)==1
-        if punching==1
+public function fighter_sprite(number cls, number punching, number skin)
+    if skin_is_active(cls,skin)==1 then
+        if punching==1 then
             return zombie_punch_tex()
         end
         return zombie_idle_tex()
     end
-    if punching==1
+    if punching==1 then
         return class_punch_tex(cls)
     end
     return class_idle_tex(cls)
 end
-function draw_fighter_shadow(number x, number y, number ang, number cls, number punching, number skin)
-    number hw=25*cube_scale*player_scale, ps=cube_scale*player_scale
+public function draw_fighter_shadow(number x, number y, number ang, number cls, number punching, number skin)
+    local number hw=25*cube_scale*player_scale, ps=cube_scale*player_scale
     tex_tint(x-hw-shadow_off,y-hw+shadow_off,fighter_sprite(cls,punching,skin),sprite_a(ang),ps,(((unsigned)(int)shadow_alpha)<<24))
 end
-function draw_fighter_body(number x, number y, number ang, number cls, number punching, number skin)
-    number hw=25*cube_scale*player_scale, ps=cube_scale*player_scale
-    number sx=x-hw, sy=y-hw
-    string t=fighter_sprite(cls,punching,skin)
+public function draw_fighter_body(number x, number y, number ang, number cls, number punching, number skin)
+    local number hw=25*cube_scale*player_scale, ps=cube_scale*player_scale
+    local number sx=x-hw, sy=y-hw
+    local string t=fighter_sprite(cls,punching,skin)
     tex(sx,sy,t,sprite_a(ang),ps)
 end
-function draw_player_shadow(number x, number y, number ang, number punching, number skin)
+public function draw_player_shadow(number x, number y, number ang, number punching, number skin)
     draw_fighter_shadow(x,y,ang,player_class,punching,skin)
 end
-function draw_player_body(number x, number y, number ang, number punching)
+public function draw_player_body(number x, number y, number ang, number punching)
     draw_fighter_body(x,y,ang,player_class,punching,azum_skin)
 end
-function draw_remote_shadow(number x, number y, number ang, number cls, number punching, number skin)
+public function draw_remote_shadow(number x, number y, number ang, number cls, number punching, number skin)
     draw_fighter_shadow(x,y,ang,cls,punching,skin)
 end
-function draw_remote_body(number x, number y, number ang, number cls, number punching, number skin)
+public function draw_remote_body(number x, number y, number ang, number cls, number punching, number skin)
     draw_fighter_body(x,y,ang,cls,punching,skin)
 end
-function draw_field()
+public function draw_field()
     rect(0,0,screen_w,screen_h,0x33000000)
 end
-function draw_player_shadow_layer()
-    if punch_left>0
+public function draw_player_shadow_layer()
+    if punch_left>0 then
         draw_player_shadow(player.x,player.y,player.angle,1,azum_skin)
     else
         draw_player_shadow(player.x,player.y,player.angle,0,azum_skin)
     end
 end
-function draw_player_hitbox_layer()
-    if show_hitboxes==0
+public function draw_player_hitbox_layer()
+    if show_hitboxes==0 then
         return
     end
-    if aim_a>0
+    if aim_a>0 then
         draw_punch_box(player.x,player.y,cos(player.angle),sin(player.angle),punch_reach,punch_width,aim_a)
     end
 end
-function draw_player_body_layer()
-    if punch_left>0
+public function draw_player_body_layer()
+    if punch_left>0 then
         draw_player_body(player.x,player.y,player.angle,1)
     else
         draw_player_body(player.x,player.y,player.angle,0)
     end
 end
-function enemy_punching_now()
-    if enemy.state==1||enemy.state==2
+public function enemy_punching_now()
+    if enemy.state==1||enemy.state==2 then
         return 1
     end
-    if enemy_super_windup>0
+    if enemy_super_windup>0 then
         return 1
     end
     return 0
 end
-function enemy_battle_tex()
-    if enemy_punching_now()==1
+public function enemy_battle_tex()
+    if enemy_punching_now()==1 then
         return class_punch_tex(enemy_class)
     end
     return class_idle_tex(enemy_class)
 end
-function draw_enemy_shadow()
-    number ehw=25*cube_scale*enemy_scale, es=cube_scale*enemy_scale
+public function draw_enemy_shadow()
+    local number ehw=25*cube_scale*enemy_scale, es=cube_scale*enemy_scale
     tex_tint(enemy.x-ehw-shadow_off,enemy.y-ehw+shadow_off,enemy_battle_tex(),sprite_a(enemy.angle),es,(((unsigned)(int)shadow_alpha)<<24))
 end
-function draw_enemy_hitbox()
-    if show_hitboxes==0
+public function draw_enemy_hitbox()
+    if show_hitboxes==0 then
         return
     end
-    if enemy_punch_a>0
+    if enemy_punch_a>0 then
         draw_punch_box(enemy.x,enemy.y,cos(enemy.angle),sin(enemy.angle),enemy_punch_reach,enemy_punch_width,enemy_punch_a)
     end
 end
-function draw_enemy_body()
-    number ehw=25*cube_scale*enemy_scale, es=cube_scale*enemy_scale
+public function draw_enemy_body()
+    local number ehw=25*cube_scale*enemy_scale, es=cube_scale*enemy_scale
     tex(enemy.x-ehw,enemy.y-ehw,enemy_battle_tex(),sprite_a(enemy.angle),es)
 end
-function draw_controls()
+public function draw_controls()
     ring(joy.x,joy.y,joy.r,4,0x000000)
     circle(joy.x+joy.ox,joy.y+joy.oy,34,0x000000)
     circle(atk_x,atk_y,70,0xE94560)
     ring(atk_x,atk_y,70,4,0x000000)
     text_in_box(tr_punch(),atk_x-70,atk_y-70,140,140,0xFFFFFF,0.55)
-    if (player_class==CLASS_AZUM||player_class==CLASS_SANTA||player_class==CLASS_EBUC)&&(game_state==ST_SOLO||game_state==ST_ONLINE)
+    if (player_class==CLASS_AZUM||player_class==CLASS_SANTA||player_class==CLASS_EBUC)&&(game_state==ST_SOLO||game_state==ST_ONLINE) then
         circle(atk2_x,atk2_y,70,0x5F10A0)
         ring(atk2_x,atk2_y,70,4,0x000000)
-        string sl=tr_super()
-        if player_class==CLASS_EBUC
+        local string sl=tr_super()
+        if player_class==CLASS_EBUC then
             sl=tr_super_ebuc()
-        else if player_class==CLASS_AZUM
+        else if player_class==CLASS_AZUM then
             sl=tr_super_azum()
         end
-        number sls=0.55
-        number left=super_cd
-        if player_class==CLASS_AZUM
+        local number sls=0.55
+        local number left=super_cd
+        if player_class==CLASS_AZUM then
             left=dash_cd
         end
-        if left>0
+        if left>0 then
             sl=floor(left+0.999)+""
             sls=0.95
         end
@@ -322,48 +322,48 @@ function draw_controls()
     end
     draw_back()
 end
-function draw_result(string title)
+public function draw_result(string title)
     rect(0,0,screen_w,screen_h,0x99000000)
-    number w=430, h=250
-    number x=(screen_w-w)/2, y=screen_h/2-h/2
+    local number w=430, h=250
+    local number x=(screen_w-w)/2, y=screen_h/2-h/2
     roundrect(x,y,w,h,30,0x5F10A0)
-    number reward=0
-    if finished==1
+    local number reward=0
+    if finished==1 then
         reward=cup_win
-    else if finished==2
+    else if finished==2 then
         reward=0-cup_lose
     end
     ctext_scaled(title,y+36,0xFFFFFF,1.12)
-    if finished==2
+    if finished==2 then
         ctext_scaled(tr_cups_lose(reward),y+126,0xFFFFFF,0.9)
     else
         ctext_scaled(tr_cups_reward(reward),y+126,0xFFFFFF,0.9)
     end
     ctext_scaled(tr_tap_to_return(),y+188,0xFFFFFF,0.62)
 end
-// Счётчик FPS в бою: маленькая плашка по центру сверху — между полосами
-// здоровья, они занимают только левую и правую четверть экрана.
-function draw_fps_meter()
-    if show_fps==0
+-- Счётчик FPS в бою: маленькая плашка по центру сверху — между полосами
+-- здоровья, они занимают только левую и правую четверть экрана.
+public function draw_fps_meter()
+    if show_fps==0 then
         return
     end
-    string label="FPS "+floor(fps_value+0.5)
-    number sc=fps_text_scale
-    number tw=text_ink_width(label)*sc
-    number th=text_ink_height(label)*sc
-    number tt=text_ink_top(label)*sc
-    number w=tw+28, h=36
-    number x=(screen_w-w)/2, y=16
+    local string label="FPS "+floor(fps_value+0.5)
+    local number sc=fps_text_scale
+    local number tw=text_ink_width(label)*sc
+    local number th=text_ink_height(label)*sc
+    local number tt=text_ink_top(label)*sc
+    local number w=tw+28, h=36
+    local number x=(screen_w-w)/2, y=16
     roundrect(x,y,w,h,h/2,fps_plate_rgb)
     text_scaled(label,x+(w-tw)/2,y+(h-th)/2-tt+1.5,text_color,sc)
 end
-function draw_dash_streak()
+public function draw_dash_streak()
     return
 end
-function draw_remote_dash()
+public function draw_remote_dash()
     return
 end
-function draw_game()
+public function draw_game()
     draw_arena_background()
     draw_field()
     draw_dust()
@@ -392,14 +392,14 @@ function draw_game()
     draw_player_stun()
     draw_dash_streak()
     draw_snow()
-    number w=screen_w/4
+    local number w=screen_w/4
     hud_bar(20,20,w,28,player.hp,player.max_hp,0x7ED321,0)
     hud_bar(screen_w-w-20,20,w,28,enemy.hp,enemy.max_hp,0xE94560,1)
     draw_controls()
     draw_fps_meter()
-    if finished==1
+    if finished==1 then
         draw_result(tr_victory())
-    else if finished==2
+    else if finished==2 then
         draw_result(tr_defeat())
     end
     draw_card_open()

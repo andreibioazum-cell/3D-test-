@@ -1,0 +1,64 @@
+-- DimScript v2, стандартный модуль Dim.System.Gui: немедленный UI-минимум
+-- поверх встроенных примитивов движка. Подключение: import Dim.System.Gui.
+-- Модуль даёт классы Gui, Window, ButtonStyle и Color из примера языка:
+-- статические методы класса вызываются как Gui.text(...), экземпляры —
+-- win.isOpen(), поля читаются через self/win.title.
+
+private number gui_cursor_y = 24
+
+class ButtonStyle
+    public color bgColor = 0xFF888888
+    public color textColor = 0xFFFFFFFF
+end
+
+class Color
+    public static function fromRGB(number r, number g, number b) -> color
+        return 0xFF000000 + r * 65536 + g * 256 + b
+    end
+end
+
+class Window
+    private number open = 0
+    public string title = ""
+    public function set_open(number v) -> void
+        self.open = v
+    end
+    public function isOpen() -> bool
+        return self.open
+    end
+    public function beginFrame() -> void
+        clear_screen(0xFF12121C)
+        gui_cursor_y = 24
+    end
+    public function endFrame() -> void
+    end
+    public function shutdown() -> void
+        self.open = 0
+    end
+end
+
+class Gui
+    public static function init(string title, number w, number h) -> Window
+        local Window win = new Window()
+        win.title = title
+        win.set_open(1)
+        return win
+    end
+    public static function text(number y, string s) -> void
+        text(s, 12, y, 0xFFFFFFFF)
+    end
+    public static function space(number h) -> void
+        gui_cursor_y += h
+    end
+    public static function button(string label, number w, number h, ButtonStyle style) -> bool
+        local number x = (screen_w - w) / 2
+        local number y = gui_cursor_y
+        roundrect(x, y, w, h, 8, style.bgColor)
+        text(label, x + 10, y + h / 2, style.textColor)
+        gui_cursor_y += h + 10
+        if mouse_clicked == 1 and ds_mouse_x >= x and ds_mouse_x <= x + w and ds_mouse_y >= y and ds_mouse_y <= y + h then
+            return 1
+        end
+        return 0
+    end
+end

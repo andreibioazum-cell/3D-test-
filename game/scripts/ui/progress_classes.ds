@@ -1,156 +1,155 @@
-include graphics
-array class_level_tbl=arr_new()
-array class_unlocked_tbl=arr_new()
-array class_owned_tbl=arr_new()
-function class_level_of(number cls)
+public array class_level_tbl=arr_new()
+public array class_unlocked_tbl=arr_new()
+public array class_owned_tbl=arr_new()
+public function class_level_of(number cls)
     return arr_get(class_level_tbl, cls)
 end
-function class_unlocked_of(number cls)
+public function class_unlocked_of(number cls)
     return arr_get(class_unlocked_tbl, cls)
 end
-function class_owned_of(number cls)
-    if cls == CLASS_ORDINARY
+public function class_owned_of(number cls)
+    if cls == CLASS_ORDINARY then
         return 1
     end
     return arr_get(class_owned_tbl, cls)
 end
-function set_class_owned(number cls, number owned)
+public function set_class_owned(number cls, number owned)
     arr_set(class_owned_tbl, cls, owned)
 end
-function set_class_progress(number cls, number lv, number un)
+public function set_class_progress(number cls, number lv, number un)
     arr_set(class_level_tbl, cls, lv)
     arr_set(class_unlocked_tbl, cls, un)
 end
-function class_cost_of(number cls)
-    if cls == CLASS_AZUM
+public function class_cost_of(number cls)
+    if cls == CLASS_AZUM then
         return azum_cost
     end
-    if cls == CLASS_SANTA
+    if cls == CLASS_SANTA then
         return santa_candy_cost
     end
-    if cls == CLASS_EBUC
+    if cls == CLASS_EBUC then
         return ebuc_candy_cost
     end
     return 0
 end
-function class_pays_candies(number cls)
-    if cls == CLASS_SANTA || cls == CLASS_EBUC
+public function class_pays_candies(number cls)
+    if cls == CLASS_SANTA || cls == CLASS_EBUC then
         return 1
     end
     return 0
 end
-function class_currency_of(number cls)
-    if class_pays_candies(cls) == 1
+public function class_currency_of(number cls)
+    if class_pays_candies(cls) == 1 then
         return tr_candies_unit()
     end
     return tr_cups_unit()
 end
-function class_name_of(number cls)
-    if cls == CLASS_AZUM
+public function class_name_of(number cls)
+    if cls == CLASS_AZUM then
         return tr_class_azum()
     end
-    if cls == CLASS_SANTA
+    if cls == CLASS_SANTA then
         return tr_class_santa()
     end
-    if cls == CLASS_EBUC
+    if cls == CLASS_EBUC then
         return tr_class_ebuc()
     end
     return tr_class_ordinary()
 end
-function class_desc_of(number cls)
-    if cls == CLASS_AZUM
+public function class_desc_of(number cls)
+    if cls == CLASS_AZUM then
         return tr_class_azum_desc()
     end
-    if cls == CLASS_SANTA
+    if cls == CLASS_SANTA then
         return tr_class_santa_desc()
     end
-    if cls == CLASS_EBUC
+    if cls == CLASS_EBUC then
         return tr_class_ebuc_desc()
     end
     return tr_class_ordinary_desc()
 end
-function class_hp_of(number cls)
+public function class_hp_of(number cls)
     return player_max_hp_for(cls)
 end
-function class_power_of(number cls)
+public function class_power_of(number cls)
     return class_punch_damage_for(cls, class_level_of(cls))
 end
-function class_pick_label(number cls)
-    if player_class == cls
+public function class_pick_label(number cls)
+    if player_class == cls then
         return tr_class_selected()
     end
-    if class_owned_of(cls) == 0
+    if class_owned_of(cls) == 0 then
         return tr_buy_for(class_cost_of(cls), class_currency_of(cls))
     end
     return tr_class_pick()
 end
-function class_msg_text()
-    if class_msg_kind == 1
+public function class_msg_text()
+    if class_msg_kind == 1 then
         return tr_class_need_candies()
     end
     return tr_class_need_cups()
 end
-function skin_is_active(number cls, number skin)
-    if cls == CLASS_AZUM && skin == SKIN_ZOMBIE
+public function skin_is_active(number cls, number skin)
+    if cls == CLASS_AZUM && skin == SKIN_ZOMBIE then
         return 1
     end
     return 0
 end
-function class_skin_active(number cls)
+public function class_skin_active(number cls)
     return skin_is_active(cls, azum_skin)
 end
-function skin_unlocked(number skin)
-    if skin == SKIN_NORMAL
+public function skin_unlocked(number skin)
+    if skin == SKIN_NORMAL then
         return 1
     end
-    if skin == SKIN_ZOMBIE
-        if has_achievement(ACH_LEGENDS) == 1
+    if skin == SKIN_ZOMBIE then
+        if has_achievement(ACH_LEGENDS) == 1 then
             return 1
         end
     end
     return 0
 end
-function skin_name_of(number skin)
-    if skin == SKIN_ZOMBIE
+public function skin_name_of(number skin)
+    if skin == SKIN_ZOMBIE then
         return tr_skin_zombie()
     end
     return tr_skin_normal()
 end
-function pick_skin(number skin)
-    if skin < 0 || skin >= SKIN_COUNT
+public function pick_skin(number skin)
+    if skin < 0 || skin >= SKIN_COUNT then
         return
     end
-    if class_has_skins(player_class) == 0
+    if class_has_skins(player_class) == 0 then
         return
     end
-    if skin_unlocked(skin) == 0
+    if skin_unlocked(skin) == 0 then
         skin_msg_t = msg_time
         return
     end
     azum_skin = skin
     save_progress()
 end
-function class_visible(number cls)
-    if cls == CLASS_SANTA && candy_enabled == 0 && class_owned_of(CLASS_SANTA) == 0
+public function class_visible(number cls)
+    if cls == CLASS_SANTA && candy_enabled == 0 && class_owned_of(CLASS_SANTA) == 0 then
         return 0
     end
     return 1
 end
-function classes_visible_count()
-    number n = 0, cls = 0
-    loop cls < class_count
-        if class_visible(cls) == 1
+public function classes_visible_count()
+    local number n = 0, cls = 0
+    while cls < class_count do
+        if class_visible(cls) == 1 then
             n = n + 1
         end
         cls = cls + 1
     end
     return n
 end
-function visible_class_at(number vi)
-    number n = 0, cls = 0
-    loop cls < class_count
-        if class_visible(cls) == 1
-            if n == vi
+public function visible_class_at(number vi)
+    local number n = 0, cls = 0
+    while cls < class_count do
+        if class_visible(cls) == 1 then
+            if n == vi then
                 return cls
             end
             n = n + 1
@@ -159,11 +158,11 @@ function visible_class_at(number vi)
     end
     return CLASS_ORDINARY
 end
-function class_visible_index(number cls)
-    number n = 0, c = 0
-    loop c < class_count
-        if class_visible(c) == 1
-            if c == cls
+public function class_visible_index(number cls)
+    local number n = 0, c = 0
+    while c < class_count do
+        if class_visible(c) == 1 then
+            if c == cls then
                 return n
             end
             n = n + 1
@@ -172,95 +171,95 @@ function class_visible_index(number cls)
     end
     return -1
 end
-function level_cost(number n)
+public function level_cost(number n)
     return level_base_cost + (n - 1) * level_cost_step
 end
-function sync_selected_class()
+public function sync_selected_class()
     player_level = class_level_of(player_class)
     levels_unlocked = class_unlocked_of(player_class)
 end
-function select_level(number cls, number n)
+public function select_level(number cls, number n)
     set_class_progress(cls, n, class_unlocked_of(cls))
-    if cls == player_class
+    if cls == player_class then
         sync_selected_class()
     end
     save_progress()
 end
-function buy_level(number cls, number n)
-    number cost = level_cost(n)
-    if cups < cost
+public function buy_level(number cls, number n)
+    local number cost = level_cost(n)
+    if cups < cost then
         level_msg_kind = 0
         level_msg_t = msg_time
         return 0
     end
     cups = cups - cost
     set_class_progress(cls, n, n)
-    if cls == player_class
+    if cls == player_class then
         sync_selected_class()
     end
     level_msg_t = 0
     save_progress()
     return 1
 end
-function level_action(number cls, number n)
-    if n < 1 || n > max_level
+public function level_action(number cls, number n)
+    if n < 1 || n > max_level then
         return
     end
-    if class_owned_of(cls) == 0
+    if class_owned_of(cls) == 0 then
         class_msg_kind = 0
         class_msg_t = msg_time
         return
     end
-    number un = class_unlocked_of(cls)
-    if n <= un
+    local number un = class_unlocked_of(cls)
+    if n <= un then
         select_level(cls, n)
         return
     end
-    if n == un + 1
+    if n == un + 1 then
         buy_level(cls, n)
         return
     end
     level_msg_kind = 1
     level_msg_t = msg_time
 end
-function level_status_of(number cls, number n)
-    if n <= class_unlocked_of(cls)
+public function level_status_of(number cls, number n)
+    if n <= class_unlocked_of(cls) then
         return tr_level_status_open()
     end
-    if n == class_unlocked_of(cls) + 1
+    if n == class_unlocked_of(cls) + 1 then
         return tr_level_unlock_cost(level_cost(n))
     end
     return tr_level_status_locked()
 end
-function level_msg_text()
-    if level_msg_kind == 1
+public function level_msg_text()
+    if level_msg_kind == 1 then
         return tr_level_locked()
     end
     return tr_level_need_cups()
 end
-function select_class(number cls)
+public function select_class(number cls)
     player_class = cls
     sync_selected_class()
     save_progress()
 end
-function pick_class(number cls)
-    if cls < 0 || cls >= class_count
+public function pick_class(number cls)
+    if cls < 0 || cls >= class_count then
         return
     end
-    if class_owned_of(cls) == 1
+    if class_owned_of(cls) == 1 then
         select_class(cls)
         return
     end
-    number cost = class_cost_of(cls)
+    local number cost = class_cost_of(cls)
     class_msg_kind = class_pays_candies(cls)
-    if class_pays_candies(cls) == 1
-        if candies < cost
+    if class_pays_candies(cls) == 1 then
+        if candies < cost then
             class_msg_t = msg_time
             return
         end
         candies = candies - cost
     else
-        if cups < cost
+        if cups < cost then
             class_msg_t = msg_time
             return
         end

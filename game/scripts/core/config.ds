@@ -1,208 +1,207 @@
-include graphics
-number ST_LOBBY=0, ST_SOLO=1, ST_MODES=2, ST_SETTINGS=4, ST_ONLINE=5
-number ST_LOGIN=7, ST_CLASSES=8, ST_LEVELS=9, ST_LEADERBOARD=10
-number ST_ACHIEVEMENTS=11, ST_SKINS=13, ST_PROMO=14
-number ST_QUESTS=15
-number game_state=ST_LOBBY
-number language=0, t_dir=0, t_target=0, t_fade=0, transition_duration=0.15
-number ui_purple=0xFF5F10A0
-number bg_screen=0x1A1A2E, card_bg=0xFF2A2A40, card_ring=0xFF5A5A78, card_ring_pad=4
-number text_color=0xFFFFFF
-number locked_shade=0.75, locked_text_alpha=191
-number stat_hp_color=0xE94560, stat_power_color=0x4FC3F7
-number btn_w=280, btn_h=56, btn_gap=16, btn_radius=20
-number back_y=24, title_gap=12
-number lobby_rows=5
-number modes_rows=5
-number touch_pad_x=12, touch_pad_y=8
-number screen_margin=40, class_action_gap=40
-number class_count=4, class_gap=14, class_card_h=272
-number class_card_min_w=150, class_card_max_w=260, class_pick_h=42, class_pick_pad=22
-number list_w=520, level_row_h=70, level_row_gap=8, list_top_gap=40
-number lb_w_max=560, lb_row_h=42, lb_row_gap=6
-number ach_card_h=96, ach_card_gap=10
-number skin_card_w=260, skin_card_h=184, skin_card_gap=28
-number field_radius=14, field_text_pad=16, card_text_pad=24
-number msg_time=2.5, msg_fade=0.6
-number class_msg_t=0, class_msg_kind=0
-number level_msg_t=0, level_msg_kind=0
-number skin_msg_t=0
-number achievement_mask=0
-number ACH_FIRST_WIN=2, ACH_FIRST_BUY=4, ACH_ALL_CHARACTERS=8, ACH_LEGENDS=16
-number ACH_LEGENDS_NEED=7
-number azum_revive_count=0
-number ach_toast_bit=0, ach_toast_t=0
-number ACH_TOAST_FADE_IN=0.14, ACH_TOAST_HOLD=1.5, ACH_TOAST_EXIT=0.24
-number ACH_TOAST_DURATION=1.96
-number cups=0, candies=0, cup_win=4, candy_win=3
-number cup_lose=1
-number candy_enabled=1
-number card_chance_base=6, card_chance_step=1, card_chance_cap=20
-number card_drop_min=6, card_drop_max=24
-number promo_reward_cups=50, promo_reward_candies=20
-number money_scale=0.5, money_gap=24, money_line_h=16
-number alert_hold=0.5, finish_t=0
-number cups_awarded=0
-number quest_count=3, quest_msg_t=0
-array quest_type=arr_new(), quest_prog=arr_new(), quest_need=arr_new()
-number plates_finished=0
-number match_seen_foe=0, foes_seen_t=0, foes_seen_min=1.0
-number CLASS_ORDINARY=0, CLASS_AZUM=1, CLASS_SANTA=2, CLASS_EBUC=3
-number player_class=CLASS_ORDINARY, azum_revived=0, revive_prot=0
-number azum_cost=65, santa_candy_cost=100, ebuc_candy_cost=150
-number player_level=0, levels_unlocked=0
-number max_level=3, level_base_cost=30, level_cost_step=10
-number SKIN_NORMAL=0, SKIN_ZOMBIE=1, SKIN_COUNT=2
-number azum_tex_ok=0, azum_zombie_tex_ok=0, azum_zombie_punch_tex_ok=0
-number azum_skin=SKIN_NORMAL
-number arena_tile_size=256, snow_tex_ok=0, snow_t=0
-// Зимняя тема — настройка из меню: снежный фон арены и снегопад включаются и
-// выключаются одним тапом. По умолчанию она включена, а в выключенном виде
-// арена снова в траве (grass.png), как было до зимнего оформления.
-number winter_theme=1
-number show_hitboxes=1
-// Хитбоксы тёмные, как раньше: чёрная полупрозрачная зона вместо серой.
-number hitbox_rgb=0x00000000
-number hitbox_snow_rgb=hitbox_rgb, hitbox_dash_rgb=hitbox_rgb
-number hitbox_turret_rgb=hitbox_rgb, hitbox_universe_rgb=hitbox_rgb
-number hitbox_fill_alpha=36, hitbox_line_alpha=170
-number hitbox_solid_alpha=140
-number hitbox_fade_in=0.16, hitbox_fade_out=0.26
-// Скругление углов квадратных зон (доля стороны клетки): зоны рывка больше не
-// острые, но площадь попадания от этого не меняется.
-number hitbox_corner=0.34
-number dash_hitbox_zone_scale=1.3
-number dash_hit_radius_scale=0.9
-number punch_time=0.2, punch_cooldown=0.3, punch_reach=104, punch_width=104, punch_damage=1
-number joy_speed=192, player_scale=1.8, enemy_scale=1.8
-number cube_scale=1.4
-number aim_fade_in=0.09, aim_fade_out=0.1, aim_max_alpha=102
-number online_ready=0, max_players=4, pi=3.1415926535
-number azum_second_life_damage_reduction=0.10, azum_speed_bonus=0.03, azum_attack_heal=0.10
-number ordinary_damage_bonus=0.05, ordinary_speed_bonus=0.02, ordinary_attack_heal=0.05
-number bot_speed=190, bot_strafe_speed=96, bot_dodge_speed=330
-number enemy_min_distance=55, enemy_punch_reach=104, enemy_punch_width=104
-number enemy_windup=0.10, enemy_lock_time=0.04, enemy_punch_time=0.10, enemy_recovery=0.04
-number enemy_cooldown_min=0.05, enemy_cooldown_max=0.12, enemy_damage=1
-number enemy_base_hp=10, enemy_first_delay=0.45
-number enemy_dodge_time=0.22, enemy_dodge_cooldown=0.65
-number enemy_think_min=0.01, enemy_think_max=0.05
-number enemy_lead=0.12, enemy_hit_margin=10, enemy_close_gain=4.2, enemy_flank_time=1.1
-number enemy_still_speed=28, enemy_punish_react=0.08
-number enemy_move_smooth=10, enemy_face_speed=7, enemy_face_max_speed=12, enemy_attack_turn_speed=10
-number enemy_human_wobble=10, enemy_human_miss=0.06
-number enemy_human_react_min=0.06, enemy_human_react_max=0.16
-number enemy_human_speed_var=0.22, enemy_human_dodge_fail=0.25
-number enemy_class_azum_chance=20, enemy_class_ebuc_chance=8
-number enemy_class_santa_chance=30
-number enemy_santa_cd_time=4.0, enemy_dash_cd_time=9.0, enemy_station_cd_time=7.0
-number enemy_super_windup_time=0.25, enemy_santa_range=340
-number enemy_dash_min_range=90, enemy_dash_max_range=420
-number enemy_dash_damage=3, enemy_revive_prot_time=1.2, enemy_first_super_min=2.0, enemy_first_super_max=4.0
-number santa_damage=0.25, santa_poison_time=2.4, santa_poison_tick_interval=0.6, santa_poison_dps=1.0
-number santa_poison_damage_bonus=0.15, santa_freeze_time_bonus=0.50
-number santa_follow_delay=0.4, santa_super_damage=2.0
-number super_freeze=3.0, super_freeze_slow=0.12
-number super_cd_time=3.0, super_speed=420, super_range=260, super_radius=130, boom_time=0.45
-number freeze_fade_in=0.12, freeze_fade_out=0.35, boom_fade_in=0.25, boom_fade_out=0.5
-number ebuc_hp=12, ebuc_station_hp=6, ebuc_station_hp_bonus=1, ebuc_damage=1.0
-number ebuc_super_cd_time=4.0, ebuc_universe_collapse_time=2.0
-number ebuc_universe_damage=20, ebuc_universe_damage_bonus=3
-number ebuc_universe_particles=140, ebuc_place_heal=0.5, ebuc_beam_heal=0.1
-number universe_fade_in=0.18, universe_fade_out=0.45
-number station_boom_time=0.5
-number turret_max=3, turret_hit_r=30, station_scale=1.6, station_spawn_time=0.2
-number station_beam_w=15, station_beam_core_w=6, station_beam_pull=32, station_beam_min=2
-number station_beam_alpha=255, station_beam_core_alpha=255
-number station_beam_rgb=0x00E676, station_beam_core_rgb=0x00C8FAD6
-number ebuc_station_cd=6
-number turret_counter_damage=0.5
-number azum_dash_cd=5.5, azum_dash_time=1.275, azum_dash_speed=300
-number azum_dash_damage=3, azum_dash_stun=1.8, dash_hit_r=34
-number azum_hp=8
-number shadow_off=10, shadow_alpha=0x30
-number candy_count=5, candy_margin=46, candy_scale=0.8, candy_give=1
-number candy_pop_time=0.4, candy_pick_time=0.3
-number dust_max=48, dust_fields=5, dust_life_max=0.6, dust_spawn_cd=0.06, dust_r_max=8, dust_spd=38
-number dust_back_off=34, dust_back_share=0.85, dust_side_share=0.4
-number dust_cd=0, enemy_dust_cd=0, dust_enemy_min_speed=40
-number remote_fields=11, punch_fields=6, snow_fields=8, remote_smooth=14, remote_snap=220
-number universe_fields=5
-number station_fields=1+turret_max*5
-number dash_fields=8
-string FIREBASE="https://cubicbattleserver-19ae2-default-rtdb.firebaseio.com", ROOM="main"
-string FB_KEY="AIzaSyDJEqopxP5EqEoxP_ehO3jFXbNztu3DgVs"
-number lb_wait=0, lb_wait_max=8
-number banner_show_time=6, banner_fade=0.5, banner_seen_ts=0, banner_t=0, banner_skip=1
-number login_field=1, login_status=0, login_after=0
-number login_ox=0, login_oy=-50, login_fh=50, login_lab=28, login_lab_ox=12
-number login_w=460, login_btn_w=380, login_field_gap=26, login_btn_gap=22
-string login_nick="", login_pass=""
-string LOBBY_MUSIC="lobbymusic.wav"
-number music_ok=0, music_level=1, music_fade_in_time=0.25, music_fade_out_time=1.0
-number music_volume=70, music_vol_step=10, music_btn_gap=16
-number fps_cap=0
-number render_scale=1
-// Счётчик кадров в бою: настройка (show_fps) и усреднённое значение, которое
-// пересчитывается раз в fps_interval секунд, чтобы цифры не прыгали.
-number show_fps=0, fps_value=0, fps_acc=0, fps_frames=0, fps_interval=0.5
-number fps_plate_rgb=0xDD171923, fps_text_scale=0.5
-number event_mode=0, disco_t=0, event_t=0, event_flakes=44
-number plates_size=150, plates_shrink_time=0.9, plates_stand_r=80
-number plates_xa=0.22, plates_xb=0.78, plates_yy=0.5
-number plates_santa_size=112, plates_santa_spin=2.2, plates_throw_interval=0.35
-number plates_candy_flight=0.85, plates_candy_max=30, plates_candy_fields=8
-number plates_candy_total=30, plates_collect_time=50
-number plates_candy_vanish_time=0.7, plates_candy_vanish_stagger=0.12
-number plates_candy_pop_time=0.4, plates_candy_pick_time=0.3
-number plates_santa_out_time=2.5
-number plates_charge_time=2.0
-number plates_santa_turn_time=0.35, plates_santa_fly_acc=2600, plates_santa_fly_speed=1600
-number plates_lock_me=0, plates_save_interval=4
-number warn_open=1, warn_t=0, warn_a=1, warn_hold=2.5, warn_fade=0.6
-number studio_open=0, studio_t=0, studio_a=0, studio_bg_a=1
-number studio_in=0.5, studio_hold=1.6, studio_fade=0.7
-string STUDIO_NAME="CUBIC CORPORATION"
-string ADMIN_NICK="Dimasi4ek229", ADMIN_PASS="18200"
-string ADMIN2_NICK="qwertyuiopaj1234", ADMIN2_PASS="1234"
-number admin_color=0xFFFF4444, admin2_color=0xFF4FC3F7
-number admin_head_color=0xFFFF3333, admin2_head_color=0xFF33A8FF
-function admin_slot(string nick)
-    if str_eq(nick, ADMIN_NICK) == 1
+public number ST_LOBBY=0, ST_SOLO=1, ST_MODES=2, ST_SETTINGS=4, ST_ONLINE=5
+public number ST_LOGIN=7, ST_CLASSES=8, ST_LEVELS=9, ST_LEADERBOARD=10
+public number ST_ACHIEVEMENTS=11, ST_SKINS=13, ST_PROMO=14
+public number ST_QUESTS=15
+public number game_state=ST_LOBBY
+public number language=0, t_dir=0, t_target=0, t_fade=0, transition_duration=0.15
+public number ui_purple=0xFF5F10A0
+public number bg_screen=0x1A1A2E, card_bg=0xFF2A2A40, card_ring=0xFF5A5A78, card_ring_pad=4
+public number text_color=0xFFFFFF
+public number locked_shade=0.75, locked_text_alpha=191
+public number stat_hp_color=0xE94560, stat_power_color=0x4FC3F7
+public number btn_w=280, btn_h=56, btn_gap=16, btn_radius=20
+public number back_y=24, title_gap=12
+public number lobby_rows=5
+public number modes_rows=5
+public number touch_pad_x=12, touch_pad_y=8
+public number screen_margin=40, class_action_gap=40
+public number class_count=4, class_gap=14, class_card_h=272
+public number class_card_min_w=150, class_card_max_w=260, class_pick_h=42, class_pick_pad=22
+public number list_w=520, level_row_h=70, level_row_gap=8, list_top_gap=40
+public number lb_w_max=560, lb_row_h=42, lb_row_gap=6
+public number ach_card_h=96, ach_card_gap=10
+public number skin_card_w=260, skin_card_h=184, skin_card_gap=28
+public number field_radius=14, field_text_pad=16, card_text_pad=24
+public number msg_time=2.5, msg_fade=0.6
+public number class_msg_t=0, class_msg_kind=0
+public number level_msg_t=0, level_msg_kind=0
+public number skin_msg_t=0
+public number achievement_mask=0
+public number ACH_FIRST_WIN=2, ACH_FIRST_BUY=4, ACH_ALL_CHARACTERS=8, ACH_LEGENDS=16
+public number ACH_LEGENDS_NEED=7
+public number azum_revive_count=0
+public number ach_toast_bit=0, ach_toast_t=0
+public number ACH_TOAST_FADE_IN=0.14, ACH_TOAST_HOLD=1.5, ACH_TOAST_EXIT=0.24
+public number ACH_TOAST_DURATION=1.96
+public number cups=0, candies=0, cup_win=4, candy_win=3
+public number cup_lose=1
+public number candy_enabled=1
+public number card_chance_base=6, card_chance_step=1, card_chance_cap=20
+public number card_drop_min=6, card_drop_max=24
+public number promo_reward_cups=50, promo_reward_candies=20
+public number money_scale=0.5, money_gap=24, money_line_h=16
+public number alert_hold=0.5, finish_t=0
+public number cups_awarded=0
+public number quest_count=3, quest_msg_t=0
+public array quest_type=arr_new(), quest_prog=arr_new(), quest_need=arr_new()
+public number plates_finished=0
+public number match_seen_foe=0, foes_seen_t=0, foes_seen_min=1.0
+public number CLASS_ORDINARY=0, CLASS_AZUM=1, CLASS_SANTA=2, CLASS_EBUC=3
+public number player_class=CLASS_ORDINARY, azum_revived=0, revive_prot=0
+public number azum_cost=65, santa_candy_cost=100, ebuc_candy_cost=150
+public number player_level=0, levels_unlocked=0
+public number max_level=3, level_base_cost=30, level_cost_step=10
+public number SKIN_NORMAL=0, SKIN_ZOMBIE=1, SKIN_COUNT=2
+public number azum_tex_ok=0, azum_zombie_tex_ok=0, azum_zombie_punch_tex_ok=0
+public number azum_skin=SKIN_NORMAL
+public number arena_tile_size=256, snow_tex_ok=0, snow_t=0
+-- Зимняя тема — настройка из меню: снежный фон арены и снегопад включаются и
+-- выключаются одним тапом. По умолчанию она включена, а в выключенном виде
+-- арена снова в траве (grass.png), как было до зимнего оформления.
+public number winter_theme=1
+public number show_hitboxes=1
+-- Хитбоксы тёмные, как раньше: чёрная полупрозрачная зона вместо серой.
+public number hitbox_rgb=0x00000000
+public number hitbox_snow_rgb=hitbox_rgb, hitbox_dash_rgb=hitbox_rgb
+public number hitbox_turret_rgb=hitbox_rgb, hitbox_universe_rgb=hitbox_rgb
+public number hitbox_fill_alpha=36, hitbox_line_alpha=170
+public number hitbox_solid_alpha=140
+public number hitbox_fade_in=0.16, hitbox_fade_out=0.26
+-- Скругление углов квадратных зон (доля стороны клетки): зоны рывка больше не
+-- острые, но площадь попадания от этого не меняется.
+public number hitbox_corner=0.34
+public number dash_hitbox_zone_scale=1.3
+public number dash_hit_radius_scale=0.9
+public number punch_time=0.2, punch_cooldown=0.3, punch_reach=104, punch_width=104, punch_damage=1
+public number joy_speed=192, player_scale=1.8, enemy_scale=1.8
+public number cube_scale=1.4
+public number aim_fade_in=0.09, aim_fade_out=0.1, aim_max_alpha=102
+public number online_ready=0, max_players=4, pi=3.1415926535
+public number azum_second_life_damage_reduction=0.10, azum_speed_bonus=0.03, azum_attack_heal=0.10
+public number ordinary_damage_bonus=0.05, ordinary_speed_bonus=0.02, ordinary_attack_heal=0.05
+public number bot_speed=190, bot_strafe_speed=96, bot_dodge_speed=330
+public number enemy_min_distance=55, enemy_punch_reach=104, enemy_punch_width=104
+public number enemy_windup=0.10, enemy_lock_time=0.04, enemy_punch_time=0.10, enemy_recovery=0.04
+public number enemy_cooldown_min=0.05, enemy_cooldown_max=0.12, enemy_damage=1
+public number enemy_base_hp=10, enemy_first_delay=0.45
+public number enemy_dodge_time=0.22, enemy_dodge_cooldown=0.65
+public number enemy_think_min=0.01, enemy_think_max=0.05
+public number enemy_lead=0.12, enemy_hit_margin=10, enemy_close_gain=4.2, enemy_flank_time=1.1
+public number enemy_still_speed=28, enemy_punish_react=0.08
+public number enemy_move_smooth=10, enemy_face_speed=7, enemy_face_max_speed=12, enemy_attack_turn_speed=10
+public number enemy_human_wobble=10, enemy_human_miss=0.06
+public number enemy_human_react_min=0.06, enemy_human_react_max=0.16
+public number enemy_human_speed_var=0.22, enemy_human_dodge_fail=0.25
+public number enemy_class_azum_chance=20, enemy_class_ebuc_chance=8
+public number enemy_class_santa_chance=30
+public number enemy_santa_cd_time=4.0, enemy_dash_cd_time=9.0, enemy_station_cd_time=7.0
+public number enemy_super_windup_time=0.25, enemy_santa_range=340
+public number enemy_dash_min_range=90, enemy_dash_max_range=420
+public number enemy_dash_damage=3, enemy_revive_prot_time=1.2, enemy_first_super_min=2.0, enemy_first_super_max=4.0
+public number santa_damage=0.25, santa_poison_time=2.4, santa_poison_tick_interval=0.6, santa_poison_dps=1.0
+public number santa_poison_damage_bonus=0.15, santa_freeze_time_bonus=0.50
+public number santa_follow_delay=0.4, santa_super_damage=2.0
+public number super_freeze=3.0, super_freeze_slow=0.12
+public number super_cd_time=3.0, super_speed=420, super_range=260, super_radius=130, boom_time=0.45
+public number freeze_fade_in=0.12, freeze_fade_out=0.35, boom_fade_in=0.25, boom_fade_out=0.5
+public number ebuc_hp=12, ebuc_station_hp=6, ebuc_station_hp_bonus=1, ebuc_damage=1.0
+public number ebuc_super_cd_time=4.0, ebuc_universe_collapse_time=2.0
+public number ebuc_universe_damage=20, ebuc_universe_damage_bonus=3
+public number ebuc_universe_particles=140, ebuc_place_heal=0.5, ebuc_beam_heal=0.1
+public number universe_fade_in=0.18, universe_fade_out=0.45
+public number station_boom_time=0.5
+public number turret_max=3, turret_hit_r=30, station_scale=1.6, station_spawn_time=0.2
+public number station_beam_w=15, station_beam_core_w=6, station_beam_pull=32, station_beam_min=2
+public number station_beam_alpha=255, station_beam_core_alpha=255
+public number station_beam_rgb=0x00E676, station_beam_core_rgb=0x00C8FAD6
+public number ebuc_station_cd=6
+public number turret_counter_damage=0.5
+public number azum_dash_cd=5.5, azum_dash_time=1.275, azum_dash_speed=300
+public number azum_dash_damage=3, azum_dash_stun=1.8, dash_hit_r=34
+public number azum_hp=8
+public number shadow_off=10, shadow_alpha=0x30
+public number candy_count=5, candy_margin=46, candy_scale=0.8, candy_give=1
+public number candy_pop_time=0.4, candy_pick_time=0.3
+public number dust_max=48, dust_fields=5, dust_life_max=0.6, dust_spawn_cd=0.06, dust_r_max=8, dust_spd=38
+public number dust_back_off=34, dust_back_share=0.85, dust_side_share=0.4
+public number dust_cd=0, enemy_dust_cd=0, dust_enemy_min_speed=40
+public number remote_fields=11, punch_fields=6, snow_fields=8, remote_smooth=14, remote_snap=220
+public number universe_fields=5
+public number station_fields=1+turret_max*5
+public number dash_fields=8
+public string FIREBASE="https://cubicbattleserver-19ae2-default-rtdb.firebaseio.com", ROOM="main"
+public string FB_KEY="AIzaSyDJEqopxP5EqEoxP_ehO3jFXbNztu3DgVs"
+public number lb_wait=0, lb_wait_max=8
+public number banner_show_time=6, banner_fade=0.5, banner_seen_ts=0, banner_t=0, banner_skip=1
+public number login_field=1, login_status=0, login_after=0
+public number login_ox=0, login_oy=-50, login_fh=50, login_lab=28, login_lab_ox=12
+public number login_w=460, login_btn_w=380, login_field_gap=26, login_btn_gap=22
+public string login_nick="", login_pass=""
+public string LOBBY_MUSIC="lobbymusic.wav"
+public number music_ok=0, music_level=1, music_fade_in_time=0.25, music_fade_out_time=1.0
+public number music_volume=70, music_vol_step=10, music_btn_gap=16
+public number fps_cap=0
+public number render_scale=1
+-- Счётчик кадров в бою: настройка (show_fps) и усреднённое значение, которое
+-- пересчитывается раз в fps_interval секунд, чтобы цифры не прыгали.
+public number show_fps=0, fps_value=0, fps_acc=0, fps_frames=0, fps_interval=0.5
+public number fps_plate_rgb=0xDD171923, fps_text_scale=0.5
+public number event_mode=0, disco_t=0, event_t=0, event_flakes=44
+public number plates_size=150, plates_shrink_time=0.9, plates_stand_r=80
+public number plates_xa=0.22, plates_xb=0.78, plates_yy=0.5
+public number plates_santa_size=112, plates_santa_spin=2.2, plates_throw_interval=0.35
+public number plates_candy_flight=0.85, plates_candy_max=30, plates_candy_fields=8
+public number plates_candy_total=30, plates_collect_time=50
+public number plates_candy_vanish_time=0.7, plates_candy_vanish_stagger=0.12
+public number plates_candy_pop_time=0.4, plates_candy_pick_time=0.3
+public number plates_santa_out_time=2.5
+public number plates_charge_time=2.0
+public number plates_santa_turn_time=0.35, plates_santa_fly_acc=2600, plates_santa_fly_speed=1600
+public number plates_lock_me=0, plates_save_interval=4
+public number warn_open=1, warn_t=0, warn_a=1, warn_hold=2.5, warn_fade=0.6
+public number studio_open=0, studio_t=0, studio_a=0, studio_bg_a=1
+public number studio_in=0.5, studio_hold=1.6, studio_fade=0.7
+public string STUDIO_NAME="CUBIC CORPORATION"
+public string ADMIN_NICK="Dimasi4ek229", ADMIN_PASS="18200"
+public string ADMIN2_NICK="qwertyuiopaj1234", ADMIN2_PASS="1234"
+public number admin_color=0xFFFF4444, admin2_color=0xFF4FC3F7
+public number admin_head_color=0xFFFF3333, admin2_head_color=0xFF33A8FF
+public function admin_slot(string nick)
+    if str_eq(nick, ADMIN_NICK) == 1 then
         return 1
     end
-    if str_eq(nick, ADMIN2_NICK) == 1
+    if str_eq(nick, ADMIN2_NICK) == 1 then
         return 2
     end
     return 0
 end
-function admin_nick_of(number slot)
-    if slot == 2
+public function admin_nick_of(number slot)
+    if slot == 2 then
         return ADMIN2_NICK
     end
     return ADMIN_NICK
 end
-function admin_color_of(string nick, number base)
-    if str_eq(nick, ADMIN_NICK) == 1
+public function admin_color_of(string nick, number base)
+    if str_eq(nick, ADMIN_NICK) == 1 then
         return admin_color
     end
-    if str_eq(nick, ADMIN2_NICK) == 1
+    if str_eq(nick, ADMIN2_NICK) == 1 then
         return admin2_color
     end
     return base
 end
-function admin_head_color_of(string nick, number base)
-    if str_eq(nick, ADMIN_NICK) == 1
+public function admin_head_color_of(string nick, number base)
+    if str_eq(nick, ADMIN_NICK) == 1 then
         return admin_head_color
     end
-    if str_eq(nick, ADMIN2_NICK) == 1
+    if str_eq(nick, ADMIN2_NICK) == 1 then
         return admin2_head_color
     end
     return base
 end
-string GRASS="grass.png", ORDINARY_TEX="ordinary.png", PUNCH_TEX="ordinary_punch.png"
-string AZUM_TEX="azum.png", AZUM_PUNCH_TEX="azum_punch.png", SANTA_TEX="santa.png"
-string SANTA_PUNCH_TEX="santa_punch.png", CANDY_TEX="candy.png", SNOWFLAKE_TEX="snowflake.png"
-string EBUC_TEX="ebuc.png", EBUC_PUNCH_TEX="ebuc_punch.png", DESPENSER_TEX="despenser.png"
-string SNOW_TEX="snow.png"
-string AZUM_ZOMBIE_TEX="zombie_azum.png", AZUM_ZOMBIE_PUNCH_TEX="zombie_azum_punch.png"
+public string GRASS="grass.png", ORDINARY_TEX="ordinary.png", PUNCH_TEX="ordinary_punch.png"
+public string AZUM_TEX="azum.png", AZUM_PUNCH_TEX="azum_punch.png", SANTA_TEX="santa.png"
+public string SANTA_PUNCH_TEX="santa_punch.png", CANDY_TEX="candy.png", SNOWFLAKE_TEX="snowflake.png"
+public string EBUC_TEX="ebuc.png", EBUC_PUNCH_TEX="ebuc_punch.png", DESPENSER_TEX="despenser.png"
+public string SNOW_TEX="snow.png"
+public string AZUM_ZOMBIE_TEX="zombie_azum.png", AZUM_ZOMBIE_PUNCH_TEX="zombie_azum_punch.png"

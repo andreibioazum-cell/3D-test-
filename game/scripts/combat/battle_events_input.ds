@@ -1,126 +1,126 @@
-function disco_color(number phase)
-    number r=127+127*sin(phase)
-    number g=127+127*sin(phase+2.094)
-    number b=127+127*sin(phase+4.188)
-    number a=55+90*(0.5+0.5*sin(disco_t*16))
+public function disco_color(number phase)
+    local number r=127+127*sin(phase)
+    local number g=127+127*sin(phase+2.094)
+    local number b=127+127*sin(phase+4.188)
+    local number a=55+90*(0.5+0.5*sin(disco_t*16))
     return ((((unsigned)(int)a)<<24)|(((unsigned)(int)r)<<16)|(((unsigned)(int)g)<<8)|((unsigned)(int)b))
 end
-function draw_disco()
-    if event_mode!=1
+public function draw_disco()
+    if event_mode!=1 then
         return
     end
-    number col=disco_color(disco_t*18)
+    local number col=disco_color(disco_t*18)
     rect(0,0,screen_w,screen_h,col)
-    number ct=disco_t*12
-    number r=110+40*sin(ct)
+    local number ct=disco_t*12
+    local number r=110+40*sin(ct)
     ring(screen_w/2,screen_h/2,r,7,0xC0FFFFFF)
 end
-function update_event()
+public function update_event()
     event_mode=net_event()
-    if event_mode==3&&candy_enabled==0
+    if event_mode==3&&candy_enabled==0 then
         event_mode=0
     end
     event_t=event_t+dt
-    if event_t>100000
+    if event_t>100000 then
         event_t=0
     end
-    if event_mode==1
+    if event_mode==1 then
         disco_t=disco_t+dt
     else
         disco_t=0
     end
     tick_plates_event()
 end
-function banner_named_color(string name)
-    if str_eq(name,"red")==1
+public function banner_named_color(string name)
+    if str_eq(name,"red")==1 then
         return 0x00FF5252
     end
-    if str_eq(name,"green")==1
+    if str_eq(name,"green")==1 then
         return 0x0000E676
     end
-    if str_eq(name,"blue")==1
+    if str_eq(name,"blue")==1 then
         return 0x004FC3F7
     end
-    if str_eq(name,"yellow")==1
+    if str_eq(name,"yellow")==1 then
         return 0x00FFD54A
     end
-    if str_eq(name,"orange")==1
+    if str_eq(name,"orange")==1 then
         return 0x00FF9800
     end
-    if str_eq(name,"purple")==1
+    if str_eq(name,"purple")==1 then
         return 0x00AB47BC
     end
-    if str_eq(name,"pink")==1
+    if str_eq(name,"pink")==1 then
         return 0x00FF80AB
     end
-    if str_eq(name,"cyan")==1
+    if str_eq(name,"cyan")==1 then
         return 0x0000E5FF
     end
-    if str_eq(name,"black")==1
+    if str_eq(name,"black")==1 then
         return 0x00222222
     end
     return 0x00FFFFFF
 end
-function banner_color_now(string name)
+public function banner_color_now(string name)
     return banner_named_color(name)
 end
-function update_banner()
-    if game_state!=ST_ONLINE
+public function update_banner()
+    if game_state!=ST_ONLINE then
         return
     end
-    number ts=net_banner_ts()
-    if ts>0
-        if banner_skip==1
+    local number ts=net_banner_ts()
+    if ts>0 then
+        if banner_skip==1 then
             banner_seen_ts=ts
             banner_skip=0
-        else if ts!=banner_seen_ts
+        else if ts!=banner_seen_ts then
             banner_seen_ts=ts
             banner_t=banner_show_time
         end
     end
-    if banner_t>0
+    if banner_t>0 then
         banner_t=banner_t-dt
-        if banner_t<0
+        if banner_t<0 then
             banner_t=0
         end
     end
 end
-function draw_banner()
-    if banner_t<=0
+public function draw_banner()
+    if banner_t<=0 then
         return
     end
-    string txt=net_banner_text()
-    if str_len(txt)==0
+    local string txt=net_banner_text()
+    if str_len(txt)==0 then
         return
     end
-    number elapsed=banner_show_time-banner_t
-    number a=elapsed
-    if a>banner_t
+    local number elapsed=banner_show_time-banner_t
+    local number a=elapsed
+    if a>banner_t then
         a=banner_t
     end
-    number alpha=floor(clamp(a/banner_fade,0,1)*230)
-    if alpha<=0
+    local number alpha=floor(clamp(a/banner_fade,0,1)*230)
+    if alpha<=0 then
         return
     end
-    number sc=1.05
-    number w=text_ink_width(txt)*sc
-    if w>screen_w-40
+    local number sc=1.05
+    local number w=text_ink_width(txt)*sc
+    if w>screen_w-40 then
         sc=(screen_w-40)/w
         w=text_ink_width(txt)*sc
     end
-    number x=(screen_w-w)/2
-    number y=118
-    color col=banner_color_now(net_banner_color())
+    local number x=(screen_w-w)/2
+    local number y=118
+    local color col=banner_color_now(net_banner_color())
     text_scaled(txt,x,y,((((unsigned)(int)alpha)<<24)|col),sc)
 end
-function draw_overhead_nick(string nick, number cx, number top_y, color col)
-    number w=text_ink_width(nick)*0.5
-    number th=text_ink_height(nick)*0.5
-    number tt=text_ink_top(nick)*0.5
+public function draw_overhead_nick(string nick, number cx, number top_y, color col)
+    local number w=text_ink_width(nick)*0.5
+    local number th=text_ink_height(nick)*0.5
+    local number tt=text_ink_top(nick)*0.5
     text_scaled(nick,cx-w/2,top_y-12-th-tt,col,0.5)
 end
-function draw_online()
-    if chat_open==1
+public function draw_online()
+    if chat_open==1 then
         draw_chat()
         return
     end
@@ -131,17 +131,17 @@ function draw_online()
     draw_event_candies()
     draw_dust()
     draw_player_shadow_layer()
-    number i=0, b=0, rb=0, rx=0, ry=0, ra=0, rcls=0, punching=0
-    loop i<max_players
+    local number i=0, b=0, rb=0, rx=0, ry=0, ra=0, rcls=0, punching=0
+    while i<max_players do
         b=i*remote_fields
         rb=i*punch_fields
-        if arr_get(remotes,b+5)==1
+        if arr_get(remotes,b+5)==1 then
             rx=arr_get(remotes,b+1)
             ry=arr_get(remotes,b+2)
             ra=arr_get(remotes,b+3)
             rcls=arr_get(remotes,b+10)
             punching=0
-            if arr_get(remote_punches,rb)==1
+            if arr_get(remote_punches,rb)==1 then
                 punching=1
                 ra=atan2(arr_get(remote_punches,rb+4),arr_get(remote_punches,rb+3))
             end
@@ -151,11 +151,11 @@ function draw_online()
     end
     draw_turret_shadows()
     draw_player_hitbox_layer()
-    if show_hitboxes==1
+    if show_hitboxes==1 then
         i=0
-        loop i<max_players
+        while i<max_players do
             rb=i*punch_fields
-            if arr_get(rpunch_a,i)>0
+            if arr_get(rpunch_a,i)>0 then
                 draw_punch_box(arr_get(remote_punches,rb+1),arr_get(remote_punches,rb+2),arr_get(remote_punches,rb+3),arr_get(remote_punches,rb+4),punch_reach,punch_width,arr_get(rpunch_a,i))
             end
             i=i+1
@@ -171,30 +171,30 @@ function draw_online()
     draw_remote_station()
     draw_remote_dash()
     draw_player_body_layer()
-    number hw=25*cube_scale*player_scale
-    string myn=net_player_nick(net_slot())
-    if str_len(myn)>0
-        color ncol=admin_head_color_of(myn,0xFFFFFF)
+    local number hw=25*cube_scale*player_scale
+    local string myn=net_player_nick(net_slot())
+    if str_len(myn)>0 then
+        local color ncol=admin_head_color_of(myn,0xFFFFFF)
         draw_overhead_nick(myn,player.x,player.y-hw,ncol)
     end
     i=0
-    loop i<max_players
+    while i<max_players do
         b=i*remote_fields
         rb=i*punch_fields
-        if arr_get(remotes,b+5)==1
+        if arr_get(remotes,b+5)==1 then
             rx=arr_get(remotes,b+1)
             ry=arr_get(remotes,b+2)
             ra=arr_get(remotes,b+3)
             rcls=arr_get(remotes,b+10)
             punching=0
-            if arr_get(remote_punches,rb)==1
+            if arr_get(remote_punches,rb)==1 then
                 punching=1
                 ra=atan2(arr_get(remote_punches,rb+4),arr_get(remote_punches,rb+3))
             end
             draw_remote_body(rx,ry,ra,rcls,punching,net_player_skin(i))
-            string rn=net_player_nick(i)
-            if str_len(rn)>0
-                color rncol=admin_head_color_of(rn,0xFFFFFF)
+            local string rn=net_player_nick(i)
+            if str_len(rn)>0 then
+                local color rncol=admin_head_color_of(rn,0xFFFFFF)
                 draw_overhead_nick(rn,rx,ry-hw,rncol)
             end
         end
@@ -207,52 +207,52 @@ function draw_online()
     draw_player_stun()
     draw_dash_streak()
     draw_snow()
-    number w=screen_w/3
+    local number w=screen_w/3
     hud_bar(20,20,w,28,player.hp,player.max_hp,0x7ED321,0)
     draw_controls()
     draw_fps_meter()
     draw_chat()
     draw_plates_hud()
-    number st=net_status(), sy=chat_btn_y()+btn_h+12
-    if st==4
+    local number st=net_status(), sy=chat_btn_y()+btn_h+12
+    if st==4 then
         ctext(tr_no_connection(),sy,0xFFFFFF)
         ctext(tr_reconnecting(),sy+32,0xFFFFFF)
-    else if st==1
+    else if st==1 then
         ctext(tr_connecting(),sy,0xFFFFFF)
     end
-    if finished==2
+    if finished==2 then
         draw_result(tr_defeat())
     end
     draw_banner()
 end
-function drop_joy()
+public function drop_joy()
     joy_id=-1
     joy.dx=0
     joy.dy=0
     joy.ox=0
     joy.oy=0
 end
-function joy_touch(number x, number y, number action, number id)
-    if action==1
-        if id==joy_id
+public function joy_touch(number x, number y, number action, number id)
+    if action==1 then
+        if id==joy_id then
             drop_joy()
         end
         return
     end
-    if action==0
-        if joy_id!=-1
+    if action==0 then
+        if joy_id!=-1 then
             return
         end
-        if sqrt((x-joy.x)*(x-joy.x)+(y-joy.y)*(y-joy.y))>150
+        if sqrt((x-joy.x)*(x-joy.x)+(y-joy.y)*(y-joy.y))>150 then
             return
         end
         joy_id=id
     end
-    if id!=joy_id
+    if id!=joy_id then
         return
     end
-    number dx=x-joy.x, dy=y-joy.y, d=sqrt(dx*dx+dy*dy)
-    if d>joy.r
+    local number dx=x-joy.x, dy=y-joy.y, d=sqrt(dx*dx+dy*dy)
+    if d>joy.r then
         joy.dx=dx/d
         joy.dy=dy/d
         joy.ox=joy.dx*joy.r
@@ -264,60 +264,60 @@ function joy_touch(number x, number y, number action, number id)
         joy.oy=dy
     end
 end
-function touch_game(number x, number y, number action, number id)
-    if card_open!=0
-        if action==0
+public function touch_game(number x, number y, number action, number id)
+    if card_open!=0 then
+        if action==0 then
             card_close()
         end
         return
     end
-    if finished!=0
-        if action==0&&finish_t>=alert_hold
+    if finished!=0 then
+        if action==0&&finish_t>=alert_hold then
             start_transition(0)
         end
         return
     end
-    if action==3
+    if action==3 then
         aim_id=-1
         super_id=-1
         drop_joy()
         return
     end
-    if game_state==ST_ONLINE
-        if touch_chat(x,y,action)==1
-            if chat_open==1
+    if game_state==ST_ONLINE then
+        if touch_chat(x,y,action)==1 then
+            if chat_open==1 then
                 aim_id=-1
                 super_id=-1
                 drop_joy()
             end
             return
         end
-        if chat_open==1
+        if chat_open==1 then
             return
         end
     end
-    if back_hit(x,y)==1&&action==0
+    if back_hit(x,y)==1&&action==0 then
         start_transition(0)
         return
     end
-    if (player_class==CLASS_AZUM||player_class==CLASS_SANTA||player_class==CLASS_EBUC)&&(game_state==ST_SOLO||game_state==ST_ONLINE)
-        if action==0&&sqrt((x-atk2_x)*(x-atk2_x)+(y-atk2_y)*(y-atk2_y))<=96
+    if (player_class==CLASS_AZUM||player_class==CLASS_SANTA||player_class==CLASS_EBUC)&&(game_state==ST_SOLO||game_state==ST_ONLINE) then
+        if action==0&&sqrt((x-atk2_x)*(x-atk2_x)+(y-atk2_y)*(y-atk2_y))<=96 then
             super_id=id
             return
         end
-        if action==1&&id==super_id
+        if action==1&&id==super_id then
             super_id=-1
             fire_super()
             return
         end
     end
-    if action==0&&sqrt((x-atk_x)*(x-atk_x)+(y-atk_y)*(y-atk_y))<=96
+    if action==0&&sqrt((x-atk_x)*(x-atk_x)+(y-atk_y)*(y-atk_y))<=96 then
         aim_id=id
         return
     end
-    if action==1&&id==aim_id
+    if action==1&&id==aim_id then
         aim_id=-1
-        if game_state==ST_SOLO||online_ready==1
+        if game_state==ST_SOLO||online_ready==1 then
             fire_punch()
         end
         return

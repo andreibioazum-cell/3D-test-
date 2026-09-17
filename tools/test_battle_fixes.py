@@ -1005,115 +1005,115 @@ def main():
         # ── Wiring checks inside the compiled script modules ──
         fns = compiler.functions
         for name in ("update_game", "update_online"):
-            body = fns[name][1]
+            body = fns[name][2]
             for hook in ("tick_hitbox_fades()", "tick_status_fades()"):
                 assert body.count(hook) == 1, f"{name} must call {hook} once"
         # Эффекты, наложенные врагом, рисуются и вокруг бойца (соло).
-        solo_body = "".join(fns["draw_game"][1])
+        solo_body = "".join(fns["draw_game"][2])
         for fn in ("draw_player_freeze()", "draw_player_poison()", "draw_player_stun()"):
             assert solo_body.count(fn) == 1, f"draw_game must call {fn}"
         # Шансы классов врага берутся из конфига, а не зашиты числами.
-        pick_body = "".join(fns["enemy_pick_random_class"][1])
+        pick_body = "".join(fns["enemy_pick_random_class"][2])
         for name in ("enemy_class_azum_chance", "enemy_class_ebuc_chance",
                      "enemy_class_santa_chance"):
             assert name in pick_body, f"enemy_pick_random_class must use {name}"
         for name in ("draw_game", "draw_online"):
-            body = fns[name][1]
+            body = fns[name][2]
             assert body.count("draw_ability_hitboxes()") == 1, f"{name} must draw ability hitboxes"
         # Snow pierce helpers are wired into both flight paths.
-        assert "snow_chip_enemy_turrets()" in "".join(fns["update_gift"][1])
-        assert "snow_chip_player_turrets()" in "".join(fns["tick_enemy_gift"][1])
+        assert "snow_chip_enemy_turrets()" in "".join(fns["update_gift"][2])
+        assert "snow_chip_player_turrets()" in "".join(fns["tick_enemy_gift"][2])
         # Pierce mask resets on every throw (launch happens at windup end).
-        assert "gift.pierce=0" in "".join(fns["tick_super_windup"][1])
-        assert "enemy_gift.pierce=0" in "".join(fns["enemy_start_snow"][1])
+        assert "gift.pierce=0" in "".join(fns["tick_super_windup"][2])
+        assert "enemy_gift.pierce=0" in "".join(fns["enemy_start_snow"][2])
         # Shield funnels sit in the damage entry points.
-        assert "player_shield_absorb(dmg)" in "".join(fns["take_damage"][1])
-        assert "enemy_shield_absorb(dmg)" in "".join(fns["enemy_apply_damage"][1])
-        assert "enemy_shield_absorb(dmg)" in "".join(fns["universe_collapse"][1])
-        assert "player_shield_absorb(dmg)" in "".join(fns["universe_collapse_remote"][1])
+        assert "player_shield_absorb(dmg)" in "".join(fns["take_damage"][2])
+        assert "enemy_shield_absorb(dmg)" in "".join(fns["enemy_apply_damage"][2])
+        assert "enemy_shield_absorb(dmg)" in "".join(fns["universe_collapse"][2])
+        assert "player_shield_absorb(dmg)" in "".join(fns["universe_collapse_remote"][2])
         # Dash resolution takes the traveled length.
-        params = [p[1] for p in fns["dash_resolve_target"][0]]
+        params = [p[1] for p in fns["dash_resolve_target"][1]]
         assert params == ["sx", "sy", "dx", "dy", "len"]
         # Dash hitbox: one layer of big rounded cells, no small trailing cube
         # chain and no stripe; cells are reused from one shared array.
         assert "draw_hit_dash_cube" not in fns and "draw_hit_dash_zone" not in fns
-        dash_body = "".join(fns["draw_hit_dash_path"][1])
+        dash_body = "".join(fns["draw_hit_dash_path"][2])
         assert "roundrect(" in dash_body and "line(" not in dash_body
         assert "hitbox_corner" in dash_body, "dash cells must be rounded"
         assert "arr_new()" not in dash_body, "dash cells must reuse one array"
         # Own turret can never intercept the owner's punch.
         assert "punch_turret_target" not in fns
         # Turret shadow is the despenser sprite itself (square, tinted).
-        shadow_body = "".join(fns["draw_turret_shadow_at"][1])
+        shadow_body = "".join(fns["draw_turret_shadow_at"][2])
         assert "tex_tint(" in shadow_body and "DESPENSER_TEX" in shadow_body
         # Видимость луча бука решается одним предикатом во всех трёх местах.
         for name in ("draw_station", "draw_remote_station", "draw_enemy_turrets"):
-            assert "station_beam_visible(" in "".join(fns[name][1]), \
+            assert "station_beam_visible(" in "".join(fns[name][2]), \
                 f"{name} must gate the buk beam through station_beam_visible"
         for name in ("draw_game", "draw_online"):
-            assert "".join(fns[name][1]).count("draw_turret_shadows()") == 1, \
+            assert "".join(fns[name][2]).count("draw_turret_shadows()") == 1, \
                 f"{name} must draw turret shadows in the shadow layer"
         # Enemy shield covers from the front only (turret behind the body
         # never substitutes for it).
-        assert "tf<=bw+30" in "".join(fns["enemy_punch_turret_target"][1])
+        assert "tf<=bw+30" in "".join(fns["enemy_punch_turret_target"][2])
         # Poison is green (fill 0x00C853), freeze stays blue.
-        assert "0x0000C853" in "".join(fns["draw_poison"][1])
-        assert "0x0000C853" in "".join(fns["draw_player_poison"][1])
+        assert "0x0000C853" in "".join(fns["draw_poison"][2])
+        assert "0x0000C853" in "".join(fns["draw_player_poison"][2])
         # Splash: warning keeps its black screen; studio bg fades with the logo.
-        assert "0xFF000000" in "".join(fns["draw_warning"][1])
-        assert "studio_bg_rgb(0)" in "".join(fns["draw_studio"][1])
-        studio_body = "".join(fns["update_studio"][1]).replace(" ", "")
+        assert "0xFF000000" in "".join(fns["draw_warning"][2])
+        assert "studio_bg_rgb(0)" in "".join(fns["draw_studio"][2])
+        studio_body = "".join(fns["update_studio"][2]).replace(" ", "")
         assert "studio_bg_a=studio_a" in studio_body
 
         # ── Чат: пузыри сообщений над бойцами и кнопка закрытия по центру ──
-        online_body = "".join(fns["draw_online"][1])
+        online_body = "".join(fns["draw_online"][2])
         assert online_body.count("draw_chat_bubbles()") == 1, \
             "draw_online must draw chat bubbles once"
-        upd_body = "".join(fns["update_online"][1])
+        upd_body = "".join(fns["update_online"][2])
         assert upd_body.count("chat_bubbles_watch()") == 1, \
             "update_online must tick chat bubbles once"
-        assert "chat_bubbles_reset()" in "".join(fns["init_online"][1])
+        assert "chat_bubbles_reset()" in "".join(fns["init_online"][2])
         # Закрытие чата — там же, где draw_back: вверху по центру.
-        close_x = "".join(fns["chat_close_x"][1]).replace(" ", "")
+        close_x = "".join(fns["chat_close_x"][2]).replace(" ", "")
         assert "(screen_w-btn_w)/2" in close_x, \
             "chat close button must sit centered like every other close button"
-        assert "back_y" in "".join(fns["chat_top_y"][1])
+        assert "back_y" in "".join(fns["chat_top_y"][2])
         # Новые сообщения находятся по серверному ключу (устойчиво к обрезке).
-        watch_body = "".join(fns["chat_bubbles_watch"][1])
+        watch_body = "".join(fns["chat_bubbles_watch"][2])
         assert "net_chat_key(" in watch_body and "chat_seen_key" in watch_body
 
         # ── Настройки: громкость музыки ──
-        settings_body = "".join(fns["draw_settings"][1])
+        settings_body = "".join(fns["draw_settings"][2])
         assert "tr_music_vol()" in settings_body and "music_half_w()" in settings_body
-        touch_body = "".join(fns["touch_settings"][1])
+        touch_body = "".join(fns["touch_settings"][2])
         assert touch_body.count("music_volume_step(") == 2, \
             "touch_settings must handle both - and + buttons"
-        assert "net_load_music_volume()" in "".join(fns["settings_from_storage"][1])
-        assert "net_save_music_volume(" in "".join(fns["music_volume_step"][1])
+        assert "net_load_music_volume()" in "".join(fns["settings_from_storage"][2])
+        assert "net_save_music_volume(" in "".join(fns["music_volume_step"][2])
 
         # ── Карточки и промокоды: дроп только в соло, код персональный ──
-        solo_upd = "".join(fns["update_game"][1])
+        solo_upd = "".join(fns["update_game"][2])
         assert solo_upd.count("card_update()") == 1, \
             "update_game must tick cards once"
-        draw_game_body = "".join(fns["draw_game"][1])
+        draw_game_body = "".join(fns["draw_game"][2])
         assert draw_game_body.count("draw_card_item()") == 1, \
             "draw_game must draw the field card once"
         assert draw_game_body.count("draw_card_open()") == 1, \
             "draw_game must draw the card overlay once"
-        assert "card_roll()" in "".join(fns["init_game"][1]), \
+        assert "card_roll()" in "".join(fns["init_game"][2]), \
             "init_game must roll the card chance"
-        reset_body = "".join(fns["reset_battle"][1])
+        reset_body = "".join(fns["reset_battle"][2])
         assert "card_active=0" in reset_body and "card_open=0" in reset_body, \
             "reset_battle must clear the card state"
         # Онлайн карточки не видит: тик и ролл только в соло.
-        assert "card_update()" not in "".join(fns["update_online"][1])
-        assert "card_roll()" not in "".join(fns["init_online"][1])
-        assert "card_open!=0" in "".join(fns["touch_game"][1]), \
+        assert "card_update()" not in "".join(fns["update_online"][2])
+        assert "card_roll()" not in "".join(fns["init_online"][2])
+        assert "card_open!=0" in "".join(fns["touch_game"][2]), \
             "touch_game must be blocked while the card overlay is open"
         # Экран промокодов: кнопка в меню, маршрутизация ввода.
-        assert "tr_promo()" in "".join(fns["draw_modes"][1])
-        assert "start_transition(ST_PROMO)" in "".join(fns["touch_modes"][1])
-        assert "touch_promo(" in "".join(fns["touch_menu"][1])
+        assert "tr_promo()" in "".join(fns["draw_modes"][2])
+        assert "start_transition(ST_PROMO)" in "".join(fns["touch_modes"][2])
+        assert "touch_promo(" in "".join(fns["touch_menu"][2])
         # Код детерминированно выводится из ника в C (не в конфиге и не на клиенте).
         promo_c = (ROOT / "native/net/promo.inc").read_text(encoding="utf-8")
         # new format 3 letters + 1 digit, e.g. ABC1, deterministic from nick

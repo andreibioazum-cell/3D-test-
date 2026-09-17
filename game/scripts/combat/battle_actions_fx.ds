@@ -1,4 +1,4 @@
-function start_punch_now()
+public function start_punch_now()
     punch.x=player.x
     punch.y=player.y
     punch.dx=cos(player.angle)
@@ -10,63 +10,63 @@ function start_punch_now()
     punch_cd=punch_cooldown
     queued_punch=0
 end
-function station_boom_visual_busy()
-    number i=0
-    loop i<arr_len(station_boom_ts)
-        if arr_get(station_boom_ts,i)>0
+public function station_boom_visual_busy()
+    local number i=0
+    while i<arr_len(station_boom_ts) do
+        if arr_get(station_boom_ts,i)>0 then
             return 1
         end
         i=i+1
     end
     return 0
 end
-function ultimate_visual_busy()
-    if super_windup>0||gift.active==1||universe_active==1||boom_t>0
+public function ultimate_visual_busy()
+    if super_windup>0||gift.active==1||universe_active==1||boom_t>0 then
         return 1
     end
-    if station_boom_visual_busy()==1
+    if station_boom_visual_busy()==1 then
         return 1
     end
-    number i=0
-    loop i<turret_max
-        if arr_get(turret_spawn_t,i)>0
+    local number i=0
+    while i<turret_max do
+        if arr_get(turret_spawn_t,i)>0 then
             return 1
         end
         i=i+1
     end
     return 0
 end
-function fire_punch()
-    if dash_active>0||player_stun>0
+public function fire_punch()
+    if dash_active>0||player_stun>0 then
         return
     end
-    if punch_cd>0||ultimate_visual_busy()==1
+    if punch_cd>0||ultimate_visual_busy()==1 then
         queued_punch=1
         return
     end
     start_punch_now()
-    if player_class==2
+    if player_class==2 then
         santa_follow=santa_follow_delay
     end
 end
-function tick_santa_follow()
-    if santa_follow<=0
+public function tick_santa_follow()
+    if santa_follow<=0 then
         return
     end
     santa_follow=santa_follow-dt
-    if santa_follow>0
+    if santa_follow>0 then
         return
     end
     santa_follow=0
-    if finished!=0||player_class!=2
+    if finished!=0||player_class!=2 then
         return
     end
-    if super_windup>0||gift.active==1||universe_active==1||boom_t>0
+    if super_windup>0||gift.active==1||universe_active==1||boom_t>0 then
         return
     end
     start_punch_now()
 end
-function start_dash_now()
+public function start_dash_now()
     dash_active=1
     dash_t=azum_dash_time
     dash_dx=cos(player.angle)
@@ -83,17 +83,17 @@ function start_dash_now()
     punch_left=0
     santa_follow=0
 end
-function fire_super()
-    if player_class==CLASS_AZUM
-        if dash_cd>0
+public function fire_super()
+    if player_class==CLASS_AZUM then
+        if dash_cd>0 then
             queued_super=0
             return
         end
-        if player_stun>0||player_freeze>0
+        if player_stun>0||player_freeze>0 then
             queued_super=0
             return
         end
-        if punch_left>0||punch_cd>0||ultimate_visual_busy()==1
+        if punch_left>0||punch_cd>0||ultimate_visual_busy()==1 then
             queued_super=1
             return
         end
@@ -101,17 +101,17 @@ function fire_super()
         start_dash_now()
         return
     end
-    if player_class!=2&&player_class!=3
+    if player_class!=2&&player_class!=3 then
         return
     end
-    if super_cd>0
+    if super_cd>0 then
         return
     end
-    if punch_left>0||punch_cd>0||gift.active==1||universe_active==1||boom_t>0||station_boom_visual_busy()==1
+    if punch_left>0||punch_cd>0||gift.active==1||universe_active==1||boom_t>0||station_boom_visual_busy()==1 then
         queued_super=1
         return
     end
-    if super_windup>0
+    if super_windup>0 then
         queued_super=1
         return
     end
@@ -121,25 +121,25 @@ function fire_super()
     punch_left=punch_time
     punch.active=0
     punch.hit=0
-    if player_class==CLASS_EBUC
+    if player_class==CLASS_EBUC then
         super_cd=ebuc_station_cd
     else
         super_cd=super_cd_time
     end
 end
-function tick_super_windup()
-    if super_windup<=0
+public function tick_super_windup()
+    if super_windup<=0 then
         return
     end
     super_windup=super_windup-dt
-    if super_windup>0
+    if super_windup>0 then
         return
     end
     super_windup=0
-    if finished!=0
+    if finished!=0 then
         return
     end
-    if player_class==2
+    if player_class==2 then
         gift.x=player.x
         gift.y=player.y
         gift.dx=cos(player.angle)
@@ -148,74 +148,74 @@ function tick_super_windup()
         gift.t=0
         gift.shot=gift.shot+1
         gift.pierce=0
-        if game_state==ST_ONLINE
+        if game_state==ST_ONLINE then
             net_publish_snow(gift.x/screen_w,gift.y/screen_h,gift.dx,gift.dy,gift.shot)
         end
         return
     end
-    if player_class==CLASS_EBUC
+    if player_class==CLASS_EBUC then
         place_turret()
         ds_log("turret placed, alive %g/%g",turret_count_alive(),turret_max)
     end
 end
-function update_gift()
-    if gift.active==0
+public function update_gift()
+    if gift.active==0 then
         return
     end
     gift.t=gift.t+dt
     gift.x=gift.x+gift.dx*super_speed*dt
     gift.y=gift.y+gift.dy*super_speed*dt
-    number touched=0
-    if game_state==ST_ONLINE
-        if gift.t>super_range/super_speed
+    local number touched=0
+    if game_state==ST_ONLINE then
+        if gift.t>super_range/super_speed then
             touched=1
         end
     else
         snow_chip_enemy_turrets()
-        number hx=gift.x-enemy.x, hy=gift.y-enemy.y, hd=sqrt(hx*hx+hy*hy)
-        if hd<enemy.size*0.65+24
+        local number hx=gift.x-enemy.x, hy=gift.y-enemy.y, hd=sqrt(hx*hx+hy*hy)
+        if hd<enemy.size*0.65+24 then
             touched=1
         end
-        if gift.t>super_range/super_speed
+        if gift.t>super_range/super_speed then
             touched=1
         end
     end
-    if touched==0
+    if touched==0 then
         return
     end
     gift.active=0
     boom_x=gift.x
     boom_y=gift.y
     boom_t=boom_time
-    if game_state!=ST_ONLINE
-        if dist(boom_x,boom_y,enemy.x,enemy.y)<=super_radius&&enemy_revive_prot<=0
+    if game_state!=ST_ONLINE then
+        if dist(boom_x,boom_y,enemy.x,enemy.y)<=super_radius&&enemy_revive_prot<=0 then
             freeze_enemy(santa_freeze_time_for(player_level),super_freeze_slow)
             enemy_apply_damage(santa_super_damage)
         end
     end
 end
-function draw_gift()
-    if gift.active==0
+public function draw_gift()
+    if gift.active==0 then
         return
     end
-    number hw=16, rot=gift.t*3
+    local number hw=16, rot=gift.t*3
     tex(gift.x-hw,gift.y-hw,SNOWFLAKE_TEX,rot,0.5)
 end
-function draw_boom_at(number x, number y, number bt)
-    if bt<=0
+public function draw_boom_at(number x, number y, number bt)
+    if bt<=0 then
         return
     end
-    number p=1-bt/boom_time, r=super_radius*p
-    number fade_in=clamp(p/boom_fade_in,0,1), fade_out=clamp(bt/(boom_time*boom_fade_out),0,1)
-    number a=floor(fade_in*fade_out*255)
-    if a<=0
+    local number p=1-bt/boom_time, r=super_radius*p
+    local number fade_in=clamp(p/boom_fade_in,0,1), fade_out=clamp(bt/(boom_time*boom_fade_out),0,1)
+    local number a=floor(fade_in*fade_out*255)
+    if a<=0 then
         return
     end
-    number c0=(((unsigned)(int)a)<<24)|0x00B3E5FC, c1=(((unsigned)(int)a)<<24)|0x00E1F5FE
+    local number c0=(((unsigned)(int)a)<<24)|0x00B3E5FC, c1=(((unsigned)(int)a)<<24)|0x00E1F5FE
     ring(x,y,r,9,c0)
     ring(x,y,r*0.6,6,c1)
     circle(x,y,super_radius*0.3,c0)
 end
-function draw_boom()
+public function draw_boom()
     draw_boom_at(boom_x,boom_y,boom_t)
 end

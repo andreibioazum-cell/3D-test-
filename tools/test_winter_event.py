@@ -411,50 +411,50 @@ def main():
         assert not compiler.errors and not compiler.warnings
         # Wiring checks: weather must tick outside the battle's early returns,
         # and both modes must draw snow below their HUD, using the same ground.
-        frame = compiler.functions["update"][1]
+        frame = compiler.functions["update"][2]
         assert frame[-1] == "update_weather()" and frame.count("update_weather()") == 1
         for name in ("draw_game", "draw_online"):
-            body = compiler.functions[name][1]
+            body = compiler.functions[name][2]
             # В draw_online первым может стоять чат-гард: пока чат открыт,
             # рисуется только чат, без арены позади.
-            if body[:4] == ["if chat_open==1", "draw_chat()", "return", "end"]:
+            if body[:4] == ["if chat_open==1 then", "draw_chat()", "return", "end"]:
                 body = body[4:]
             assert body[0] == "draw_arena_background()"
             assert body.count("draw_snow()") == 1
             assert body.index("draw_snow()") < next(i for i, line in enumerate(body) if line.startswith("hud_bar("))
-        assert "update_event()" not in compiler.functions["update_game"][1]
+        assert "update_event()" not in compiler.functions["update_game"][2]
         # Луча ивента больше нет: фаза «заряда» держит бойцов, но линии не рисует.
         assert "draw_event_beam" not in compiler.functions, \
             "event beam must be removed from the plates event"
-        assert "draw_event_beam()" not in "".join(compiler.functions["draw_online"][1])
-        assert "plates_charge_time" in "".join(compiler.functions["tick_plates_event"][1])
+        assert "draw_event_beam()" not in "".join(compiler.functions["draw_online"][2])
+        assert "plates_charge_time" in "".join(compiler.functions["tick_plates_event"][2])
         # Леденцы (соло и ивент) появляются/собираются с анимацией, как Дед Мороз.
-        solo_draw = "".join(compiler.functions["draw_candies"][1])
+        solo_draw = "".join(compiler.functions["draw_candies"][2])
         assert "candy_pop_time" in solo_draw and "candy_pick" in solo_draw, \
             "solo candies must pop in/out like Santa"
-        solo_tick = "".join(compiler.functions["tick_candies"][1])
+        solo_tick = "".join(compiler.functions["tick_candies"][2])
         # Подобранный леденец пропадает сразу и респавнится в новой точке
         # (задержки candy_pick_time в соло больше нет).
         assert "candy_rand_pos(" in solo_tick, \
             "a picked candy must respawn in a new random spot"
-        event_candy_draw = "".join(compiler.functions["draw_event_candies"][1])
+        event_candy_draw = "".join(compiler.functions["draw_event_candies"][2])
         # Ивентовые леденцы появляются тем же поп-временем, а исчезают за
         # plates_candy_vanish_time (задержки подбора plates_candy_pick_time
         # больше нет: подобранный леденец уходит сразу).
         assert "plates_candy_pop_time" in event_candy_draw
         assert "plates_candy_vanish_time" in event_candy_draw
-        event_candy_tick = "".join(compiler.functions["plates_collect_candies"][1])
+        event_candy_tick = "".join(compiler.functions["plates_collect_candies"][2])
         assert "plates_candy_vanish_time" in event_candy_tick
         # Дед Мороз: без серого кольца при появлении, уход — полётом вверх.
-        santa_body = "".join(compiler.functions["draw_event_santa"][1])
+        santa_body = "".join(compiler.functions["draw_event_santa"][2])
         assert "ring(" not in santa_body, "Santa must appear and leave without rings"
         assert "plates_santa_dy" in santa_body, "Santa must move up on exit"
         assert "plates_santa_out/plates_santa_out_time" not in santa_body, \
             "Santa must not shrink away on exit"
-        santa_tick = "".join(compiler.functions["tick_event_santa"][1])
+        santa_tick = "".join(compiler.functions["tick_event_santa"][2])
         assert "plates_santa_fly_acc" in santa_tick and "plates_santa_up" in santa_tick
         # Луч бука: без резкого обреза по дистанции и без мигающей альфы.
-        station_beam = "".join(compiler.functions["draw_station_beam"][1])
+        station_beam = "".join(compiler.functions["draw_station_beam"][2])
         assert "d<40" not in station_beam and "station_beam_min" in station_beam
         assert "station_beam_alpha" in station_beam and "floor(250)" not in station_beam
         android = temp / "android"

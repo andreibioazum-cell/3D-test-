@@ -339,7 +339,7 @@ def main():
 
         # ── Проводка: сохранение действительно вызывается из игры ──
         fns = compiler.functions
-        save_body = "".join(fns["save_progress"][1])
+        save_body = "".join(fns["save_progress"][2])
         assert "net_save_progress_all(" in save_body, (
             "save_progress() must call net_save_progress_all — the whole "
             "progress write (device + cloud) lives in that one call"
@@ -353,7 +353,7 @@ def main():
                          ("leave_screen", "save_progress()"),
                          ("login_do", "settings_from_storage()"),
                          ("init", "settings_from_storage()")):
-            assert hook in "".join(fns[fn][1]), f"{fn} must call {hook}"
+            assert hook in "".join(fns[fn][2]), f"{fn} must call {hook}"
 
         android = temp / "android"
         android.mkdir()
