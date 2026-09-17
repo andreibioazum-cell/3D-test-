@@ -92,10 +92,28 @@ void tex(float x, float y, const char *name, float a, float sc) {
 void tex_tint(float x, float y, const char *name, float a, float sc, uint32_t c) { (void)c; tex(x, y, name, a, sc); }
 static int ink_width(const char *s) { return s ? (int)strlen(s) * 10 : 0; }
 void text(const char *s, float x, float y, uint32_t c) { (void)s; (void)x; (void)y; (void)c; }
-void text_scaled(const char *s, float x, float y, uint32_t c, float sc) { (void)s; (void)x; (void)y; (void)c; (void)sc; }
+typedef struct { char s[96]; float x, y, scale; } TextCall;
+static TextCall text_calls[128];
+static int text_count;
+void text_scaled(const char *s, float x, float y, uint32_t c, float sc) {
+    (void)y; (void)c;
+    if (text_count >= 128) return;
+    snprintf(text_calls[text_count].s, sizeof text_calls[0].s, "%s", s ? s : "");
+    text_calls[text_count].x = x;
+    text_calls[text_count].y = y;
+    text_calls[text_count].scale = sc;
+    text_count++;
+}
 int text_width(const char *s) { return ink_width(s); }
 int text_height(const char *s) { (void)s; return 20; }
 int text_ink_width(const char *s) { return ink_width(s); }
+/* Подпись как в runtime.h: надписи вида «Уровень 3» и «HP: 20» собираются из
+ * числа (ds_concat в харнессе уже есть), а карточки классов их рисуют. */
+char *ds_num_to_string(double v) {
+    static char buf[32];
+    snprintf(buf, sizeof buf, "%g", v);
+    return buf;
+}
 int text_ink_height(const char *s) { (void)s; return 20; }
 int text_ink_top(const char *s) { (void)s; return 0; }
 
@@ -242,6 +260,40 @@ static void test_class_mottos(void) {
     double ss = ds_fn_fit_text_scale(ebuc, screen_w - 2 * screen_margin, 0.8);
     assert(ss < 0.8 && ss * ink_width(ebuc) <= screen_w - 2 * screen_margin + 0.001);
     screen_w = saved_w;
+
+    /* Карточки классов: девиз действительно рисуется и остаётся внутри карточки. */
+    text_count = 0;
+    ds_fn_draw_classes();
+    const char *azum = ds_fn_tr_class_azum_desc();
+    double cw2 = ds_fn_classes_card_w();
+    int seen_azum = 0, seen_ebuc = 0;
+    for (int i = 0; i < text_count; i++) {
+        const char *drawn = text_calls[i].s;
+        int cls = -1;
+        if (strcmp(drawn, azum) == 0) { cls = CLASS_AZUM; seen_azum = 1; }
+        else if (strcmp(drawn, ebuc) == 0) { cls = CLASS_EBUC; seen_ebuc = 1; }
+        if (cls < 0) continue;
+        double cx = ds_fn_classes_card_x(ds_fn_class_visible_index(cls));
+        double sc2 = text_calls[i].scale;
+        near(sc2, ds_fn_fit_text_scale(drawn, cw2 - 16, 0.5));
+        assert(sc2 <= 0.5 + 1e-9);
+        assert(text_calls[i].x >= cx - 0.001);                      /* левый край внутри */
+        assert(text_calls[i].x + sc2 * ink_width(drawn) <= cx + cw2 + 0.001);  /* и правый */
+    }
+    assert(seen_azum == 1 && seen_ebuc == 1);
+    /* Девиз выбранного класса дублируется на экране характеристик — тоже вписан. */
+    player_class = CLASS_EBUC;
+    text_count = 0;
+    ds_fn_draw_class_stats();
+    int seen_stat = 0;
+    for (int i = 0; i < text_count; i++) {
+        if (strcmp(text_calls[i].s, ebuc) != 0) continue;
+        seen_stat = 1;
+        near(text_calls[i].scale, ds_fn_fit_text_scale(ebuc, screen_w - 2 * screen_margin, 0.8));
+        assert(text_calls[i].x >= screen_margin - 0.001);
+        assert(text_calls[i].x + text_calls[i].scale * ink_width(ebuc) <= screen_w - screen_margin + 0.001);
+    }
+    assert(seen_stat == 1);
     puts("class mottos: Azum/buC text and fit-to-width scaling OK");
 }
 
