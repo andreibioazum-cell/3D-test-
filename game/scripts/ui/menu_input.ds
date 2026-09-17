@@ -250,6 +250,17 @@ function touch_settings(number x, number y)
         ds_set_render_scale(render_scale)
         return
     end
+    if hit_settings_row(x, y, 8) == 1
+        winter_theme = 1 - winter_theme
+        apply_winter_theme()
+        save_settings()
+        return
+    end
+    if hit_settings_row(x, y, 9) == 1
+        show_fps = 1 - show_fps
+        save_settings()
+        return
+    end
 end
 function next_fps_cap(number cur)
     if cur == 0

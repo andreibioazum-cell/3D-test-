@@ -24,10 +24,14 @@ static uint64_t monotonic_ns(void) {
     if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0;
     return (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
 }
-/* Экономия заряда без жёсткого глобального лимита: скрипт из настроек задаёт
- * 1) апскейл — игра рисуется в виртуальном буфере screen/scale и растянывается
- *    nearest-neighbor на окно (пиксели, но в scale^2 раз меньше пикселей
- *    рендерит софтрассер);
+/* Экономия заряда и производительность без жёсткого глобального лимита: скрипт
+ * из настроек задаёт
+ * 1) апскейл — кадр рисуется в оффскрин screen/scale и растягивается
+ *    nearest-neighbor на окно (пиксельная картинка и в scale^2 раз меньше
+ *    пикселей на GPU). Координаты скриптов при этом остаются физическими
+ *    пикселями окна, поэтому интерфейс НЕ увеличивается: раньше виртуальный
+ *    экран был в scale раз меньше, и на больших разрешениях вся игра
+ *    становилась «супер огромной»;
  * 2) лимит FPS (0 = без ограничения, по умолчанию так и остаётся). */
 static volatile int render_scale_setting = 1;
 static volatile int fps_cap_setting = 0;
@@ -47,18 +51,14 @@ static int current_render_scale(void) {
     return s;
 }
 static int phys_w = 0, phys_h = 0;
-static int active_scale = 1; /* масштаб апскейла: тот же для тачей */
-/* Виртуальный экран = окно / масштаб. screen_w/screen_h — то, что видит скрипт.
- * Рендер идёт через Vulkan в оффскрин этого размера и растягивается на окно
- * nearest-blit'ом на GPU, поэтому CPU-буферов больше нет. */
+/* screen_w/screen_h — то, что видит скрипт: всегда полный размер окна.
+ * Апскейл уменьшает только оффскрин Vulkan (пикселей на GPU в scale^2 раз
+ * меньше), поэтому ни вёрстка, ни тачи от него не зависят. */
 static void apply_screen_size(void) {
     if (phys_w < 1 || phys_h < 1) return;
-    int s = current_render_scale();
-    int vw = phys_w / s, vh = phys_h / s;
-    if (vw < 1) vw = 1;
-    if (vh < 1) vh = 1;
-    screen_w = vw;
-    screen_h = vh;
+    screen_w = phys_w;
+    screen_h = phys_h;
+    ds_graphics_set_pixel_scale(current_render_scale());
 }
 /* Лимит FPS: досыпаем остаток кадра сном. 0 - без ограничения. */
 static void cap_frame_sleep(uint64_t frame_start_ns) {
@@ -169,12 +169,12 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
         i = (action == AMOTION_EVENT_ACTION_MOVE) ? 0 : index;
         count = (action == AMOTION_EVENT_ACTION_MOVE) ? count : index + 1;
         for (; i < count; i++) {
-            /* Координаты окна делим на масштаб апскейла: скрипт живёт в
-             * виртуальных пикселях (screen_w x screen_h), а не в физических. */
-            call.x = AMotionEvent_getX(event, i) / (float)active_scale;
-            call.y = AMotionEvent_getY(event, i) / (float)active_scale;
-            /* Край окна при масштабе: phys/s округляется вниз, и пара крайних
-             * пикселей может лечь за виртуальный экран — прижимаем к нему. */
+            /* Координаты окна — те же пиксели, в которых живёт скрипт:
+             * апскейл на них больше не влияет. */
+            call.x = AMotionEvent_getX(event, i);
+            call.y = AMotionEvent_getY(event, i);
+            /* Край окна: прижимаем к виртуальному экрану, чтобы касание у самой
+             * кромки не уходило за его пределы. */
             if (screen_w > 0) {
                 if (call.x < 0) call.x = 0;
                 if (call.x > (float)(screen_w - 1)) call.x = (float)(screen_w - 1);
@@ -259,7 +259,6 @@ void android_main(struct android_app *app) {
             if (!ds_call_protected(protected_update, NULL, "update")) mark_script_failed("update");
             else if (ds_script_restart_requested()) { script_active = 0; restart_after_ns = monotonic_ns(); }
         }
-        active_scale = current_render_scale();
         /* Кадр = Vulkan: захватываем изображение swapchain, скрипт складывает
          * команды, в end_frame GPU рисует их в оффскрин и делает present. */
         frame.pixels = NULL;

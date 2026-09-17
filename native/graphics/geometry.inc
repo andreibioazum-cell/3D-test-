@@ -61,6 +61,51 @@ static int geo_quad(const GeoVert q[4]) {
 }
 static void geo_reset(void) { geo_vn = 0; geo_in = 0; }
 
+/* --- кэш тригонометрии для вееров ---
+ *
+ * Круги и кольца встречаются в кадре сотнями (пыль, кнопки управления,
+ * хитбоксы, частицы вселенной и взрывы), и почти все они тесселируются с одним
+ * и тем же числом сегментов. cosf/sinf — самая дорогая часть построения
+ * геометрии, поэтому значения считаются один раз на пару (число сегментов,
+ * формула) и переиспользуются. Формулы углов ровно те же, что были при прямом
+ * вычислении, поэтому вершины получаются идентичными прежним. */
+#define GEO_TRIG_SLOTS 12
+typedef struct { int n, mode; float *cosv, *sinv; } GeoTrig;
+static GeoTrig geo_trig[GEO_TRIG_SLOTS];
+static int geo_trig_next;
+
+/* mode 0 — веер круга: a = i * 2pi / n (float-арифметика, как и раньше);
+ * mode 1 — лента кольца: a = (i / n) * 2pi (double-арифметика, как и раньше). */
+static const GeoTrig *geo_trig_table(int n, int mode) {
+    if (n < 3 || n > 4096) return NULL;
+    for (int i = 0; i < GEO_TRIG_SLOTS; i++) {
+        GeoTrig *t = &geo_trig[i];
+        if (t->cosv && t->n == n && t->mode == mode) return t;
+    }
+    GeoTrig *t = &geo_trig[geo_trig_next];
+    geo_trig_next = (geo_trig_next + 1) % GEO_TRIG_SLOTS;
+    free(t->cosv); free(t->sinv);
+    t->cosv = NULL; t->sinv = NULL; t->n = 0;
+    float *c = (float *)malloc((size_t)(n + 1) * sizeof(float));
+    float *v = (float *)malloc((size_t)(n + 1) * sizeof(float));
+    if (!c || !v) { free(c); free(v); return NULL; }
+    for (int i = 0; i <= n; i++) {
+        float a = mode == 0 ? (float)i * (float)(2.0 * M_PI) / (float)n
+                            : (float)((double)i / n * 2.0 * M_PI);
+        c[i] = cosf(a);
+        v[i] = sinf(a);
+    }
+    t->cosv = c; t->sinv = v; t->n = n; t->mode = mode;
+    return t;
+}
+static void geo_trig_free(void) {
+    for (int i = 0; i < GEO_TRIG_SLOTS; i++) {
+        free(geo_trig[i].cosv); free(geo_trig[i].sinv);
+        geo_trig[i].cosv = geo_trig[i].sinv = NULL;
+        geo_trig[i].n = geo_trig[i].mode = 0;
+    }
+}
+
 /* --- примитивы --- */
 
 static int geo_rect(float x, float y, float w, float h, uint32_t c) {
@@ -87,9 +132,12 @@ static int geo_circle(float x, float y, float r, uint32_t c) {
     int n = geo_circle_segs(r);
     size_t base = geo_vn;
     if (!geo_push_vert(x, y, 0.5f, 0.5f, c)) return 0;
+    const GeoTrig *tt = geo_trig_table(n, 0);
     for (int i = 0; i < n; i++) {
-        float a = (float)i * (float)(2.0 * M_PI) / (float)n;
-        if (!geo_push_vert(x + cosf(a) * r, y + sinf(a) * r, 0, 0, c)) return 0;
+        float ca, sa;
+        if (tt) { ca = tt->cosv[i]; sa = tt->sinv[i]; }
+        else { float a = (float)i * (float)(2.0 * M_PI) / (float)n; ca = cosf(a); sa = sinf(a); }
+        if (!geo_push_vert(x + ca * r, y + sa * r, 0, 0, c)) return 0;
     }
     for (int i = 1; i <= n; i++)
         if (!geo_push_index((uint16_t)base) ||
@@ -103,9 +151,11 @@ static int geo_ring(float x, float y, float r, float th, uint32_t c) {
     if (th >= r) return geo_circle(x, y, r, c);
     int n = geo_circle_segs(r);
     size_t base = geo_vn;
+    const GeoTrig *tt = geo_trig_table(n, 1);
     for (int i = 0; i <= n; i++) {
-        float a = (float)((double)i / n * 2.0 * M_PI);
-        float ca = cosf(a), sa = sinf(a);
+        float ca, sa;
+        if (tt) { ca = tt->cosv[i]; sa = tt->sinv[i]; }
+        else { float a = (float)((double)i / n * 2.0 * M_PI); ca = cosf(a); sa = sinf(a); }
         if (!geo_push_vert(x + ca * (r - th), y + sa * (r - th), 0, 0, c)) return 0;
         if (!geo_push_vert(x + ca * r, y + sa * r, 0, 0, c)) return 0;
     }
@@ -193,7 +243,10 @@ static int geo_roundrect(float x, float y, float w, float h, float rad, uint32_t
 static int geo_tex(float x, float y, float ang, float sc, float tw, float th_, uint32_t c) {
     if (!isfinite(x + y + ang + sc) || sc <= 0 || tw <= 0 || th_ <= 0) return 1;
     float hw = tw * 0.5f * sc, hh = th_ * 0.5f * sc;
-    float cx = x + hw, cy = y + hh, ca = cosf(ang), sa = sinf(ang);
+    /* Плитка фона арены — это десятки текстур без поворота за кадр: для нуля
+     * косинус и синус известны наперёд, лишний вызов тригонометрии не нужен. */
+    float ca = ang == 0.0f ? 1.0f : cosf(ang), sa = ang == 0.0f ? 0.0f : sinf(ang);
+    float cx = x + hw, cy = y + hh;
     static const float sx[4] = { -1, 1, 1, -1 }, sy[4] = { -1, -1, 1, 1 };
     static const float uu[4] = { 0, 1, 1, 0 },  vv[4] = { 0, 0, 1, 1 };
     GeoVert q[4];

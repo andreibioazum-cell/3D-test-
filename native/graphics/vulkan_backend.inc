@@ -69,6 +69,10 @@ static VkImageView vk_off_view;
 static VkFramebuffer vk_off_fb;
 static VkFormat vk_off_format = VK_FORMAT_R8G8B8A8_UNORM;
 static uint32_t vk_off_w, vk_off_h;
+/* Логический размер кадра (физические пиксели окна): в этих координатах живут
+ * скрипты, поэтому вершинный шейдер делит на них, а не на размер оффскрина —
+ * апскейл уменьшает число пикселей растра, но не увеличивает интерфейс. */
+static uint32_t vk_log_w, vk_log_h;
 
 typedef struct {
     VkCommandPool pool;
@@ -789,7 +793,10 @@ static int ds_vk_build_geometry(void) {
  * одной текстуры сливаются в один vkCmdDrawIndexed. */
 static void ds_vk_record_draws(VkCommandBuffer cmd) {
     if (vk_off_w == 0 || vk_off_h == 0) return;
-    float pc[4] = { 2.0f / (float)vk_off_w, 2.0f / (float)vk_off_h, -1.0f, -1.0f };
+    /* Координаты скриптов → NDC: масштаб берём из логического размера окна,
+     * иначе при апскейле весь интерфейс вырос бы в scale раз. */
+    uint32_t lw = vk_log_w ? vk_log_w : vk_off_w, lh = vk_log_h ? vk_log_h : vk_off_h;
+    float pc[4] = { 2.0f / (float)lw, 2.0f / (float)lh, -1.0f, -1.0f };
     int cur_pipe = -1;
     const void *cur_desc = NULL;
     size_t i = 0;
@@ -1186,9 +1193,10 @@ static int ds_vk_acquire_image(void) {
     return 1;
 }
 
-static int ds_vk_begin_frame_backend(uint32_t w, uint32_t h) {
+static int ds_vk_begin_frame_backend(uint32_t w, uint32_t h, uint32_t ow, uint32_t oh) {
     if (!vk_ready) return 0;
-    if (w == 0 || h == 0) return 0;
+    if (w == 0 || h == 0 || ow == 0 || oh == 0) return 0;
+    vk_log_w = w; vk_log_h = h;
     /* Размер окна мог смениться (поворот, IME): сверяемся с поверхностью. */
     if (vk_swap == VK_NULL_HANDLE || vk_need_recreate) {
         if (!ds_vk_recreate_swapchain()) return 0;
@@ -1208,7 +1216,7 @@ static int ds_vk_begin_frame_backend(uint32_t w, uint32_t h) {
     /* Заливки текстур ждём на хосте ДО записи команд кадра: к моменту
      * submit'а кадра transfer уже завершён (фенс), гонок отправок нет. */
     ds_vk_process_pending_uploads();
-    if (!ds_vk_ensure_offscreen(w, h, vk_sw_format)) return 0;
+    if (!ds_vk_ensure_offscreen(ow, oh, vk_sw_format)) return 0;
 
     /* Слот кадра: новый - только если прошлый начатый кадр был завершён
      * (submit или полный сброс); иначе переиспользуем текущий слот вместе
@@ -1234,13 +1242,13 @@ static int ds_vk_begin_frame_backend(uint32_t w, uint32_t h) {
     VkRenderPassBeginInfo ri = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
     ri.renderPass = vk_renderpass;
     ri.framebuffer = vk_off_fb;
-    ri.renderArea.extent.width = w;
-    ri.renderArea.extent.height = h;
+    ri.renderArea.extent.width = ow;
+    ri.renderArea.extent.height = oh;
     ri.clearValueCount = 1;
     ri.pClearValues = &clear;
     vkCmdBeginRenderPass(f->cmd, &ri, VK_SUBPASS_CONTENTS_INLINE);
-    VkViewport vp = { 0.0f, 0.0f, (float)w, (float)h, 0.0f, 1.0f };
-    VkRect2D sc = { { 0, 0 }, { w, h } };
+    VkViewport vp = { 0.0f, 0.0f, (float)ow, (float)oh, 0.0f, 1.0f };
+    VkRect2D sc = { { 0, 0 }, { ow, oh } };
     vkCmdSetViewport(f->cmd, 0, 1, &vp);
     vkCmdSetScissor(f->cmd, 0, 1, &sc);
     return 1;

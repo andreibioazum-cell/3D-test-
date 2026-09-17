@@ -44,8 +44,13 @@ function draw_hit_circle(number x, number y, number r, number rgb, number env)
     if r<=0||env<=0
         return
     end
-    circle(x,y,r,(((unsigned)(int)hb_fill_alpha(env))<<24)|((unsigned)(int)rgb))
-    ring(x,y,r,3,(((unsigned)(int)hb_line_alpha(env))<<24)|((unsigned)(int)rgb))
+    number fa=hb_fill_alpha(env), la=hb_line_alpha(env)
+    if fa>0
+        circle(x,y,r,(((unsigned)(int)fa)<<24)|((unsigned)(int)rgb))
+    end
+    if la>0
+        ring(x,y,r,3,(((unsigned)(int)la)<<24)|((unsigned)(int)rgb))
+    end
 end
 function draw_hit_circle_solid(number x, number y, number r, number rgb, number env)
     if show_hitboxes==0
@@ -54,8 +59,13 @@ function draw_hit_circle_solid(number x, number y, number r, number rgb, number 
     if r<=0||env<=0
         return
     end
-    circle(x,y,r,(((unsigned)(int)hb_solid_alpha(env))<<24)|((unsigned)(int)rgb))
-    ring(x,y,r,3,(((unsigned)(int)hb_line_alpha(env))<<24)|((unsigned)(int)rgb))
+    number sa=hb_solid_alpha(env), la=hb_line_alpha(env)
+    if sa>0
+        circle(x,y,r,(((unsigned)(int)sa)<<24)|((unsigned)(int)rgb))
+    end
+    if la>0
+        ring(x,y,r,3,(((unsigned)(int)la)<<24)|((unsigned)(int)rgb))
+    end
 end
 function draw_hit_line(number x1, number y1, number x2, number y2, number w, number rgb, number env)
     if show_hitboxes==0
@@ -64,7 +74,11 @@ function draw_hit_line(number x1, number y1, number x2, number y2, number w, num
     if w<=0||env<=0
         return
     end
-    line(x1,y1,x2,y2,w,(((unsigned)(int)hb_line_alpha(env))<<24)|((unsigned)(int)rgb))
+    number la=hb_line_alpha(env)
+    if la<=0
+        return
+    end
+    line(x1,y1,x2,y2,w,(((unsigned)(int)la)<<24)|((unsigned)(int)rgb))
 end
 function draw_hit_snowball(number x, number y, number dx, number dy, number t, number r, number env)
     draw_hit_circle_solid(x,y,r,hitbox_snow_rgb,env)
@@ -118,6 +132,11 @@ end
 function hb_aim_alpha(number env)
     return floor(aim_max_alpha*hb_env(env))
 end
+// Клетки зоны рывка: один общий массив на все вызовы (раньше на каждый кадр
+// рывка создавался и выбрасывался свой), а повтор предыдущей клетки отсекается
+// сравнением с соседом — путь прямой, поэтому в одну клетку можно попасть
+// только дважды подряд. Сами клетки теперь со скруглёнными углами.
+array dash_cells=arr_new()
 function draw_hit_dash_path(number sx, number sy, number dx, number dy, number cx, number cy, number pr, number env)
     number travel=(cx-sx)*dx+(cy-sy)*dy
     if travel<0
@@ -134,34 +153,33 @@ function draw_hit_dash_path(number sx, number sy, number dx, number dy, number c
     if side<=0
         side=2
     end
-    array cells=arr_new()
-    number off=0, step=side*0.5, px=0, py=0, gx=0, gy=0, seen=0, k=0
+    number aa=hb_aim_alpha(env)
+    if aa<=0
+        return
+    end
+    arr_clear(dash_cells)
+    number off=0, step=side*0.5, px=0, py=0, gx=0, gy=0, prev_x=0, prev_y=0, first=1
     loop off<=travel
         px=sx+dx*off
         py=sy+dy*off
         gx=floor(px/side)
         gy=floor(py/side)
-        seen=0
-        k=0
-        loop k<arr_len(cells)
-            if arr_get(cells,k)==gx&&arr_get(cells,k+1)==gy
-                seen=1
-                k=arr_len(cells)
-            end
-            k=k+2
-        end
-        if seen==0
-            arr_push(cells,gx)
-            arr_push(cells,gy)
+        if first==1||gx!=prev_x||gy!=prev_y
+            arr_push(dash_cells,gx)
+            arr_push(dash_cells,gy)
+            prev_x=gx
+            prev_y=gy
+            first=0
         end
         off=off+step
     end
-    number col=(((unsigned)(int)hb_aim_alpha(env))<<24)|((unsigned)(int)hitbox_dash_rgb)
-    k=0
-    loop k<arr_len(cells)
-        gx=arr_get(cells,k)
-        gy=arr_get(cells,k+1)
-        rect(gx*side,gy*side,side,side,col)
+    number col=(((unsigned)(int)aa)<<24)|((unsigned)(int)hitbox_dash_rgb)
+    number rad=side*hitbox_corner
+    number k=0
+    loop k<arr_len(dash_cells)
+        gx=arr_get(dash_cells,k)
+        gy=arr_get(dash_cells,k+1)
+        roundrect(gx*side,gy*side,side,side,rad,col)
         k=k+2
     end
 end

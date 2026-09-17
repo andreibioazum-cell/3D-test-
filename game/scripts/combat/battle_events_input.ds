@@ -210,6 +210,7 @@ function draw_online()
     number w=screen_w/3
     hud_bar(20,20,w,28,player.hp,player.max_hp,0x7ED321,0)
     draw_controls()
+    draw_fps_meter()
     draw_chat()
     draw_plates_hud()
     number st=net_status(), sy=chat_btn_y()+btn_h+12

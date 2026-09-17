@@ -185,11 +185,12 @@ double net_leaderboard_cups(double idx);
 
 /* Настройки игрока: язык (0 — English, 1 — русский, как в ui/locale_core.ds),
  * хитбоксы (1 — видны), громкость музыки (0..100, по умолчанию 70),
- * лимит FPS (0 — без ограничения, по умолчанию) и апскейл (1..3 — игра
- * рендерится в screen/scale и растягивается на окно, по умолчанию 1). Живут в
- * settings.dat на устройстве и в профиле /users/<ник> в облаке — то есть
- * сохраняются и там, и там, как прогресс.
- * Реализация — settings_storage.inc. */
+ * лимит FPS (0 — без ограничения, по умолчанию), апскейл (1..3 — игра
+ * рендерится в screen/scale и растягивается на окно, по умолчанию 1),
+ * зимняя тема (1 — снежный фон арены и снегопад, по умолчанию) и счётчик FPS
+ * в бою (0 — выключен, по умолчанию). Живут в settings.dat на устройстве и в
+ * профиле /users/<ник> в облаке — то есть сохраняются и там, и там, как
+ * прогресс. Реализация — settings_storage.inc. */
 double net_load_language(void);
 double net_load_hitboxes(void);
 void net_save_settings(double language, double hitboxes);
@@ -199,6 +200,10 @@ double net_load_fps_cap(void);
 void net_save_fps_cap(double cap);
 double net_load_render_scale(void);
 void net_save_render_scale(double scale);
+double net_load_winter_theme(void);
+void net_save_winter_theme(double on);
+double net_load_fps_meter(void);
+void net_save_fps_meter(double on);
 
 /* Бан система */
 double net_banned(void);

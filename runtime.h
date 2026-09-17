@@ -119,6 +119,12 @@ void ds_sound_shutdown(void);
 void ds_sound_pause(void);
 void ds_sound_resume(void);
 void ds_sound_set_java_vm(void *vm);
+/* Игровой шрифт: Comic Relief — метрически эквивалентная Comic Sans MS гарнитура
+ * под свободной лицензией SIL OFL 1.1 (текст лицензии лежит рядом с файлом,
+ * game/assets/fonts/ComicRelief-OFL.txt). Кириллица и латиница в нём есть,
+ * поэтому оба языка интерфейса рисуются одной гарнитурой. */
+#define DS_FONT_ASSET "fonts/ComicRelief-Regular.ttf"
+#define DS_FONT_PIXEL_HEIGHT 32
 void text(const char *string, float x, float y, uint32_t color);
 void text_scaled(const char *string, float x, float y, uint32_t color, float scale);
 /* Алиасы text_ink_* для более наглядного API из примера "Кликер". */
@@ -127,6 +133,10 @@ int text_height(const char *string);
 int text_ink_width(const char *string);
 int text_ink_height(const char *string);
 int text_ink_top(const char *string);
+/* Пиксельный масштаб апскейла: скрипты по-прежнему живут в физических пикселях
+ * окна (интерфейс не увеличивается), а кадр рисуется в оффскрин в scale раз
+ * меньше и растягивается на окно nearest-blit'ом. 1..3, по умолчанию 1. */
+void ds_graphics_set_pixel_scale(int scale);
 /* Создание Vulkan-рендера: менеджер активов плюс окно (для поверхности
  * VK_KHR_android_surface). Возвращает 1 при успехе; при 0 кадры не рисуются. */
 int ds_graphics_init(AAssetManager *assets, ANativeWindow *window);

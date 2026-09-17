@@ -76,10 +76,6 @@ function update_transition()
 end
 function load_textures()
     png_load(GRASS)
-    snow_tex_ok = 0
-    if candy_enabled == 1
-        snow_tex_ok = png_load(SNOW_TEX)
-    end
     png_load(ORDINARY_TEX)
     png_load(PUNCH_TEX)
     azum_tex_ok = png_load(AZUM_TEX)
@@ -105,6 +101,16 @@ function start_music()
     snd_loop(LOBBY_MUSIC)
     ds_log("init: lobby music on")
 end
+// Снежная плитка подгружается только для зимней темы: настройка читается из
+// хранилища после текстур, поэтому тему применяем отдельным шагом (и повторно —
+// на каждом тапе по «Зимней теме» в настройках).
+function apply_winter_theme()
+    if winter_theme == 1
+        snow_tex_ok = png_load(SNOW_TEX)
+        return
+    end
+    snow_tex_ok = 0
+end
 function init()
     ds_log("init: loading textures")
     load_textures()
@@ -114,6 +120,7 @@ function init()
     progress_from_storage()
     settings_from_storage()
     apply_video_settings()
+    apply_winter_theme()
     ds_log("init: ready")
 end
 function update_music()
@@ -179,6 +186,25 @@ end
 function tick_achievement_toast()
     ach_toast_t = tick_down(ach_toast_t)
 end
+// Счётчик FPS для боя: среднее за fps_interval секунд (dt — время между
+// кадрами, которое считает main.c), поэтому цифра не прыгает каждый кадр.
+function tick_fps_meter()
+    if show_fps == 0
+        fps_acc = 0
+        fps_frames = 0
+        return
+    end
+    fps_acc = fps_acc + dt
+    fps_frames = fps_frames + 1
+    if fps_acc < fps_interval
+        return
+    end
+    if fps_acc > 0
+        fps_value = fps_frames / fps_acc
+    end
+    fps_acc = 0
+    fps_frames = 0
+end
 function achievement_toast_text()
     if ach_toast_bit == ACH_FIRST_WIN
         return tr_achievement_first_win()
@@ -226,6 +252,7 @@ function update()
     update_transition()
     update_music()
     tick_achievement_toast()
+    tick_fps_meter()
     if game_state == ST_SOLO
         update_game()
     else if game_state == ST_ONLINE

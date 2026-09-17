@@ -213,11 +213,14 @@ static void test_video_settings(void) {
     assert(ds_fn_next_render_scale(1) == 2);
     assert(ds_fn_next_render_scale(2) == 3);
     assert(ds_fn_next_render_scale(3) == 1);
-    /* Все 8 строк настроек помещаются на низком (landscape) экране. */
+    /* Все 10 строк настроек помещаются на низком (landscape) экране: на
+     * экранах ниже нужного шаг строк сжимается (но не меньше высоты кнопки). */
     screen_h = 720;
-    assert(ds_fn_settings_row_y(7) + 56 <= screen_h - 4);
+    assert(ds_fn_settings_row_y(9) + 56 <= screen_h - 4);
+    screen_h = 640;
+    assert(ds_fn_settings_row_y(9) + 56 <= screen_h - 4);
     screen_h = 1280;
-    assert(ds_fn_settings_row_y(7) + 56 <= screen_h - 4);
+    assert(ds_fn_settings_row_y(9) + 56 <= screen_h - 4);
     puts("video settings: fps/scale cycling and settings screen fit OK");
 }
 

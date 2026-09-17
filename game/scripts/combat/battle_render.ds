@@ -201,7 +201,7 @@ end
 function draw_punch_box(number x, number y, number dx, number dy, number reach, number width, number alpha)
     number aa=floor(clamp(alpha,0,1)*aim_max_alpha)
     if aa>0
-        line(x,y,x+dx*reach,y+dy*reach,width,(((unsigned)(int)aa)<<24)|((unsigned)(int)hitbox_gray_rgb))
+        line(x,y,x+dx*reach,y+dy*reach,width,(((unsigned)(int)aa)<<24)|((unsigned)(int)hitbox_rgb))
     end
 end
 function fighter_sprite(number cls, number punching, number skin)
@@ -341,6 +341,22 @@ function draw_result(string title)
     end
     ctext_scaled(tr_tap_to_return(),y+188,0xFFFFFF,0.62)
 end
+// Счётчик FPS в бою: маленькая плашка по центру сверху — между полосами
+// здоровья, они занимают только левую и правую четверть экрана.
+function draw_fps_meter()
+    if show_fps==0
+        return
+    end
+    string label="FPS "+floor(fps_value+0.5)
+    number sc=fps_text_scale
+    number tw=text_ink_width(label)*sc
+    number th=text_ink_height(label)*sc
+    number tt=text_ink_top(label)*sc
+    number w=tw+28, h=36
+    number x=(screen_w-w)/2, y=16
+    roundrect(x,y,w,h,h/2,fps_plate_rgb)
+    text_scaled(label,x+(w-tw)/2,y+(h-th)/2-tt+1.5,text_color,sc)
+end
 function draw_dash_streak()
     return
 end
@@ -380,6 +396,7 @@ function draw_game()
     hud_bar(20,20,w,28,player.hp,player.max_hp,0x7ED321,0)
     hud_bar(screen_w-w-20,20,w,28,enemy.hp,enemy.max_hp,0xE94560,1)
     draw_controls()
+    draw_fps_meter()
     if finished==1
         draw_result(tr_victory())
     else if finished==2

@@ -80,6 +80,8 @@ BUILTINS = frozenset({
     'net_load_music_volume', 'net_save_music_volume',
     'net_load_fps_cap', 'net_save_fps_cap',
     'net_load_render_scale', 'net_save_render_scale',
+    'net_load_winter_theme', 'net_save_winter_theme',
+    'net_load_fps_meter', 'net_save_fps_meter',
     'ds_set_fps_cap', 'ds_set_render_scale',
     'keyboard_show',
     'keyboard_hide', 'keyboard_get_text', 'keyboard_get_raw', 'keyboard_clear',

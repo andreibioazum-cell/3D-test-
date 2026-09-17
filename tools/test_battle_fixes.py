@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Regression checks for the battle fixes batch, without Android or Firebase.
 
-Covers: real dash hitbox (traveled length), turret shield of the buk absorbing
-all damage, snowflakes piercing turrets, smooth hitbox fades, filled snowflake
-hitbox, poison drawn green next to blue freeze, and the warning/studio splash
-timing (black screen never jumps). Compiles the real DimScript sources with a
-host C harness and asserts on the actual logic/draw calls.
+Covers: real dash hitbox (traveled length, rounded dark cells), turret shield of
+the buk absorbing all damage, snowflakes piercing turrets, smooth hitbox fades,
+filled snowflake hitbox, poison drawn green next to blue freeze, and the
+warning/studio splash timing (black screen never jumps). Compiles the real
+DimScript sources with a host C harness and asserts on the actual logic/draw
+calls.
 """
 from pathlib import Path
 import json
@@ -74,7 +75,7 @@ void tex_tint(float x, float y, const char *name, float a, float sc, uint32_t c)
     tint_calls++;
     snprintf(tint_last, sizeof(tint_last), "%s", name ? name : "");
 }
-void roundrect(float x, float y, float w, float h, float r, uint32_t color) { (void)x; (void)y; (void)w; (void)h; (void)r; (void)color; }
+
 int text_ink_width(const char *s) { (void)s; return 10; }
 int text_ink_height(const char *s) { (void)s; return 10; }
 int text_ink_top(const char *s) { (void)s; return 2; }
@@ -253,6 +254,11 @@ void line(float x1, float y1, float x2, float y2, float t, uint32_t c) {
     calls[call_count - 1].t = t;   /* толщина полосы — она и есть ширина зоны */
 }
 void rect(float x, float y, float w, float h, uint32_t c) { record('q', x, y, w, h, c); }
+/* roundrect пишут и меню, и зоны рывка: запоминаем вызов вместе с радиусом. */
+void roundrect(float x, float y, float w, float h, float r, uint32_t color) {
+    record('o', x, y, w, h, color);
+    calls[call_count - 1].r = r;
+}
 
 static int count_kind_color(char kind, uint32_t color) {
     int n = 0;
@@ -464,9 +470,9 @@ static void test_hitbox_drawing(void) {
     enemy->x = 1000; enemy->y = 400; enemy->size = 25;
     enemy->hp = 999; enemy->max_hp = 999;
     player->hp = 999; player->max_hp = 999;
-    uint32_t gray = 0x00808080;
-    uint32_t solid = (140u << 24) | gray;   /* hitbox_solid_alpha=140 */
-    uint32_t line_c = (170u << 24) | gray;  /* hitbox_line_alpha=170 */
+    uint32_t dark = 0x00000000;             /* hitbox_rgb: тёмные, как раньше */
+    uint32_t solid = (140u << 24) | dark;   /* hitbox_solid_alpha=140 */
+    uint32_t line_c = (170u << 24) | dark;  /* hitbox_line_alpha=170 */
     /* Снежинка: вся зона залита (сплошной круг), линия пути и взрыв тоже. */
     gift->active = 1; snow_ball_a = 1;
     gift->x = 400; gift->y = 400; gift->dx = 1; gift->dy = 0; gift->t = 0;
@@ -480,31 +486,35 @@ static void test_hitbox_drawing(void) {
     snow_ball_a = 0.5;
     call_count = 0;
     ds_fn_draw_ability_hitboxes();
-    assert(count_kind_color('c', (70u << 24) | gray) >= 1);
+    assert(count_kind_color('c', (70u << 24) | dark) >= 1);
     gift->active = 0; boom_t = 0;
     /* Зоны рисуются, пока жива их альфа: после полного затухания — ничего. */
     snow_ball_a = 0; snow_boom_a = 0;
-    /* Рывок: зона урона — ОДИН слой квадратных больших хитбоксов по уже
-     * проеханному отрезку (клетки мира размером со сторону квадрата).
-     * Второго слоя нет: ни мелких кубиков следом, ни полосы, ни пятна. */
+    /* Рывок: зона урона — ОДИН слой больших клеток по уже проеханному
+     * отрезку (клетки мира размером со сторону квадрата), теперь со
+     * скруглёнными углами. Второго слоя нет: ни мелких кубиков следом, ни
+     * полосы, ни пятна. */
     dash_active = 1; dash_box_a = 1;
     dash_x0 = 300; dash_y0 = 400; dash_dx = 1; dash_dy = 0;
     player->x = 700; player->y = 400;
     call_count = 0;
     ds_fn_draw_ability_hitboxes();
-    uint32_t aim_c = (102u << 24) | gray;        /* aim_max_alpha=102 */
+    uint32_t aim_c = (102u << 24) | dark;        /* aim_max_alpha=102 */
     double pr = ds_fn_dash_hit_radius_solo();    /* тот же радиус, что и урон */
     double side = pr * dash_hitbox_zone_scale;   /* сторона большого квадрата */
     double travel = azum_dash_speed * azum_dash_time;   /* 382.5 из 400 пути */
-    int squares = count_kind_color('q', aim_c);
+    int squares = count_kind_color('o', aim_c);
     assert(squares >= (int)(travel / side));
     assert(squares >= 8);
+    assert(count_kind_color('q', aim_c) == 0);       /* острых квадратов больше нет */
     for (int i = 0; i < call_count; i++) {
-        if (calls[i].kind != 'q' || calls[i].color != aim_c) continue;
-        /* Все квадраты одного большого размера и сидят на сетке мира
-         * (координаты хранятся во float, поэтому допуск 1e-3). */
+        if (calls[i].kind != 'o' || calls[i].color != aim_c) continue;
+        /* Все клетки одного большого размера, сидят на сетке мира и
+         * скруглены одной долей стороны (координаты во float, допуск 1e-3). */
         assert(fabs(calls[i].w - side) < 1e-3);
         assert(fabs(calls[i].h - side) < 1e-3);
+        assert(fabs(calls[i].r - side * hitbox_corner) < 1e-3);
+        assert(calls[i].r > 0);
         double gx = calls[i].x / side, gy = calls[i].y / side;
         assert(fabs(gx - floor(gx + 0.5)) < 1e-3);   /* центр клетки сетки */
         assert(fabs(gy - floor(gy + 0.5)) < 1e-3);
@@ -520,7 +530,8 @@ static void test_hitbox_drawing(void) {
     enemy->x = 800; enemy->y = 400;
     call_count = 0;
     ds_fn_draw_ability_hitboxes();
-    assert(count_kind_color('q', aim_c) >= 5);
+    assert(count_kind_color('o', aim_c) >= 5);
+    assert(count_kind_color('q', aim_c) == 0);
     assert(count_kind_color('l', aim_c) == 0);
     assert(count_kind_color('c', aim_c) == 0);
     enemy_dash_active = 0;
@@ -531,11 +542,12 @@ static void test_hitbox_drawing(void) {
     arr_set(turret_box_a, 0, 1);
     call_count = 0;
     ds_fn_draw_ability_hitboxes();
-    assert(count_kind_color('q', (36u << 24) | gray) == 0);  /* без заливки квадрата */
+    assert(count_kind_color('q', (36u << 24) | dark) == 0);  /* без заливки квадрата */
+    assert(count_kind_color('o', (36u << 24) | dark) == 0);  /* без скруглённой заливки */
     assert(count_kind_color('l', line_c) == 0);              /* без контура */
     assert(count_kind_color('r', line_c) == 0);              /* без круглого контура */
-    assert(count_kind_color('c', (36u << 24) | gray) == 0);  /* без круглой заливки */
-    puts("hitboxes: real geometry drawn, snowflake solid-filled, dash is big squares only");
+    assert(count_kind_color('c', (36u << 24) | dark) == 0);  /* без круглой заливки */
+    puts("hitboxes: dark geometry, snowflake solid-filled, dash is rounded cells only");
 }
 
 static void test_poison_green(void) {
@@ -622,7 +634,7 @@ static void test_punch_hitbox_fades(void) {
     enemy->x = 400; enemy->y = 300; enemy->angle = 0;
     call_count = 0;
     ds_fn_draw_enemy_hitbox();
-    assert(count_kind_color('l', (51u << 24) | 0x00808080) == 1);  /* floor(0.5*102) */
+    assert(count_kind_color('l', (51u << 24) | 0x00000000) == 1);  /* floor(0.5*102) */
     /* Конец боя: все хитбоксы гаснут плавно, а не исчезают разом. */
     ds_fn_reset_battle();
     game_state = ST_SOLO;
@@ -1022,10 +1034,13 @@ def main():
         # Dash resolution takes the traveled length.
         params = [p[1] for p in fns["dash_resolve_target"][0]]
         assert params == ["sx", "sy", "dx", "dy", "len"]
-        # Dash hitbox: one layer of big squares, no small trailing cube chain.
+        # Dash hitbox: one layer of big rounded cells, no small trailing cube
+        # chain and no stripe; cells are reused from one shared array.
         assert "draw_hit_dash_cube" not in fns and "draw_hit_dash_zone" not in fns
         dash_body = "".join(fns["draw_hit_dash_path"][1])
-        assert "rect(" in dash_body and "line(" not in dash_body
+        assert "roundrect(" in dash_body and "line(" not in dash_body
+        assert "hitbox_corner" in dash_body, "dash cells must be rounded"
+        assert "arr_new()" not in dash_body, "dash cells must reuse one array"
         # Own turret can never intercept the owner's punch.
         assert "punch_turret_target" not in fns
         # Turret shadow is the despenser sprite itself (square, tinted).

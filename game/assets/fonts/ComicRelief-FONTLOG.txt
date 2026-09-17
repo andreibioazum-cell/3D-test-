@@ -1,0 +1,25 @@
+V1.0 17 JAN 2013
+- Initial release. Contains all glyphs necessary to replace Comic Sans MS Regular V5.0
+
+V1.1 19 NOV 2013
+- Bold Variant added
+- Very minor changes
+    - Highest/lowest points adjusted for better compatibility with Comic Sans MS
+    - Crossbar of lowercase 't' raised slightly
+
+V1.1.1 12 AUG 2017
+- Points removed from subscript '4'
+
+V1.1.2 15 JUL 2023
+- Changed OS/2 Win Descent from -42 to 0 to get sources to compile with gftools
+- Several name table changes to pass Fontbakery Google Font errors
+
+V1.2 3 FEB 2025 - Added to Google Fonts!
+- Added missing glyphs from Google Fonts Latin_core glyphset, which extends Comic Relief slightly outside the character set of Comic Sans MS
+    - Capital German double S
+    - All of the combining diacritics in the Latin_core list
+- Updated OS/2 metrics to meet Google Fonts requirements, or otherwise match Comic Sans MS 5.1
+- Adjusted width on bold non-breaking space to match regular space, mismatch in Comic Sans MS appears to be abug
+- Corrected dottlessj glyph name in bold font
+- Fix minor issues with bold capital 'P' and 'R'
+- Update copyright strings to match Google Fonts format

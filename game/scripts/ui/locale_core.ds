@@ -368,6 +368,32 @@ function tr_hitboxes_toggle()
     end
     return "Hitboxes: OFF"
 end
+// Зимняя тема одним тапом включает и выключает снежный фон арены и снегопад.
+function tr_winter_toggle()
+    if language == 1
+        if winter_theme == 1
+            return "Зимняя тема: ВКЛ"
+        end
+        return "Зимняя тема: ВЫКЛ"
+    end
+    if winter_theme == 1
+        return "Winter theme: ON"
+    end
+    return "Winter theme: OFF"
+end
+// Счётчик FPS показывается только в бою (соло, онлайн и ивенты).
+function tr_fps_meter_toggle()
+    if language == 1
+        if show_fps == 1
+            return "FPS в бою: ВКЛ"
+        end
+        return "FPS в бою: ВЫКЛ"
+    end
+    if show_fps == 1
+        return "Battle FPS: ON"
+    end
+    return "Battle FPS: OFF"
+end
 function tr_fps_label()
     if language == 1
         return "Частота кадров"
