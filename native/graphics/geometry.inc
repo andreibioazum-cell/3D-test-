@@ -23,7 +23,10 @@ static uint16_t *geo_idx;
 static size_t geo_in, geo_icap;
 
 static int geo_push_vert(float x, float y, float u, float v, uint32_t c) {
-    if (geo_vn >= (size_t)UINT16_MAX * 4) return 0; /* индексы uint16 + запас */
+    /* Индексы uint16 адресуют максимум 65536 вершин: переполнение давало бы
+     * чтение мусорных вершин на GPU (вплоть до device lost) - лишнее
+     * молча не добавляем. */
+    if (geo_vn >= 65535) return 0;
     if (geo_vn == geo_vcap) {
         size_t cap = geo_vcap ? geo_vcap * 2 : 1024;
         if (cap > SIZE_MAX / sizeof(*geo_verts)) return 0;

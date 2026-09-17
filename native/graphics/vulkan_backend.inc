@@ -83,6 +83,11 @@ typedef struct {
 } DsVkFrame;
 static DsVkFrame vk_frames[DS_VK_FRAMES_IN_FLIGHT];
 static int vk_frame_cur;
+/* Кадр начат (изображение захвачено), но ещё не показан: cancel_frame или
+ * ошибка submit оставляют слот в этом состоянии - следующий begin обязан
+ * переиспользовать ТОТ ЖЕ слот и то же изображение, иначе submit будет ждать
+ * семафор, сигнал от которого уже потерян. */
+static int vk_begun;
 
 /* Пулы дескрипторов: по набору на текстуру и один на шрифтовой атлас. */
 static VkDescriptorPool *vk_desc_pools;
@@ -452,8 +457,12 @@ static int ds_vk_create_pipeline(VkShaderModule frag, VkPipelineLayout layout, i
     pi.subpass = 0;
     int ok = ds_vk_check_result(vkCreateGraphicsPipelines(vk_device, VK_NULL_HANDLE, 1, &pi, NULL, out),
                                 "vkCreateGraphicsPipelines");
+    /* Вершинный модуль создан здесь - уничтожаем здесь. Фрагментный модуль
+     * принадлежит вызывающему коду: один frag_solid используется двумя
+     * конвейерами (обычным и replace), уничтожать его после первого же
+     * создания конвейера значило бы строить второй по освобождённому
+     * хендлу - мгновенный краш на устройстве. */
     vkDestroyShaderModule(vk_device, stages[0].module, NULL);
-    vkDestroyShaderModule(vk_device, frag, NULL);
     return ok;
 }
 
@@ -556,7 +565,8 @@ static int ds_vk_recreate_swapchain(void) {
         if (f == VK_FORMAT_R8G8B8A8_UNORM || f == VK_FORMAT_B8G8R8A8_UNORM) { chosen = formats[i]; break; }
     }
     free(formats);
-    vk_sw_format = chosen.format;
+    /* VK_FORMAT_UNDEFINED означает "подойдёт любой" - выбираем сами. */
+    vk_sw_format = chosen.format == VK_FORMAT_UNDEFINED ? VK_FORMAT_R8G8B8A8_UNORM : chosen.format;
 
     VkFormatProperties fp;
     vkGetPhysicalDeviceFormatProperties(vk_phys, vk_sw_format, &fp);
@@ -1028,21 +1038,21 @@ static int ds_vk_init_backend(ANativeWindow *window) {
                             "vkCreatePipelineLayout(tint)")) { ds_vk_shutdown_backend(); return 0; }
 
     VkShaderModule frag_solid = VK_NULL_HANDLE, frag_image = VK_NULL_HANDLE, frag_tint = VK_NULL_HANDLE;
-    if (!ds_vk_create_shader_module(ds_spirv_solid_frag,
-                                    sizeof(ds_spirv_solid_frag) / sizeof(uint32_t), &frag_solid) ||
-        !ds_vk_create_shader_module(ds_spirv_image_frag,
-                                    sizeof(ds_spirv_image_frag) / sizeof(uint32_t), &frag_image) ||
-        !ds_vk_create_shader_module(ds_spirv_tint_frag,
-                                    sizeof(ds_spirv_tint_frag) / sizeof(uint32_t), &frag_tint) ||
-        !ds_vk_create_pipeline(frag_solid, vk_layout_solid, 1, &vk_pipe_solid) ||
-        !ds_vk_create_pipeline(frag_image, vk_layout_image, 1, &vk_pipe_image) ||
-        !ds_vk_create_pipeline(frag_tint, vk_layout_tint, 1, &vk_pipe_tint) ||
-        !ds_vk_create_pipeline(frag_solid, vk_layout_solid, 0, &vk_pipe_replace)) {
-        if (frag_solid != VK_NULL_HANDLE) vkDestroyShaderModule(vk_device, frag_solid, NULL);
-        if (frag_image != VK_NULL_HANDLE) vkDestroyShaderModule(vk_device, frag_image, NULL);
-        if (frag_tint != VK_NULL_HANDLE) vkDestroyShaderModule(vk_device, frag_tint, NULL);
-        ds_vk_shutdown_backend(); return 0;
-    }
+    int ok = ds_vk_create_shader_module(ds_spirv_solid_frag,
+                                        sizeof(ds_spirv_solid_frag) / sizeof(uint32_t), &frag_solid) &&
+             ds_vk_create_shader_module(ds_spirv_image_frag,
+                                        sizeof(ds_spirv_image_frag) / sizeof(uint32_t), &frag_image) &&
+             ds_vk_create_shader_module(ds_spirv_tint_frag,
+                                        sizeof(ds_spirv_tint_frag) / sizeof(uint32_t), &frag_tint) &&
+             ds_vk_create_pipeline(frag_solid, vk_layout_solid, 1, &vk_pipe_solid) &&
+             ds_vk_create_pipeline(frag_solid, vk_layout_solid, 0, &vk_pipe_replace) &&
+             ds_vk_create_pipeline(frag_image, vk_layout_image, 1, &vk_pipe_image) &&
+             ds_vk_create_pipeline(frag_tint, vk_layout_tint, 1, &vk_pipe_tint);
+    /* Модули больше не нужны при любом исходе - конвейеры их скопировали. */
+    if (frag_solid != VK_NULL_HANDLE) vkDestroyShaderModule(vk_device, frag_solid, NULL);
+    if (frag_image != VK_NULL_HANDLE) vkDestroyShaderModule(vk_device, frag_image, NULL);
+    if (frag_tint != VK_NULL_HANDLE) vkDestroyShaderModule(vk_device, frag_tint, NULL);
+    if (!ok) { ds_vk_shutdown_backend(); return 0; }
 
     if (!ds_vk_create_frame_resources()) { ds_vk_shutdown_backend(); return 0; }
 
@@ -1100,6 +1110,7 @@ static void ds_vk_shutdown_backend(void) {
     vk_ready = 0;
     vk_need_recreate = 0;
     vk_image_held = 0;
+    vk_begun = 0;
     free(vk_batches);
     vk_batches = NULL; vk_batch_n = vk_batch_cap = 0;
 }
@@ -1142,10 +1153,18 @@ static int ds_vk_begin_frame_backend(uint32_t w, uint32_t h) {
             }
         }
     }
+    /* Заливки текстур ждём на хосте ДО записи команд кадра: к моменту
+     * submit'а кадра transfer уже завершён (фенс), гонок отправок нет. */
+    ds_vk_process_pending_uploads();
     if (!ds_vk_ensure_offscreen(w, h, vk_sw_format)) return 0;
 
-    /* Слот кадра: ждём его предыдущий submit (если был), затем пишем новый. */
-    vk_frame_cur = (vk_frame_cur + 1) % DS_VK_FRAMES_IN_FLIGHT;
+    /* Слот кадра: новый - только если прошлый начатый кадр был завершён
+     * (submit или полный сброс); иначе переиспользуем текущий слот вместе
+     * с его уже захваченным изображением. */
+    if (!vk_begun) {
+        vk_frame_cur = (vk_frame_cur + 1) % DS_VK_FRAMES_IN_FLIGHT;
+        vk_begun = 1;
+    }
     DsVkFrame *f = &vk_frames[vk_frame_cur];
     if (f->submitted) {
         if (!ds_vk_check_result(vkWaitForFences(vk_device, 1, &f->fence, VK_TRUE, UINT64_MAX),
@@ -1178,7 +1197,6 @@ static int ds_vk_begin_frame_backend(uint32_t w, uint32_t h) {
 
 static void ds_vk_end_frame_backend(void) {
     DsVkFrame *f = &vk_frames[vk_frame_cur];
-    ds_vk_process_pending_uploads();
     if (ds_vk_build_geometry() && geo_in > 0 &&
         ds_vk_frame_ensure_capacity(f, geo_vn, geo_in)) {
         memcpy(f->vmap, geo_verts, geo_vn * sizeof(GeoVert));
@@ -1192,7 +1210,7 @@ static void ds_vk_end_frame_backend(void) {
     }
     vkCmdEndRenderPass(f->cmd);
     if (vk_swap == VK_NULL_HANDLE || vk_sw_index >= vk_sw_count || vk_off_image == VK_NULL_HANDLE)
-        return; /* показывать нечего; кадр остаётся захваченным - переиспользуем */
+        return; /* показывать нечего: vk_begun остаётся 1, слот переиспользуется */
     ds_vk_record_present_blit(f->cmd);
     if (!ds_vk_check_result(vkEndCommandBuffer(f->cmd), "vkEndCommandBuffer(frame)"))
         return;
@@ -1223,4 +1241,5 @@ static void ds_vk_end_frame_backend(void) {
     if (pr == VK_ERROR_OUT_OF_DATE_KHR || pr == VK_SUBOPTIMAL_KHR) vk_need_recreate = 1;
     else if (pr != VK_SUCCESS) ds_log_err("vulkan: vkQueuePresentKHR failed (%d)", (int)pr);
     vk_image_held = 0;
+    vk_begun = 0;
 }
