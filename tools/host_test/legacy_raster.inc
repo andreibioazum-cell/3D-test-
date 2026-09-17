@@ -418,3 +418,31 @@ static void draw_tx_unrot_tint(Buffer *b, const Texture *t, float x, float y, fl
     }
 }
 static void draw_tx_rot_tint(Buffer *b, const Texture *t, float x, float y, float ang, float sc, uint32_t tint) {
+    float hw = t->w*0.5f*sc, hh = t->h*0.5f*sc;
+    float cx = x+hw, cy = y+hh, ca = cosf(ang), sa = sinf(ang);
+    float dx = fabsf(hw*ca) + fabsf(hh*sa), dy = fabsf(hw*sa) + fabsf(hh*ca);
+    int l = cl_floor(floorf(cx-dx), b->width), t0 = cl_floor(floorf(cy-dy), b->height);
+    int r = cl_ceil(ceilf(cx+dx), b->width),   bo = cl_ceil(ceilf(cy+dy), b->height);
+    uint32_t tr = tint & 0xff, tg = (tint >> 8) & 0xff, tb = (tint >> 16) & 0xff, ta = (tint >> 24) & 0xff;
+    for (int sy = t0; sy < bo; sy++) {
+        float py = (float)sy + 0.5f - cy;
+        for (int sx = l; sx < r; sx++) {
+            float px = (float)sx + 0.5f - cx;
+            int tx = (int)floorf((px*ca + py*sa)/sc + t->w*0.5f);
+            int ty = (int)floorf((-px*sa + py*ca)/sc + t->h*0.5f);
+            if (tx < 0 || tx >= t->w || ty < 0 || ty >= t->h) continue;
+            uint32_t p = t->pixels[ty*t->w + tx];
+            uint32_t sa = (p >> 24) & 0xff;
+            if (!sa) continue;
+            uint32_t a = (sa * ta) / 255;
+            if (!a) continue;
+            uint32_t s = tr | (tg << 8) | (tb << 16) | (a << 24);
+            b->pixels[sy*b->stride + sx] = blend(b->pixels[sy*b->stride + sx], s);
+        }
+    }
+}
+static void draw_tx_tint(Buffer *b, const Texture *t, float x, float y, float a, float sc, uint32_t tint) {
+    if (!b || !t || !t->pixels || !isfinite(x+y+a+sc) || sc <= 0) return;
+    if (fabsf(a) < 0.0005f) { draw_tx_unrot_tint(b, t, x, y, sc, tint); return; }
+    draw_tx_rot_tint(b, t, x, y, a, sc, tint);
+}

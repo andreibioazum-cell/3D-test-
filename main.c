@@ -47,24 +47,10 @@ static int current_render_scale(void) {
     return s;
 }
 static int phys_w = 0, phys_h = 0;
-static int active_scale = 1; /* масштаб, которым реально рисуем: тот же для тачей */
-static uint32_t *virt_pixels = NULL;
-static int virt_w = 0, virt_h = 0;
-static void virt_ensure(int w, int h) {
-    if (virt_w == w && virt_h == h) return;
-    free(virt_pixels);
-    virt_pixels = NULL;
-    virt_w = 0;
-    virt_h = 0;
-    if (w < 1 || h < 1) return;
-    void *p = malloc((size_t)w * (size_t)h * sizeof(uint32_t));
-    if (!p) return; /* не хватило памяти - рисуем в полный размер без апскейла */
-    memset(p, 0, (size_t)w * (size_t)h * sizeof(uint32_t));
-    virt_pixels = (uint32_t *)p;
-    virt_w = w;
-    virt_h = h;
-}
-/* Виртуальный экран = окно / масштаб. screen_w/screen_h — то, что видит скрипт. */
+static int active_scale = 1; /* масштаб апскейла: тот же для тачей */
+/* Виртуальный экран = окно / масштаб. screen_w/screen_h — то, что видит скрипт.
+ * Рендер идёт через Vulkan в оффскрин этого размера и растягивается на окно
+ * nearest-blit'ом на GPU, поэтому CPU-буферов больше нет. */
 static void apply_screen_size(void) {
     if (phys_w < 1 || phys_h < 1) return;
     int s = current_render_scale();
@@ -73,31 +59,6 @@ static void apply_screen_size(void) {
     if (vh < 1) vh = 1;
     screen_w = vw;
     screen_h = vh;
-    /* Буфер сверяем всегда, а не только при смене размера: если прошлый
-     * malloc не удался, следующая попытка будет уже в этом кадре. */
-    if (!virt_pixels || virt_w != vw || virt_h != vh) virt_ensure(vw, vh);
-}
-/* nearest-neighbor: каждый виртуальный пиксель масштабируется в s x s.
- * Координаты источника клампятся: ширина/высота окна не обязаны делиться на
- * масштаб нацело, и без клампа крайние столбцы/строки читали бы мусор за
- * концом виртуального буфера. Строки приёмника шагаем по его страйду, а не по
- * ширине: у ANativeWindow stride бывает шире видимой области, и запись по
- * ширине давала бы «полосатую кашу» со сдвигом строк. */
-static void upscale_nearest(const uint32_t *src, int sw, int sh,
-                            uint32_t *dst, int dw, int dh, int dst_stride, int s) {
-    if (!src || !dst || sw < 1 || sh < 1 || dw < 1 || dh < 1 || s < 1) return;
-    if (dst_stride < dw) dst_stride = dw;
-    for (int y = 0; y < dh; y++) {
-        int sy = y / s;
-        if (sy >= sh) sy = sh - 1;
-        const uint32_t *srow = src + (size_t)sy * (size_t)sw;
-        uint32_t *drow = dst + (size_t)y * (size_t)dst_stride;
-        for (int x = 0; x < dw; x++) {
-            int sx = x / s;
-            if (sx >= sw) sx = sw - 1;
-            drow[x] = srow[sx];
-        }
-    }
 }
 /* Лимит FPS: досыпаем остаток кадра сном. 0 - без ограничения. */
 static void cap_frame_sleep(uint64_t frame_start_ns) {
@@ -165,9 +126,10 @@ static void handle_cmd(struct android_app *app, int32_t command) {
             if (phys_w <= 0 || phys_h <= 0) { init_done = 0; return; }
             apply_screen_size();
             script_assets = app->activity ? app->activity->assetManager : NULL;
-            ANativeWindow_setBuffersGeometry(app->window, 0, 0, WINDOW_FORMAT_RGBA_8888);
             ds_set_activity(app->activity);
-            if (!ds_graphics_init(script_assets)) { init_done = 0; return; }
+            /* Vulkan-рендер создаётся на каждое окно заново (окно после
+             * сворачивания - новая поверхность); активы перечитываются лениво. */
+            if (!ds_graphics_init(script_assets, app->window)) { init_done = 0; return; }
             /* Звуки лежат в тех же assets (sounds/...), играют через OpenSL ES. */
             ds_sound_init(script_assets);
             ds_sound_resume();
@@ -176,12 +138,9 @@ static void handle_cmd(struct android_app *app, int32_t command) {
         case APP_CMD_WINDOW_RESIZED:
         case APP_CMD_CONTENT_RECT_CHANGED:
         case APP_CMD_CONFIG_CHANGED:
-            /* adjustResize changes the game surface while the IME is open. */
+            /* adjustResize меняет поверхность при открытой клавиатуре; размер
+             * swapchain/оффскрина Vulkan подстроит в начале следующего кадра. */
             if (app->window) {
-                /* Re-assert the pixel format: some devices switch the surface
-                 * format after an IME-driven resize, which made ANativeWindow_lock
-                 * return buffers the renderer would reject (blank/crashy frames). */
-                ANativeWindow_setBuffersGeometry(app->window, 0, 0, WINDOW_FORMAT_RGBA_8888);
                 int w = ANativeWindow_getWidth(app->window);
                 int h = ANativeWindow_getHeight(app->window);
                 if (w > 0 && h > 0) { phys_w = w; phys_h = h; apply_screen_size(); }
@@ -277,7 +236,7 @@ void android_main(struct android_app *app) {
     ds_sound_set_java_vm((void *)app->activity->vm);
     net_set_data_path(app->activity->internalDataPath);
     ds_set_activity(app->activity);
-    ds_log("DimScript Android 10 arm64/arm32 only + system keyboard (JNI)");
+    ds_log("DimScript Android + Vulkan renderer + system keyboard (JNI)");
     for (;;) {
         struct android_poll_source *source = NULL; int ident;
         while ((ident = ALooper_pollOnce(script_active ? 0 : 10, NULL, NULL, (void **)&source)) >= 0) {
@@ -290,7 +249,7 @@ void android_main(struct android_app *app) {
         restart_script_if_due();
         uint64_t frame_start = monotonic_ns();
         /* Настройки могут сменить апскейл в любой момент - пересчитываем
-         * виртуальный экран и буфер перед каждым кадром (операция дешёвая). */
+         * виртуальный экран перед каждым кадром (операция дешёвая). */
         apply_screen_size();
         if (script_active) {
             uint64_t now = frame_start;
@@ -300,58 +259,27 @@ void android_main(struct android_app *app) {
             if (!ds_call_protected(protected_update, NULL, "update")) mark_script_failed("update");
             else if (ds_script_restart_requested()) { script_active = 0; restart_after_ns = monotonic_ns(); }
         }
-        ANativeWindow_Buffer native_buffer;
-        if (ANativeWindow_lock(app->window, &native_buffer, NULL) == 0) {
-            int frame_valid;
-            /* Размеры настоящего буфера — истина: окно могли пересоздать или
-             * повернуть между колбэками, а апскейл считает от phys_w/phys_h. */
-            if (native_buffer.width > 0 && native_buffer.height > 0 &&
-                (native_buffer.width != phys_w || native_buffer.height != phys_h)) {
-                phys_w = native_buffer.width;
-                phys_h = native_buffer.height;
+        active_scale = current_render_scale();
+        /* Кадр = Vulkan: захватываем изображение swapchain, скрипт складывает
+         * команды, в end_frame GPU рисует их в оффскрин и делает present. */
+        frame.pixels = NULL;
+        frame.width = screen_w;
+        frame.height = screen_h;
+        frame.stride = screen_w;
+        if (frame.width > 0 && frame.height > 0 && ds_graphics_begin_frame(&frame)) {
+            int draw_failed = 0;
+            if (script_active) {
+                if (!ds_call_protected(protected_draw, &frame, "draw")) { mark_script_failed("draw"); draw_failed = 1; }
+                else if (ds_script_restart_requested()) { script_active = 0; restart_after_ns = monotonic_ns(); }
             }
-            apply_screen_size();
-            int s = current_render_scale();
-            if (s > 1 && (!virt_pixels || virt_w != screen_w || virt_h != screen_h)) {
-                /* Виртуального буфера нет (не хватило памяти) — рисуем в
-                 * полном размере и возвращаем скрипту полный экран, иначе
-                 * интерфейс соберётся под маленький экран в углу большого. */
-                s = 1;
-                screen_w = native_buffer.width;
-                screen_h = native_buffer.height;
-            }
-            active_scale = s;
-            /* Апскейл: игра рисуется в виртуальном буфере, потом растягивается
-             * nearest-neighbor на всё окно - меньше пикселей, пиксельный стиль. */
-            if (s > 1) {
-                frame.pixels = virt_pixels;
-                frame.width = virt_w; frame.height = virt_h; frame.stride = virt_w;
-            } else {
-                frame.pixels = (uint32_t *)native_buffer.bits;
-                frame.width = native_buffer.width; frame.height = native_buffer.height; frame.stride = native_buffer.stride;
-            }
-            frame_valid = frame.pixels && frame.width > 0 && frame.height > 0 && frame.stride >= frame.width
-                && native_buffer.bits && native_buffer.width > 0 && native_buffer.height > 0
-                && native_buffer.stride >= native_buffer.width
-                && native_buffer.format == WINDOW_FORMAT_RGBA_8888;
-            if (frame_valid && ds_graphics_begin_frame(&frame)) {
-                int draw_failed = 0;
-                if (script_active) {
-                    if (!ds_call_protected(protected_draw, &frame, "draw")) { mark_script_failed("draw"); draw_failed = 1; }
-                    else if (ds_script_restart_requested()) { script_active = 0; restart_after_ns = monotonic_ns(); }
-                }
-                if (!script_active) {
-                    if (draw_failed || ds_script_has_error()) ds_graphics_error_screen(ds_runtime_error_message());
-                    ds_graphics_cancel_frame();
-                } else ds_graphics_end_frame();
-            }
-            if (s > 1 && virt_pixels) {
-                upscale_nearest(virt_pixels, virt_w, virt_h,
-                                (uint32_t *)native_buffer.bits,
-                                native_buffer.width, native_buffer.height,
-                                native_buffer.stride, s);
-            }
-            ANativeWindow_unlockAndPost(app->window);
+            if (!script_active) {
+                if (draw_failed || ds_script_has_error()) {
+                    /* Экран ошибки идёт теми же командами через тот же
+                     * конвейер, поэтому кадр именно завершаем, а не отменяем. */
+                    ds_graphics_error_screen(ds_runtime_error_message());
+                    ds_graphics_end_frame();
+                } else ds_graphics_cancel_frame();
+            } else ds_graphics_end_frame();
         }
         /* Лимит FPS из настроек: 0 - без ограничения (по умолчанию). */
         cap_frame_sleep(frame_start);

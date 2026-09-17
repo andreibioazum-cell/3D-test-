@@ -29,4 +29,5 @@ endif()
 
 add_library(ds_game SHARED "${GAME_C}" runtime.c main.c ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
 target_include_directories(ds_game PRIVATE . game ${ANDROID_NDK}/sources/android/native_app_glue)
-target_link_libraries(ds_game PRIVATE android log m)
+# vulkan - графический бэкенд рендера (swapchain, оффскрин, спечённые SPIR-V шейдеры).
+target_link_libraries(ds_game PRIVATE android log m vulkan)

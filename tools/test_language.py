@@ -159,7 +159,7 @@ def check_math_helpers():
         android.mkdir()
         (android / "log.h").write_text(ANDROID_LOG_H)
         (android / "asset_manager.h").write_text("typedef struct AAssetManager AAssetManager;\n")
-        (android / "native_window.h").touch()
+        (android / "native_window.h").write_text("typedef struct ANativeWindow ANativeWindow;\n")
         (temp / "test.c").write_text(MATH_HARNESS)
         subprocess.run([
             *shlex.split(os.environ.get("CC", "cc")), "-std=gnu99", "-O0",

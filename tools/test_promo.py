@@ -165,7 +165,7 @@ def main():
         (android / "log.h").write_text(ANDROID_LOG_H)
         (android / "asset_manager.h").write_text(
             "typedef struct AAssetManager AAssetManager;\n")
-        (android / "native_window.h").touch()
+        (android / "native_window.h").write_text("typedef struct ANativeWindow ANativeWindow;\n")
         (temp / "jni.h").write_text(JNI_H)
         (temp / "test.c").write_text(HARNESS)
         subprocess.run([

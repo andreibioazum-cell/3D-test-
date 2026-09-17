@@ -11,6 +11,11 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Рендер работает только через Vulkan: без поддержки 1.0 игра не имеет
+         запасного пути, поэтому магазин не должен ставить её на такие устройства. -->
+    <uses-feature android:name="android.hardware.vulkan.version" android:required="true" android:version="0x00010000" />
+    <uses-feature android:name="android.hardware.vulkan.level" android:required="false" />
+
     <application
         android:label="Cubic Battle 4"
         android:icon="@mipmap/ic_launcher"
