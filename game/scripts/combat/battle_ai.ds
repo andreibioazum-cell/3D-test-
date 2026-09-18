@@ -168,7 +168,7 @@ public function update_enemy()
     if enemy.state==2 then
         enemy.state_time=enemy.state_time-dt
         if enemy.hit==0 then
-            local number target=punch_resolve_target(enemy.x,enemy.y,cos(enemy.angle),sin(enemy.angle),player.size*0.65)
+            local number target=punch_resolve_target(enemy.x,enemy.y,cos(enemy.angle),sin(enemy.angle),player.size*0.65,punch_front_offset(enemy.size))
             if target==0||(target>=1&&target<=turret_max) then
                 if rand()%100 >= enemy_human_miss*100 || rand()%100 < 30 then
                     enemy.hit=1

@@ -78,11 +78,12 @@ public function enemy_punch_turret_target(number px, number py, number pdx, numb
     local number bw=(enemy.x-px)*pdx+(enemy.y-py)*pdy
     local number th=punch_width/2+turret_zone_half()
     local number back=turret_zone_half()
+    local number front=punch_front_offset(player.size)
     while i<turret_max do
         if enemy_turret_alive(i)==1 then
             local number hx=arr_get(enemy_turret_x,i)-px, hy=arr_get(enemy_turret_y,i)-py
             local number tf=hx*pdx+hy*pdy, ts=hy*pdx-hx*pdy
-            if tf>=0-back&&tf<=punch_reach+back&&fabs(ts)<=th then
+            if tf>=0-back&&tf<=punch_reach+back+front&&fabs(ts)<=th then
                 if tf<=bw+30 then
                     if best==-1||tf<bfw then
                         best=i+1

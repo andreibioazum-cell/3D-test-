@@ -24,57 +24,15 @@ static uint64_t monotonic_ns(void) {
     if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0;
     return (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
 }
-/* Экономия заряда и производительность без жёсткого глобального лимита: скрипт
- * из настроек задаёт
- * 1) апскейл — кадр рисуется в оффскрин screen/scale и растягивается
- *    nearest-neighbor на окно (пиксельная картинка и в scale^2 раз меньше
- *    пикселей на GPU). Координаты скриптов при этом остаются физическими
- *    пикселями окна, поэтому интерфейс НЕ увеличивается: раньше виртуальный
- *    экран был в scale раз меньше, и на больших разрешениях вся игра
- *    становилась «супер огромной»;
- * 2) лимит FPS (0 = без ограничения, по умолчанию так и остаётся). */
-static volatile int render_scale_setting = 1;
-static volatile int fps_cap_setting = 0;
-void ds_set_render_scale(int s) {
-    if (s < 1) s = 1;
-    if (s > 3) s = 3;
-    render_scale_setting = s;
-}
-void ds_set_fps_cap(int c) {
-    if (c < 0) c = 0;
-    fps_cap_setting = c;
-}
-static int current_render_scale(void) {
-    int s = render_scale_setting;
-    if (s < 1) s = 1;
-    if (s > 3) s = 3;
-    return s;
-}
+/* Кадр всегда рисуется в полном размере окна: ни апскейла, ни лимита FPS в
+ * настройках больше нет (по просьбе игрока) - оба параметра только портили
+ * картинку и заставляли ждать кадр впустую. */
 static int phys_w = 0, phys_h = 0;
-/* screen_w/screen_h — то, что видит скрипт: всегда полный размер окна.
- * Апскейл уменьшает только оффскрин Vulkan (пикселей на GPU в scale^2 раз
- * меньше), поэтому ни вёрстка, ни тачи от него не зависят. */
+/* screen_w/screen_h — то, что видит скрипт: всегда полный размер окна. */
 static void apply_screen_size(void) {
     if (phys_w < 1 || phys_h < 1) return;
     screen_w = phys_w;
     screen_h = phys_h;
-    ds_graphics_set_pixel_scale(current_render_scale());
-}
-/* Лимит FPS: досыпаем остаток кадра сном. 0 - без ограничения. */
-static void cap_frame_sleep(uint64_t frame_start_ns) {
-    int cap = fps_cap_setting;
-    if (cap < 1) return;
-    uint64_t interval = 1000000000ull / (uint64_t)cap;
-    uint64_t deadline = frame_start_ns + interval;
-    struct timespec now;
-    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return;
-    uint64_t nowns = (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
-    if (nowns >= deadline) return;
-    uint64_t rem = deadline - nowns;
-    struct timespec req;
-    req.tv_sec = (time_t)(rem / 1000000000ull);
-    req.tv_nsec = (long)(rem % 1000000000ull);
-    while (nanosleep(&req, &req) == -1 && errno == EINTR) { /* прерван - досыпаем */ }
 }
 static void protected_init(void *userdata) { init((AAssetManager *)userdata); }
 static void protected_reset(void *userdata) { (void)userdata; reset(); }
@@ -169,8 +127,7 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
         i = (action == AMOTION_EVENT_ACTION_MOVE) ? 0 : index;
         count = (action == AMOTION_EVENT_ACTION_MOVE) ? count : index + 1;
         for (; i < count; i++) {
-            /* Координаты окна — те же пиксели, в которых живёт скрипт:
-             * апскейл на них больше не влияет. */
+            /* Координаты окна — те же пиксели, в которых живёт скрипт. */
             call.x = AMotionEvent_getX(event, i);
             call.y = AMotionEvent_getY(event, i);
             /* Край окна: прижимаем к виртуальному экрану, чтобы касание у самой
@@ -248,8 +205,6 @@ void android_main(struct android_app *app) {
         if (!app->window || !init_done || app->destroyRequested) continue;
         restart_script_if_due();
         uint64_t frame_start = monotonic_ns();
-        /* Настройки могут сменить апскейл в любой момент - пересчитываем
-         * виртуальный экран перед каждым кадром (операция дешёвая). */
         apply_screen_size();
         if (script_active) {
             uint64_t now = frame_start;
@@ -280,8 +235,6 @@ void android_main(struct android_app *app) {
                 } else ds_graphics_cancel_frame();
             } else ds_graphics_end_frame();
         }
-        /* Лимит FPS из настроек: 0 - без ограничения (по умолчанию). */
-        cap_frame_sleep(frame_start);
     }
 }
 #include "graphics.c"

@@ -239,46 +239,16 @@ public function touch_settings(number x, number y)
         return
     end
     if hit_settings_row(x, y, 6) == 1 then
-        fps_cap = next_fps_cap(fps_cap)
-        save_settings()
-        ds_set_fps_cap(fps_cap)
-        return
-    end
-    if hit_settings_row(x, y, 7) == 1 then
-        render_scale = next_render_scale(render_scale)
-        save_settings()
-        ds_set_render_scale(render_scale)
-        return
-    end
-    if hit_settings_row(x, y, 8) == 1 then
         winter_theme = 1 - winter_theme
         apply_winter_theme()
         save_settings()
         return
     end
-    if hit_settings_row(x, y, 9) == 1 then
+    if hit_settings_row(x, y, 7) == 1 then
         show_fps = 1 - show_fps
         save_settings()
         return
     end
-end
-public function next_fps_cap(number cur)
-    if cur == 0 then
-        return 60
-    end
-    if cur == 60 then
-        return 30
-    end
-    return 0
-end
-public function next_render_scale(number cur)
-    if cur == 1 then
-        return 2
-    end
-    if cur == 2 then
-        return 3
-    end
-    return 1
 end
 public function touch_classes(number x, number y, number action)
     if action != 0 then

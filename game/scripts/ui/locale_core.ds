@@ -393,36 +393,3 @@ public function tr_fps_meter_toggle()
     end
     return "Battle FPS: OFF"
 end
-public function tr_fps_label()
-    if language == 1 then
-        return "Частота кадров"
-    end
-    return "Frame rate"
-end
-public function tr_fps_value()
-    if fps_cap == 0 then
-        if language == 1 then
-            return "максимум"
-        end
-        return "max"
-    end
-    return fps_cap + " fps"
-end
-public function tr_scale_label()
-    if language == 1 then
-        return "Апскейл"
-    end
-    return "Upscale"
-end
-public function tr_scale_value()
-    if render_scale == 1 then
-        if language == 1 then
-            return "выкл"
-        end
-        return "off"
-    end
-    if language == 1 then
-        return "пиксели " + render_scale + "x"
-    end
-    return "pixels " + render_scale + "x"
-end

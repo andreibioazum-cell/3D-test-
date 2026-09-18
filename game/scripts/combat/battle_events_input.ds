@@ -156,7 +156,7 @@ public function draw_online()
         while i<max_players do
             rb=i*punch_fields
             if arr_get(rpunch_a,i)>0 then
-                draw_punch_box(arr_get(remote_punches,rb+1),arr_get(remote_punches,rb+2),arr_get(remote_punches,rb+3),arr_get(remote_punches,rb+4),punch_reach,punch_width,arr_get(rpunch_a,i))
+                draw_punch_box(arr_get(remote_punches,rb+1),arr_get(remote_punches,rb+2),arr_get(remote_punches,rb+3),arr_get(remote_punches,rb+4),punch_reach,punch_width,punch_front_offset(player.size),arr_get(rpunch_a,i))
             end
             i=i+1
         end

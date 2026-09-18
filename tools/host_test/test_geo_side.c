@@ -56,6 +56,7 @@ int geo_side_circle(float x, float y, float r, uint32_t c) { return geo_circle(x
 int geo_side_ring(float x, float y, float r, float th, uint32_t c) { return geo_ring(x, y, r, th, c); }
 int geo_side_line(float x1, float y1, float x2, float y2, float th, uint32_t c) { return geo_line(x1, y1, x2, y2, th, c); }
 int geo_side_roundrect(float x, float y, float w, float h, float r, uint32_t c) { return geo_roundrect(x, y, w, h, r, c); }
+int geo_side_rect_rot(float x, float y, float w, float h, float ang, uint32_t c) { return geo_rect_rot(x, y, w, h, ang, c); }
 int geo_side_tex(float x, float y, float a, float sc, float w, float h, uint32_t c) { return geo_tex(x, y, a, sc, w, h, c); }
 const DSFont *geo_side_font(void) { test_font_ready(); return &test_font_storage; }
 int geo_side_text(const char *s, float x, float y, uint32_t c, float sc) {

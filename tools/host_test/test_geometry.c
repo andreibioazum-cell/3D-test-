@@ -46,6 +46,7 @@ int geo_side_circle(float, float, float, uint32_t);
 int geo_side_ring(float, float, float, float, uint32_t);
 int geo_side_line(float, float, float, float, float, uint32_t);
 int geo_side_roundrect(float, float, float, float, float, uint32_t);
+int geo_side_rect_rot(float, float, float, float, float, uint32_t);
 int geo_side_tex(float, float, float, float, float, float, uint32_t);
 int geo_side_text(const char *, float, float, uint32_t, float);
 
@@ -443,6 +444,47 @@ int main(int argc, char **argv) {
             snprintf(path, sizeof(path), "%s/gpu_%s.bmp", outdir, scenes[s].name);
             write_bmp(path, &gpu_buf);
         }
+    }
+
+    /* Повёрнутый прямоугольник (rect_rot - хитбоксы): четыре угла должны быть
+     * повёрнутыми на ang углами НЕповёрнутого прямоугольника вокруг его центра,
+     * а при ang == 0 геометрия обязана совпасть с geo_rect бит в бит. */
+    {
+        int ok = 1;
+        float x = 100.0f, y = 50.0f, w = 40.0f, h = 80.0f, ang = 0.6f;
+        geo_side_reset();
+        geo_side_rect_rot(x, y, w, h, ang, pack_c(0xFFFFFFFF));
+        const GeoVert *v = geo_side_verts();
+        if (geo_side_vert_count() != 4 || geo_side_index_count() != 6) ok = 0;
+        if (ok) {
+            float hw = w * 0.5f, hh = h * 0.5f, cx = x + hw, cy = y + hh;
+            const float sx[4] = { -1, 1, 1, -1 }, sy[4] = { -1, -1, 1, 1 };
+            for (int i = 0; i < 4 && ok; i++) {
+                float lx = sx[i] * hw, ly = sy[i] * hh;
+                float ex = cx + cosf(ang) * lx - sinf(ang) * ly;
+                float ey = cy + sinf(ang) * lx + cosf(ang) * ly;
+                if (fabsf(v[i].x - ex) > 1e-3f || fabsf(v[i].y - ey) > 1e-3f) ok = 0;
+            }
+        }
+        /* Без поворота - ровно geo_rect. */
+        geo_side_reset();
+        geo_side_rect_rot(x, y, w, h, 0.0f, pack_c(0xFFFFFFFF));
+        const GeoVert *q = geo_side_verts();
+        if (geo_side_vert_count() != 4) ok = 0;
+        else if (q[0].x != x || q[0].y != y || q[2].x != x + w || q[2].y != y + h) ok = 0;
+        /* Площадь четырёхугольника при повороте не меняется (шнуровка). */
+        geo_side_reset();
+        geo_side_rect_rot(x, y, w, h, 1.1f, pack_c(0xFFFFFFFF));
+        const GeoVert *r = geo_side_verts();
+        double area = 0;
+        for (int i = 0; i < 4; i++) {
+            int j = (i + 1) % 4;
+            area += (double)r[i].x * r[j].y - (double)r[j].x * r[i].y;
+        }
+        area = fabs(area) * 0.5;
+        if (fabs(area - (double)w * h) > 0.5) ok = 0;
+        printf("%-14s: %s\n", "rect_rot", ok ? "OK" : "FAIL");
+        if (!ok) failures++;
     }
 
     /* Численная проверка раскладки текста: формула прежнего render_text_now.

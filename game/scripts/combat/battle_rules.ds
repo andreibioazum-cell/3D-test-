@@ -4,17 +4,44 @@ public function azum_idle_tex()
     end
     return ORDINARY_TEX
 end
+-- У удара Азума своя текстура, и проверять надо именно её: раньше здесь
+-- стоял флаг СТОЙКИ (azum_tex_ok), поэтому при нехватке одного из двух файлов
+-- боец на стойке и в ударе рисовался по-разному - например, в стойке обычным
+-- кубом, а в ударе зомби.
 public function azum_punch_tex()
-    if azum_tex_ok==1 then
+    if azum_punch_tex_ok==1 then
         return AZUM_PUNCH_TEX
     end
     return PUNCH_TEX
 end
+-- Скин зомби включается, только когда загрузились ОБЕ его текстуры: иначе
+-- получалась «фигня» - в ударе зомби, а в стойке обычный куб.
 public function zombie_tex_ok()
-    if azum_zombie_tex_ok==1&&azum_zombie_punch_tex_ok==1 then
-        return 1
+    if azum_zombie_tex_ok==0||azum_zombie_punch_tex_ok==0 then
+        return 0
     end
-    return 0
+    if png_load(AZUM_ZOMBIE_TEX)==0||png_load(AZUM_ZOMBIE_PUNCH_TEX)==0 then
+        return 0
+    end
+    return 1
+end
+-- Текстура для рисования бойца: имя проверяется, и если файла нет - берём
+-- запасную. tex() для незагруженной текстуры не рисует вообще ничего, поэтому
+-- без такой проверки боец просто исчезал с экрана.
+public function idle_tex_for(string name)
+    if png_load(name)==1 then
+        return name
+    end
+    return ORDINARY_TEX
+end
+public function punch_tex_for(string name)
+    if png_load(name)==1 then
+        return name
+    end
+    if png_load(PUNCH_TEX)==1 then
+        return PUNCH_TEX
+    end
+    return ORDINARY_TEX
 end
 public function zombie_idle_tex()
     if azum_zombie_tex_ok==1 then
@@ -30,27 +57,27 @@ public function zombie_punch_tex()
 end
 public function class_idle_tex(number cls)
     if cls==CLASS_AZUM then
-        return azum_idle_tex()
+        return idle_tex_for(azum_idle_tex())
     end
     if cls==CLASS_SANTA then
-        return SANTA_TEX
+        return idle_tex_for(SANTA_TEX)
     end
     if cls==CLASS_EBUC then
-        return EBUC_TEX
+        return idle_tex_for(EBUC_TEX)
     end
     return ORDINARY_TEX
 end
 public function class_punch_tex(number cls)
     if cls==CLASS_AZUM then
-        return azum_punch_tex()
+        return punch_tex_for(azum_punch_tex())
     end
     if cls==CLASS_SANTA then
-        return SANTA_PUNCH_TEX
+        return punch_tex_for(SANTA_PUNCH_TEX)
     end
     if cls==CLASS_EBUC then
-        return EBUC_PUNCH_TEX
+        return punch_tex_for(EBUC_PUNCH_TEX)
     end
-    return PUNCH_TEX
+    return punch_tex_for(PUNCH_TEX)
 end
 public function class_punch_damage_for(number cls, number lv)
     if cls==CLASS_SANTA then
