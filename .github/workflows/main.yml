@@ -166,12 +166,9 @@ jobs:
       - name: Dump build log to summary on failure
         if: failure()
         run: |
-          {
-            echo "### NDK build log (tail)"
-            echo '```text'
-            tail -c 24000 "$RUNNER_TEMP/ndk-build.log" 2>/dev/null || echo "(нет лога)"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          tail -n 8 "$RUNNER_TEMP/ndk-build.log" 2>/dev/null | cut -c1-380 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
 
       - name: Package and align APK
         run: |
