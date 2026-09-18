@@ -405,6 +405,30 @@ int __android_log_vprint(int prio, const char *tag, const char *fmt, va_list ap)
     return 0;
 }
 
+/* ==== фейковое окно: RGBA-буфер 1280x720, честный lock/unlock ==== */
+static uint32_t g_win_pixels[1280 * 720];
+static int g_win_locked;
+int32_t ANativeWindow_getWidth(ANativeWindow *w) { (void)w; return 1280; }
+int32_t ANativeWindow_getHeight(ANativeWindow *w) { (void)w; return 720; }
+int32_t ANativeWindow_setBuffersGeometry(ANativeWindow *w, int32_t width, int32_t height, int32_t format) {
+    (void)w; (void)width; (void)height; (void)format; return 0;
+}
+int ANativeWindow_lock(ANativeWindow *w, ANativeWindow_Buffer *out, void *rb) {
+    (void)w; (void)rb;
+    if (g_win_locked) return -1;
+    out->bits = g_win_pixels; out->width = 1280; out->height = 720;
+    out->stride = 1280; out->format = WINDOW_FORMAT_RGBA_8888;
+    g_win_locked = 1;
+    return 0;
+}
+int ANativeWindow_unlockAndPost(ANativeWindow *w) { (void)w; g_win_locked = 0; return 0; }
+ANativeWindow *ANativeWindow_acquire(ANativeWindow *w) { return w; }
+void ANativeWindow_release(ANativeWindow *w) { (void)w; }
+
+/* Отчёт о падении - тот же модуль, что в main.c. */
+#include "native/crash_report.inc"
+#include <signal.h>
+
 /* ==== клавиатура: на устройстве это android_keyboard.inc (JNI IME) ==== */
 static int kb_up; static char kb_buf[256];
 void keyboard_show(void) { kb_up = 1; }
@@ -490,6 +514,74 @@ int main(void) {
 
     ds_graphics_shutdown();
     ds_sound_shutdown();
-    printf("PASS: полная игра (лобби+настройки+бой+сворачивание) на фейковом драйвере\n");
+
+    /* Диагностика падения: крошки -> отчёт -> чтение -> CPU-режим с экраном
+     * отчёта и обычными кадрами игры. ds_crash_report_write зовётся напрямую
+     * (без реального сигнала: ASan перехватывает его раньше нашего хендлера). */
+    fprintf(stderr, "HARNESS: crash-report scenario\n");
+    ds_crash_report_init("/tmp/cb4_host_test");
+    ds_crumb("boot"); ds_crumb("jni"); ds_crumb("win"); ds_crumb("gfx-vk-init");
+    ds_crash_report_write(SIGABRT, (void *)(uintptr_t)0xdeadbeef);
+    char report[DS_CRASH_REPORT_MAX];
+    if (!ds_crash_report_load(report, sizeof report)) {
+        printf("FAIL: отчёт о падении не записан\n"); return 1;
+    }
+    if (!strstr(report, "signal 6") || !strstr(report, "gfx-vk-init")) {
+        printf("FAIL: в отчёте нет сигнала или крошек:\n%s\n", report); return 1;
+    }
+    {
+        static int dummy_window2;
+        ANativeWindow *win2 = (ANativeWindow *)&dummy_window2;
+        screen_w = 1280; screen_h = 720;
+        if (!ds_graphics_init_cpu((AAssetManager *)&dummy_amgr_storage, win2)) {
+            printf("FAIL: ds_graphics_init_cpu вернул 0\n"); return 1;
+        }
+        Buffer fb2; memset(&fb2, 0, sizeof fb2);
+        for (int i = 0; i < 8; i++) {
+            dt = 1.0 / 60.0;
+            if (i == 0) ds_call_protected(init, (AAssetManager *)&dummy_amgr_storage, "init");
+            ds_call_protected(update, NULL, "update");
+            if (!ds_graphics_begin_frame_cpu(&fb2)) {
+                printf("FAIL: begin_frame_cpu вернул 0\n"); return 1;
+            }
+            if (i < 3) ds_graphics_error_screen(report); /* экран отчёта */
+            else ds_call_protected(protected_draw, &fb2, "draw"); /* игра в CPU-режиме */
+            ds_graphics_end_frame_cpu(&fb2);
+        }
+        /* Кадр лобби (нарисован выше в CPU-режиме) - в BMP для глазной проверки:
+         * фон, кнопки, текст и текстуры обязаны быть на своих местах. */
+        {
+            FILE *f = fopen("/tmp/cb4_cpu_lobby.bmp", "wb");
+            if (f) {
+                uint32_t W = 1280, H = 720, row = W * 3, pad = (4 - (row % 4)) % 4;
+                uint32_t sz = 54 + (row + pad) * H;
+                uint8_t hdr[54] = { 'B','M' };
+                memcpy(hdr + 2, &sz, 4); uint32_t off = 54; memcpy(hdr + 10, &off, 4);
+                uint32_t hs = 40; memcpy(hdr + 14, &hs, 4);
+                memcpy(hdr + 18, &W, 4); memcpy(hdr + 22, &H, 4);
+                uint16_t planes = 1, bpp = 24; memcpy(hdr + 26, &planes, 2); memcpy(hdr + 28, &bpp, 2);
+                fwrite(hdr, 1, 54, f);
+                uint8_t zero[4] = {0,0,0,0};
+                for (uint32_t y = H; y-- > 0;) {
+                    for (uint32_t x = 0; x < W; x++) {
+                        uint32_t p = g_win_pixels[y * 1280 + x];
+                        uint8_t rgb[3] = { (uint8_t)(p >> 16), (uint8_t)(p >> 8), (uint8_t)p };
+                        fwrite(rgb, 1, 3, f);
+                    }
+                    fwrite(zero, 1, pad, f);
+                }
+                fclose(f);
+                fprintf(stderr, "HARNESS: cpu lobby frame -> /tmp/cb4_cpu_lobby.bmp\n");
+            }
+        }
+        /* Отчёт стёрли - следующая загрузка прочитает пустоту. */
+        ds_crash_report_clear();
+        if (ds_crash_report_load(report, sizeof report)) {
+            printf("FAIL: отчёт не стёрлся\n"); return 1;
+        }
+        ds_graphics_shutdown_cpu();
+        ds_graphics_shutdown();
+    }
+    printf("PASS: полная игра + crash-report + CPU-режим на фейковом драйвере\n");
     return 0;
 }

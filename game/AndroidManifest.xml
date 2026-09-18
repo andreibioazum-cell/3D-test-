@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.cb4"
-    android:versionCode="4"
-    android:versionName="1.2.1">
+    android:versionCode="5"
+    android:versionName="1.2.2">
 
     <!-- Android 8 (API 26) до Android 15 (API 35), arm64/arm32/x86_64 -->
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
@@ -11,9 +11,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- Рендер работает только через Vulkan: без поддержки 1.0 игра не имеет
-         запасного пути, поэтому магазин не должен ставить её на такие устройства. -->
-    <uses-feature android:name="android.hardware.vulkan.version" android:required="true" android:version="0x00010000" />
+    <!-- Рендер работает через Vulkan, но с полного отказа запасным путём
+         рисует CPU-растеризатор (native/graphics/cpu_backend.c), поэтому
+         устройство без Vulkan игру не выкидывает из магазина. -->
+    <uses-feature android:name="android.hardware.vulkan.version" android:required="false" android:version="0x00010000" />
     <uses-feature android:name="android.hardware.vulkan.level" android:required="false" />
 
     <application

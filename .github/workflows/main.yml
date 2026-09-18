@@ -117,6 +117,7 @@ jobs:
           set -euo pipefail
           git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Headers.git /tmp/vkheaders
           gcc -std=gnu99 -O1 -o /tmp/test_vk_init tools/host_test/test_vk_init.c \
+            native/graphics/cpu_backend.c \
             -I tools/host_test/stub -I /tmp/vkheaders/include -I . -lm -lpthread
           /tmp/test_vk_init
           gcc -std=gnu99 -O1 -o /tmp/test_geometry tools/host_test/test_geometry.c \
@@ -128,6 +129,7 @@ jobs:
             -Wl,--wrap=malloc,--wrap=calloc,--wrap=realloc,--wrap=free
           /tmp/test_string_arena
           gcc -std=gnu99 -O1 -o /tmp/test_full_game tools/host_test/test_full_game.c \
+            native/graphics/cpu_backend.c \
             -I tools/host_test/stub -I /tmp/vkheaders/include -I . -lm -lpthread
           /tmp/test_full_game
 
@@ -144,17 +146,17 @@ jobs:
           mkdir -p staging/lib/arm64-v8a staging/lib/armeabi-v7a staging/lib/x86_64
 
           "$TOOLCHAIN/aarch64-linux-android26-clang" -O3 -s -fPIC -shared \
-            game/game.c runtime.c main.c "$GLUE/android_native_app_glue.c" \
+            game/game.c runtime.c main.c native/graphics/cpu_backend.c "$GLUE/android_native_app_glue.c" \
             -I. -I"$GLUE" -landroid -llog -lm -lvulkan \
             -o staging/lib/arm64-v8a/libds_game.so
 
           "$TOOLCHAIN/armv7a-linux-androideabi26-clang" -O3 -s -fPIC -shared \
-            game/game.c runtime.c main.c "$GLUE/android_native_app_glue.c" \
+            game/game.c runtime.c main.c native/graphics/cpu_backend.c "$GLUE/android_native_app_glue.c" \
             -I. -I"$GLUE" -landroid -llog -lm -lvulkan \
             -o staging/lib/armeabi-v7a/libds_game.so
 
           "$TOOLCHAIN/x86_64-linux-android26-clang" -O3 -s -fPIC -shared \
-            game/game.c runtime.c main.c "$GLUE/android_native_app_glue.c" \
+            game/game.c runtime.c main.c native/graphics/cpu_backend.c "$GLUE/android_native_app_glue.c" \
             -I. -I"$GLUE" -landroid -llog -lm -lvulkan \
             -o staging/lib/x86_64/libds_game.so
 

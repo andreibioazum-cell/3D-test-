@@ -12,6 +12,7 @@
 #include <android/native_activity.h>
 #include <errno.h>
 #include <unistd.h>
+#include "native/crash_report.inc"
 static int init_done = 0;
 static int script_active = 0;
 static AAssetManager *script_assets = NULL;
@@ -19,6 +20,13 @@ static uint64_t restart_after_ns = 0;
 static unsigned int restart_failures = 0;
 static uint64_t prev_frame_ns = 0;
 static struct android_app *g_app = NULL;
+/* Безопасный режим: 1 - кадры рисует CPU-бэкенд без Vulkan. Включается, когда
+ * прошлый запуск упал (отчёт в crash_report.txt) или Vulkan не инициализировался. */
+static int g_cpu_render = 0;
+/* Экран с отчётом о прошлом падении: висит до первого касания. */
+static int g_show_report = 0;
+static char g_report[DS_CRASH_REPORT_MAX];
+static unsigned long g_frame_count = 0;
 static uint64_t monotonic_ns(void) {
     struct timespec now;
     if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0;
@@ -74,6 +82,7 @@ static void restart_script_if_due(void) {
     now = monotonic_ns(); if (now < restart_after_ns) return; (void)start_script(1);
 }
 static void handle_cmd(struct android_app *app, int32_t command) {
+    int gfx_ok;
     if (!app) { ds_runtime_error("no app"); return; }
     g_app = app;
     switch (command) {
@@ -85,14 +94,34 @@ static void handle_cmd(struct android_app *app, int32_t command) {
             apply_screen_size();
             script_assets = app->activity ? app->activity->assetManager : NULL;
             ds_set_activity(app->activity);
-            /* Vulkan-рендер создаётся на каждое окно заново (окно после
-             * сворачивания - новая поверхность); активы перечитываются лениво. */
-            if (!ds_graphics_init(script_assets, app->window)) { init_done = 0; return; }
-            /* Звуки лежат в тех же assets (sounds/...), играют через OpenSL ES. */
+            ds_crumb("win");
+            /* Рендер: Vulkan, а при отказе или после прошлого падения - CPU.
+             * Vulkan-инициализация на части драйверов падает внутри самого
+             * драйвера; CPU-путь гарантированно работает (так рендерила вся
+             * прошлая версия игры). */
+            if (g_cpu_render) {
+                ds_crumb("gfx-cpu-init");
+                gfx_ok = ds_graphics_init_cpu(script_assets, app->window);
+            } else {
+                ds_crumb("gfx-vk-init");
+                gfx_ok = ds_graphics_init(script_assets, app->window);
+                if (!gfx_ok) {
+                    ds_log_err("vulkan init failed - switching to CPU renderer");
+                    ds_crumb("gfx-cpu-fallback");
+                    g_cpu_render = 1;
+                    gfx_ok = ds_graphics_init_cpu(script_assets, app->window);
+                }
+            }
+            if (!gfx_ok) { init_done = 0; return; }
+            ds_crumb(g_cpu_render ? "gfx-cpu-ok" : "gfx-vk-ok");
+            /* Звуки лежат в тех же assets (sounds/...), играют через AudioTrack. */
             ds_sound_init(script_assets);
+            ds_crumb("snd");
             ds_sound_resume();
             init_done = 1; script_active = 0; restart_failures = 0;
-            ds_clear_script_restart(); (void)start_script(0); break;
+            ds_clear_script_restart(); (void)start_script(0);
+            ds_crumb("script");
+            break;
         case APP_CMD_WINDOW_RESIZED:
         case APP_CMD_CONTENT_RECT_CHANGED:
         case APP_CMD_CONFIG_CHANGED:
@@ -105,7 +134,9 @@ static void handle_cmd(struct android_app *app, int32_t command) {
             }
             break;
         case APP_CMD_TERM_WINDOW:
-            init_done = 0; script_active = 0; keyboard_hide(); ds_graphics_shutdown(); ds_sound_shutdown(); break;
+            init_done = 0; script_active = 0; keyboard_hide();
+            ds_graphics_shutdown_cpu(); /* безопасно при любом рендере */
+            ds_graphics_shutdown(); ds_sound_shutdown(); break;
         case APP_CMD_GAINED_FOCUS: ds_sound_resume(); break;
         case APP_CMD_LOST_FOCUS: ds_sound_pause(); break;
         default: break;
@@ -116,6 +147,15 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
     if (!event) return 0;
     int32_t type = AInputEvent_getType(event);
     if (type == AINPUT_EVENT_TYPE_MOTION) {
+        /* Экран отчёта о падении: любое касание закрывает его и снимает игру
+         * с паузы (сами касания в скрипт на этом экране не передаются). */
+        if (g_show_report) {
+            if ((AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK) == AMOTION_EVENT_ACTION_DOWN) {
+                g_show_report = 0;
+                ds_crash_report_clear();
+            }
+            return 1;
+        }
         if (!script_active) return 0;
         TouchCall call; size_t count, index, i; int raw, action;
         count = AMotionEvent_getPointerCount(event); if (count == 0) return 0;
@@ -184,6 +224,28 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
 }
 void android_main(struct android_app *app) {
     Buffer frame = {0}; if (!app) return;
+    /* Отчёт о падении ставим раньше всего: даже падение в самой инициализации
+     * должно оставить след для следующего запуска. */
+    ds_crash_report_init(app->activity ? app->activity->internalDataPath : NULL);
+    ds_crumb("boot");
+    if (ds_crash_report_load(g_report, sizeof g_report)) {
+        /* Прошлый запуск упал: этот стартуем без Vulkan и показываем отчёт.
+         * Файл стирается, когда игрок закрывает отчёт касанием, - тогда
+         * следующий запуск снова пробует Vulkan (и при новом падении снова
+         * пишет отчёт и включает CPU-режим). */
+        g_cpu_render = 1;
+        g_show_report = 1;
+        ds_log_err("предыдущий запуск упал - включён безопасный CPU-режим");
+        const char *rp = g_report;
+        while (*rp) {
+            char line[128];
+            size_t li = 0;
+            while (*rp && *rp != '\n' && li + 1 < sizeof(line)) line[li++] = *rp++;
+            if (*rp == '\n') rp++;
+            line[li] = '\0';
+            if (li) ds_console_log(1, "%s", line);
+        }
+    }
     /* rand() в скриптах использует libc-генератор, который сам себя не
      * сидит: без srand() спавн леденцов, их направление полёта и прочие
      * «случайные» броски шли бы по одной и той же последовательности. */
@@ -193,47 +255,65 @@ void android_main(struct android_app *app) {
     ds_sound_set_java_vm((void *)app->activity->vm);
     net_set_data_path(app->activity->internalDataPath);
     ds_set_activity(app->activity);
-    ds_log("DimScript Android + Vulkan renderer + system keyboard (JNI)");
+    ds_crumb("jni");
+    ds_log("DimScript Android + renderer + system keyboard (JNI)");
     for (;;) {
         struct android_poll_source *source = NULL; int ident;
         while ((ident = ALooper_pollOnce(script_active ? 0 : 10, NULL, NULL, (void **)&source)) >= 0) {
             if (source && source->process) source->process(app, source);
             if (app->destroyRequested) {
-                init_done = 0; script_active = 0; keyboard_hide(); ds_graphics_shutdown(); ds_sound_shutdown(); return;
+                init_done = 0; script_active = 0; keyboard_hide();
+                ds_graphics_shutdown_cpu(); ds_graphics_shutdown(); ds_sound_shutdown();
+                return;
             }
         }
         if (!app->window || !init_done || app->destroyRequested) continue;
         restart_script_if_due();
         uint64_t frame_start = monotonic_ns();
         apply_screen_size();
-        if (script_active) {
+        g_frame_count++;
+        if ((g_frame_count % 120) == 1) {
+            char mark[32];
+            snprintf(mark, sizeof(mark), "f%lu", g_frame_count);
+            ds_crumb(mark);
+        }
+        /* Экран отчёта: игра на паузе, кадр рисует только ошибку. */
+        if (script_active && !g_show_report) {
             uint64_t now = frame_start;
             dt = prev_frame_ns ? (double)(now - prev_frame_ns) / 1000000000.0 : 0.0;
             if (dt < 0.0) dt = 0.0; if (dt > 0.1) dt = 0.1;
             prev_frame_ns = now;
             if (!ds_call_protected(protected_update, NULL, "update")) mark_script_failed("update");
             else if (ds_script_restart_requested()) { script_active = 0; restart_after_ns = monotonic_ns(); }
+        } else if (g_show_report) {
+            prev_frame_ns = frame_start;
         }
-        /* Кадр = Vulkan: захватываем изображение swapchain, скрипт складывает
-         * команды, в end_frame GPU рисует их в оффскрин и делает present. */
+        /* Кадр: Vulkan (оффскрин + present) или CPU (lock + попиксельно + post). */
         frame.pixels = NULL;
         frame.width = screen_w;
         frame.height = screen_h;
         frame.stride = screen_w;
-        if (frame.width > 0 && frame.height > 0 && ds_graphics_begin_frame(&frame)) {
+        if (frame.width > 0 && frame.height > 0) {
+            int opened = g_cpu_render ? ds_graphics_begin_frame_cpu(&frame)
+                                      : ds_graphics_begin_frame(&frame);
+            if (!opened) continue;
             int draw_failed = 0;
-            if (script_active) {
+            if (g_show_report) {
+                ds_graphics_error_screen(g_report);
+            } else if (script_active) {
                 if (!ds_call_protected(protected_draw, &frame, "draw")) { mark_script_failed("draw"); draw_failed = 1; }
                 else if (ds_script_restart_requested()) { script_active = 0; restart_after_ns = monotonic_ns(); }
             }
-            if (!script_active) {
+            if (!script_active && !g_show_report) {
                 if (draw_failed || ds_script_has_error()) {
                     /* Экран ошибки идёт теми же командами через тот же
                      * конвейер, поэтому кадр именно завершаем, а не отменяем. */
                     ds_graphics_error_screen(ds_runtime_error_message());
-                    ds_graphics_end_frame();
-                } else ds_graphics_cancel_frame();
-            } else ds_graphics_end_frame();
+                } else if (g_cpu_render) ds_graphics_cancel_frame_cpu();
+                else ds_graphics_cancel_frame();
+            }
+            if (g_cpu_render) ds_graphics_end_frame_cpu(&frame);
+            else ds_graphics_end_frame();
         }
     }
 }

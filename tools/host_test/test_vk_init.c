@@ -411,6 +411,15 @@ off_t AAsset_getLength(AAsset *a) { (void)a; return 0; }
 int AAsset_read(AAsset *a, void *buf, size_t n) { (void)a; (void)buf; (void)n; return -1; }
 int AAsset_close(AAsset *a) { (void)a; return 0; }
 
+/* CPU-окно в Vulkan-тесте не используется - достаточно определений для линковки. */
+int32_t ANativeWindow_getWidth(ANativeWindow *w) { (void)w; return 720; }
+int32_t ANativeWindow_getHeight(ANativeWindow *w) { (void)w; return 1280; }
+int32_t ANativeWindow_setBuffersGeometry(ANativeWindow *w, int32_t width, int32_t height, int32_t format) { (void)w; (void)width; (void)height; (void)format; return 0; }
+int ANativeWindow_lock(ANativeWindow *w, ANativeWindow_Buffer *out, void *rb) { (void)w; (void)out; (void)rb; return -1; }
+int ANativeWindow_unlockAndPost(ANativeWindow *w) { (void)w; return 0; }
+ANativeWindow *ANativeWindow_acquire(ANativeWindow *w) { return w; }
+void ANativeWindow_release(ANativeWindow *w) { (void)w; }
+
 
 
 /* --- сам тест --- */

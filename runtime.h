@@ -133,6 +133,14 @@ int text_ink_top(const char *string);
 /* Создание Vulkan-рендера: менеджер активов плюс окно (для поверхности
  * VK_KHR_android_surface). Возвращает 1 при успехе; при 0 кадры не рисуются. */
 int ds_graphics_init(AAssetManager *assets, ANativeWindow *window);
+/* Резервный CPU-рендер без Vulkan: те же команды рисуются попиксельно в окно.
+ * Включается, когда Vulkan упал при инициализации или когда предыдущий запуск
+ * уронил драйвер (см. native/crash_report.inc). */
+int ds_graphics_init_cpu(AAssetManager *assets, ANativeWindow *window);
+int ds_graphics_begin_frame_cpu(Buffer *buffer);
+void ds_graphics_end_frame_cpu(Buffer *buffer);
+void ds_graphics_cancel_frame_cpu(void);
+void ds_graphics_shutdown_cpu(void);
 int ds_graphics_begin_frame(Buffer *buffer);
 void ds_graphics_end_frame(void);
 void ds_graphics_cancel_frame(void);
