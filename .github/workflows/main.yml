@@ -108,6 +108,29 @@ jobs:
       - name: Generate game.c
         run: python3 gen.py
 
+      - name: Host tests (запуск игры, арена строк, Vulkan-инициализация, геометрия)
+        # Настоящий код игры исполняется на хосте против фейкового Vulkan-драйвера:
+        # старт (лобби/настройки/бой/сворачивание) и жёсткие отказы malloc в
+        # строковой арене ловятся до сборки APK. Класс краша «захожу в
+        # приложение - вылет» больше не доезжает до телефона.
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Headers.git /tmp/vkheaders
+          gcc -std=gnu99 -O1 -o /tmp/test_vk_init tools/host_test/test_vk_init.c \
+            -I tools/host_test/stub -I /tmp/vkheaders/include -I . -lm -lpthread
+          /tmp/test_vk_init
+          gcc -std=gnu99 -O1 -o /tmp/test_geometry tools/host_test/test_geometry.c \
+            tools/host_test/test_geo_side.c \
+            -I tools/host_test/stub -I /tmp/vkheaders/include -I . -lm
+          /tmp/test_geometry
+          gcc -std=gnu99 -O1 -o /tmp/test_string_arena tools/host_test/test_string_arena.c \
+            -I tools/host_test/stub -I . -lm \
+            -Wl,--wrap=malloc,--wrap=calloc,--wrap=realloc,--wrap=free
+          /tmp/test_string_arena
+          gcc -std=gnu99 -O1 -o /tmp/test_full_game tools/host_test/test_full_game.c \
+            -I tools/host_test/stub -I /tmp/vkheaders/include -I . -lm -lpthread
+          /tmp/test_full_game
+
       - name: Stage assets
         run: python3 stage_assets.py game/assets staging/assets
 

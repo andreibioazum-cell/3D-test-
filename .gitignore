@@ -6,6 +6,10 @@ staging/
 *.apk
 debug.keystore
 
+# Файлы сохранений, которые игра создаёт в текущей папке без net_set_data_path
+progress.dirty
+promo.dat
+
 # Session file created by the game (saved nick)
 auth.dat
 progress.dat
