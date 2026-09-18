@@ -476,6 +476,18 @@ int main(void) {
     app_init_window();
     for (int i = 0; i < 240; i++) app_frame(i);
     fprintf(stderr, "HARNESS: resume done\n");
+
+    /* Шторм пересозданий: лаунчер/поворот/IME на реальном устройстве делают
+     * TERM+INIT много раз подряд и в разные размеры окна. Каждое - полный
+     * цикл: destroy device/swapchain, новая поверхность, новое окно. */
+    for (int cycle = 0; cycle < 5; cycle++) {
+        ds_graphics_shutdown();
+        ds_sound_shutdown();
+        app_init_window();
+        for (int i = 0; i < 30; i++) app_frame(i);
+    }
+    fprintf(stderr, "HARNESS: recreate storm done\n");
+
     ds_graphics_shutdown();
     ds_sound_shutdown();
     printf("PASS: полная игра (лобби+настройки+бой+сворачивание) на фейковом драйвере\n");
