@@ -440,16 +440,13 @@ static void *test_thread(void *arg) {
     g_res.frame2_ok = ds_graphics_begin_frame(&b);
     rect(0, 0, 10, 10, 0xff654321);
     ds_graphics_end_frame();
-    /* Третий кадр: апскейл 2x из настроек. Оффскрин обязан стать вдвое меньше
-     * окна, а логический размер (его получает вершинный шейдер) — остаться
-     * равным окну: иначе интерфейс вырастал бы в scale раз («супер огромный»). */
-    ds_graphics_set_pixel_scale(2);
+    /* Третий кадр: апскейла в настройках больше нет, поэтому оффскрин всегда
+     * ровно с окно, логический размер совпадает с ним, а blit идёт 1:1. */
     g_res.frame3_ok = ds_graphics_begin_frame(&b);
     rect(0, 0, 10, 10, 0xff123456);
     ds_graphics_end_frame();
     g_res.off_w = vk_off_w; g_res.off_h = vk_off_h;
     g_res.log_w = vk_log_w; g_res.log_h = vk_log_h;
-    ds_graphics_set_pixel_scale(1);
     ds_graphics_shutdown();
     return 0;
 }
@@ -470,25 +467,25 @@ int main(void) {
     if (!g_res.frame2_ok) { fail = 1; printf("FAIL: begin_frame второго кадра (смена формата) вернул 0\n"); }
     if (g_swapchain_creates < 2) { fail = 1; printf("FAIL: ожидалось 2+ пересоздания swapchain, было %d\n", g_swapchain_creates); }
     if (g_pipeline_creates < 8) { fail = 1; printf("FAIL: ожидалось 8+ созданий конвейеров (4 init + 4 после смены формата), было %d\n", g_pipeline_creates); }
-    if (!g_res.frame3_ok) { fail = 1; printf("FAIL: begin_frame кадра с апскейлом 2x вернул 0\n"); }
-    if (g_res.off_w != 360 || g_res.off_h != 640) {
-        fail = 1; printf("FAIL: апскейл 2x: оффскрин %ux%u, ожидалось 360x640\n", g_res.off_w, g_res.off_h);
+    if (!g_res.frame3_ok) { fail = 1; printf("FAIL: begin_frame третьего кадра вернул 0\n"); }
+    if (g_res.off_w != 720 || g_res.off_h != 1280) {
+        fail = 1; printf("FAIL: без апскейла оффскрин %ux%u, ожидалось 720x1280\n", g_res.off_w, g_res.off_h);
     }
     if (g_res.log_w != 720 || g_res.log_h != 1280) {
-        fail = 1; printf("FAIL: апскейл 2x: логический размер %ux%u, ожидалось 720x1280\n", g_res.log_w, g_res.log_h);
+        fail = 1; printf("FAIL: логический размер %ux%u, ожидалось 720x1280\n", g_res.log_w, g_res.log_h);
     }
     if (fabsf(g_pc[0] - 2.0f / 720.0f) > 1e-9f || fabsf(g_pc[1] - 2.0f / 1280.0f) > 1e-9f) {
         fail = 1; printf("FAIL: push-константы кадра с апскейлом %g %g, ожидалось %g %g (шейдер должен делить на окно, не на оффскрин)\n",
                          g_pc[0], g_pc[1], 2.0f / 720.0f, 2.0f / 1280.0f);
     }
-    if (g_blit_src_w != 360 || g_blit_src_h != 640 || g_blit_dst_w != 720 || g_blit_dst_h != 1280) {
-        fail = 1; printf("FAIL: blit с апскейлом %dx%d -> %dx%d, ожидалось 360x640 -> 720x1280\n",
+    if (g_blit_src_w != 720 || g_blit_src_h != 1280 || g_blit_dst_w != 720 || g_blit_dst_h != 1280) {
+        fail = 1; printf("FAIL: blit %dx%d -> %dx%d, ожидалось 720x1280 -> 720x1280 (без апскейла)\n",
                          g_blit_src_w, g_blit_src_h, g_blit_dst_w, g_blit_dst_h);
     }
     if (g_blits < 3) { fail = 1; printf("FAIL: blit не вызывался на каждом кадре (было %d)\n", g_blits); }
     if (g_violations) { fail = 1; printf("FAIL: строгий драйвер поймал невалидный create-info: %s\n", g_violation_msg); }
     if (!fail) {
-        printf("PASS: init + 3 кадра (последний - апскейл 2x: оффскрин 360x640, шейдер и blit на окно 720x1280) "
+        printf("PASS: init + 3 кадра (оффскрин всегда с окно - апскейл убран) "
                "+ смена формата swapchain; pNext/flags чистые, конвейеров создано %d\n", g_pipeline_creates);
     }
     return fail;

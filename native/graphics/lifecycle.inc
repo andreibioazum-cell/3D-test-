@@ -39,31 +39,58 @@ static int open_asset(const char *n, uint8_t **out, size_t *sz) {
     if (off != (size_t)len) { free(buf); return 0; }
     *out = buf; *sz = (size_t)len; return 1;
 }
+/* Убирает запись из кеша: нужно, когда файл не открылся или не раскодировался.
+ * Раньше неудачная загрузка оставалась в кеше навсегда (Texture без пикселей),
+ * и повторный вызов load_png для того же имени уже никогда не пытался открыть
+ * файл заново. Одна случайная осечка при старте (или сразу после возврата в игру
+ * из свёрнутого состояния) - и спрайт пропадал до перезапуска, причём только
+ * один: соседние текстуры грузились нормально. Теперь такая текстура доедет со
+ * следующей попытки. */
+static void drop_tx(Texture *t) {
+    if (!t) return;
+    Texture **pp = &textures;
+    while (*pp && *pp != t) pp = &(*pp)->next;
+    if (*pp) *pp = t->next;
+    free(t->name);
+    free(t);
+}
+/* Ошибки загрузки пишем в консоль не чаще нескольких раз за запуск: при
+ * повторных попытках каждые несколько секунд иначе будет спам. */
+static int tex_fail_logs = 0;
+static void tx_fail_log(const char *n, const char *why) {
+    if (tex_fail_logs < 8) {
+        ds_log_err("texture not loaded: %s: '%s' (will retry)", why, n ? n : "(null)");
+        tex_fail_logs++;
+    }
+}
 static Texture *load_png(const char *req) {
     const char *n = norm_name(req);
-    if (!n) { ds_log_err("texture not loaded: invalid PNG asset path '%s'", req ? req : "(null)"); return NULL; }
+    if (!n) { tx_fail_log(req, "invalid PNG asset path"); return NULL; }
     Texture *t = find_tx(n);
     if (t) return t->pixels ? t : NULL;
-    if (!amgr) { ds_log_err("texture not loaded: no asset manager for '%s'", n); return NULL; }
+    if (!amgr) { tx_fail_log(n, "no asset manager"); return NULL; }
     t = (Texture *)calloc(1, sizeof(*t));
-    if (!t) { ds_log_err("texture not loaded: out of memory caching '%s'", n); return NULL; }
+    if (!t) { tx_fail_log(n, "out of memory caching"); return NULL; }
     t->name = strdup_safe(n);
-    if (!t->name) { free(t); ds_log_err("texture not loaded: out of memory caching name '%s'", n); return NULL; }
+    if (!t->name) { free(t); tx_fail_log(n, "out of memory caching name"); return NULL; }
     t->next = textures; textures = t;
     uint8_t *enc = NULL; size_t enc_sz = 0;
     if (!open_asset(n, &enc, &enc_sz) || enc_sz > (size_t)INT_MAX) {
-        free(enc); ds_log_err("texture not loaded: asset not found or unreadable: '%s'", n); return NULL;
+        free(enc); tx_fail_log(n, "asset not found or unreadable"); drop_tx(t); return NULL;
     }
     int ch = 0;
     stbi_uc *dec = stbi_load_from_memory(enc, (int)enc_sz, &t->w, &t->h, &ch, STBI_rgb_alpha);
     free(enc);
     if (!dec || t->w <= 0 || t->h <= 0) {
-        ds_log_err("texture not loaded: could not decode PNG '%s': %s", n, stbi_failure_reason() ? stbi_failure_reason() : "unknown");
-        stbi_image_free(dec); return NULL;
+        tx_fail_log(n, "could not decode PNG");
+        stbi_image_free(dec); drop_tx(t); return NULL;
     }
     size_t pc = (size_t)t->w * t->h;
     t->pixels = (uint32_t *)malloc(pc * sizeof(*t->pixels));
-    if (!t->pixels) { stbi_image_free(dec); ds_log_err("texture not loaded: out of memory uploading PNG '%s'", n); return NULL; }
+    if (!t->pixels) {
+        stbi_image_free(dec); tx_fail_log(n, "out of memory uploading PNG");
+        drop_tx(t); return NULL;
+    }
     t->opaque = 1;
     for (size_t i = 0; i < pc; i++) {
         uint8_t a = dec[i*4+3];
@@ -71,7 +98,7 @@ static Texture *load_png(const char *req) {
         if (a != 255) t->opaque = 0;
     }
     stbi_image_free(dec);
-    ds_vk_pending_texture(t); /* зальётся на GPU в конце текущего кадра */
+    ds_vk_pending_texture(t); /* зальётся на GPU в начале следующего кадра */
     ds_log("texture loaded: %s (%dx%d)", n, t->w, t->h);
     return t;
 }
@@ -147,6 +174,12 @@ void clear_screen(uint32_t c) {
 void roundrect(float x, float y, float w, float h, float r, uint32_t c) {
     DSCmd *p = push(DS_CMD_ROUND); if (!p) return;
     p->v.rr.x=x; p->v.rr.y=y; p->v.rr.w=w; p->v.rr.h=h; p->v.rr.r=r; p->v.rr.c=pack_c(c);
+}
+/* Повёрнутый прямоугольник со смешиванием (обычный конвейер, как у rect):
+ * зоны удара/рывка рисуются им - прямоугольник вместо круглой капсулы. */
+void rect_rot(float x, float y, float w, float h, float ang, uint32_t c) {
+    DSCmd *p = push(DS_CMD_RECT_ROT); if (!p) return;
+    p->v.rot.x=x; p->v.rot.y=y; p->v.rot.w=w; p->v.rot.h=h; p->v.rot.ang=ang; p->v.rot.c=pack_c(c);
 }
 void circle(float x, float y, float r, uint32_t c) {
     DSCmd *p = push(DS_CMD_CIRCLE); if (!p) return;
@@ -264,22 +297,12 @@ int ds_graphics_init(AAssetManager *a, ANativeWindow *window) {
     if (amgr != a) { ds_release_assets(); amgr = a; }
     return ds_vk_init_backend(window);
 }
-/* Апскейл из настроек: 1 — кадр в полном размере окна, 2..3 — оффскрин в
- * scale раз меньше. Координаты скриптов от масштаба не зависят. */
-static int gfx_pixel_scale = 1;
-void ds_graphics_set_pixel_scale(int s) {
-    if (s < 1) s = 1;
-    if (s > 3) s = 3;
-    gfx_pixel_scale = s;
-}
 int ds_graphics_begin_frame(Buffer *b) {
     if (!b || b->width <= 0 || b->height <= 0 || b->stride < b->width) return 0;
-    /* b->pixels больше не используется: рисуем через Vulkan. */
-    uint32_t s = (uint32_t)gfx_pixel_scale;
-    uint32_t ow = (uint32_t)b->width / s, oh = (uint32_t)b->height / s;
-    if (ow < 1) ow = 1;
-    if (oh < 1) oh = 1;
-    if (!ds_vk_begin_frame_backend((uint32_t)b->width, (uint32_t)b->height, ow, oh)) return 0;
+    /* b->pixels больше не используется: рисуем через Vulkan. Оффскрин — ровно
+     * размер окна: апскейла в настройках больше нет, кадр всегда резкий. */
+    if (!ds_vk_begin_frame_backend((uint32_t)b->width, (uint32_t)b->height,
+                                   (uint32_t)b->width, (uint32_t)b->height)) return 0;
     discard_commands();
     cur_buf = b; frame_open = 1;
     return 1;

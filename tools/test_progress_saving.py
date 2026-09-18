@@ -140,16 +140,10 @@ double net_load_language(void) { return store.language; }
 double net_load_hitboxes(void) { return store.hitboxes; }
 double net_load_music_volume(void) { return store.musicvol; }
 void net_save_music_volume(double v) { store.musicvol = v; }
-double net_load_fps_cap(void) { return 0; }
-void net_save_fps_cap(double v) { (void)v; }
-double net_load_render_scale(void) { return 1; }
-void net_save_render_scale(double v) { (void)v; }
 double net_load_winter_theme(void) { return store.winter; }
 void net_save_winter_theme(double v) { store.winter = v; }
 double net_load_fps_meter(void) { return store.showfps; }
 void net_save_fps_meter(double v) { store.showfps = v; }
-void ds_set_fps_cap(int v) { (void)v; }
-void ds_set_render_scale(int v) { (void)v; }
 
 /* Снимок сети (класс/уровень/скин своего бойца) — просто считаем вызовы. */
 void net_set_class(double v) { (void)v; store.cloud_pushes++; }

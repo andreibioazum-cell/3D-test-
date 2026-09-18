@@ -80,7 +80,7 @@ def canon_type(t):
 
 
 BUILTINS = frozenset({
-    'rect', 'roundrect', 'circle', 'ring', 'line', 'tex', 'tex_tint', 'text',
+    'rect', 'roundrect', 'rect_rot', 'circle', 'ring', 'line', 'tex', 'tex_tint', 'text',
     'text_scaled', 'text_ink_width', 'text_ink_height', 'text_ink_top',
     'png_load', 'clear_screen', 'text_width', 'text_height', 'sqrt', 'sin', 'cos',
     'atan2', 'floor', 'rand', 'snd_load', 'snd_play', 'snd_loop', 'snd_stop',
@@ -133,11 +133,8 @@ BUILTINS = frozenset({
     'net_load_playtime', 'net_save_playtime', 'net_add_playtime',
     'net_load_language', 'net_load_hitboxes', 'net_save_settings',
     'net_load_music_volume', 'net_save_music_volume',
-    'net_load_fps_cap', 'net_save_fps_cap',
-    'net_load_render_scale', 'net_save_render_scale',
     'net_load_winter_theme', 'net_save_winter_theme',
     'net_load_fps_meter', 'net_save_fps_meter',
-    'ds_set_fps_cap', 'ds_set_render_scale',
     'keyboard_show',
     'keyboard_hide', 'keyboard_get_text', 'keyboard_get_raw', 'keyboard_clear',
     'keyboard_enter_pressed', 'keyboard_type', 'keyboard_visible', 'str_len',

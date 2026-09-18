@@ -34,6 +34,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CC = shlex.split(__import__("os").environ.get("CC", "cc"))
 SCREENS = ("classes", "settings")
+# Экраны, которые рисуются только по явному запросу: лобби и бой (в бою видно
+# спрайты, хитбоксы и счётчик FPS - удобно ловить «пропавшего игрока»).
+OPTIONAL_SCREENS = ("lobby", "battle", "battle_punch")
 
 STUBS = r"""
 #include <assert.h>
@@ -187,6 +190,48 @@ static uint32_t prev_text_force_white(uint32_t c) {
 }
 
 void rect(float x, float y, float w, float h, uint32_t c) { render_rect(&g_buf, x, y, w, h, pack_c(c)); }
+/* Повёрнутый прямоугольник: четыре угла вокруг центра на угол ang - то же, что
+ * делает geo_rect_rot в игре. */
+void rect_rot(float x, float y, float w, float h, float ang, uint32_t c) {
+    if (w <= 0 || h <= 0) return;
+    float hw = w * 0.5f, hh = h * 0.5f, cx = x + hw, cy = y + hh;
+    if (ang == 0.0f) { render_rect(&g_buf, x, y, w, h, pack_c(c)); return; }
+    float ca = cosf(ang), sa = sinf(ang);
+    float px[4], py[4];
+    const float sx[4] = { -1, 1, 1, -1 }, sy[4] = { -1, -1, 1, 1 };
+    for (int i = 0; i < 4; i++) {
+        float lx = sx[i] * hw, ly = sy[i] * hh;
+        px[i] = cx + ca * lx - sa * ly;
+        py[i] = cy + sa * lx + ca * ly;
+    }
+    float minx = px[0], maxx = px[0], miny = py[0], maxy = py[0];
+    for (int i = 1; i < 4; i++) {
+        if (px[i] < minx) minx = px[i];
+        if (px[i] > maxx) maxx = px[i];
+        if (py[i] < miny) miny = py[i];
+        if (py[i] > maxy) maxy = py[i];
+    }
+    int x0 = (int)floorf(minx), x1 = (int)ceilf(maxx);
+    int y0 = (int)floorf(miny), y1 = (int)ceilf(maxy);
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > g_buf.width) x1 = g_buf.width;
+    if (y1 > g_buf.height) y1 = g_buf.height;
+    uint32_t col = pack_c(c);
+    for (int py_ = y0; py_ < y1; py_++) {
+        for (int px_ = x0; px_ < x1; px_++) {
+            float fx = (float)px_ + 0.5f, fy = (float)py_ + 0.5f;
+            int inside = 1;
+            for (int i = 0; i < 4 && inside; i++) {
+                int j = (i + 1) % 4;
+                float cross = (px[j] - px[i]) * (fy - py[i]) - (py[j] - py[i]) * (fx - px[i]);
+                if (cross < 0.0f) inside = 0;   /* вершины идут по часовой (y вниз) */
+            }
+            if (!inside) continue;
+            g_buf.pixels[py_ * g_buf.stride + px_] = blend(g_buf.pixels[py_ * g_buf.stride + px_], col);
+        }
+    }
+}
 void roundrect(float x, float y, float w, float h, float r, uint32_t c) { render_roundrect(&g_buf, x, y, w, h, r, pack_c(c)); }
 void circle(float x, float y, float r, uint32_t c) { render_circle(&g_buf, x, y, r, pack_c(c)); }
 void ring(float x, float y, float r, float t, uint32_t c) { render_ring(&g_buf, x, y, r, t, pack_c(c)); }
@@ -347,7 +392,6 @@ int main(int argc, char **argv) {
     /* Значения по умолчанию из settings.dat (сетевые заглушки вернули нули). */
     language = 1; show_hitboxes = 1; music_volume = 70;
     winter_theme = 1; show_fps = 1;
-    render_scale = 1; /* дефолт чистой установки (config.ds): net_load_render_scale вернул 0 */
     ds_fn_apply_winter_theme();
     /* Прогресс: все классы куплены, выбран Азум - как у играющего человека. */
     ds_fn_set_class_owned(CLASS_AZUM, 1);
@@ -356,10 +400,26 @@ int main(int argc, char **argv) {
     candies = 320; cups = 1200;
     player_class = CLASS_AZUM;
     ds_fn_sync_selected_class();
-    if (strcmp(screen, "classes") == 0) { game_state = ST_CLASSES; ds_fn_draw_classes(); }
+    /* Бой: экран рисуется боевыми функциями поверх настоящих текстур, поэтому
+     * на PNG видно и спрайты бойцов, и хитбоксы, и счётчик FPS. */
+    if (strcmp(screen, "battle") == 0 || strcmp(screen, "battle_punch") == 0) {
+        int punching = strcmp(screen, "battle_punch") == 0;
+        game_state = ST_SOLO;
+        azum_skin = SKIN_NORMAL;
+        ds_fn_init_game();
+        dt = 1.0 / 60.0;
+        for (int i = 0; i < 45; i++) ds_fn_update();
+        fps_value = 57;
+        if (punching) {
+            ds_fn_start_punch_now();
+            for (int i = 0; i < 3; i++) ds_fn_update();
+        }
+        ds_fn_draw_game();
+    }
+    else if (strcmp(screen, "classes") == 0) { game_state = ST_CLASSES; ds_fn_draw_classes(); }
     else if (strcmp(screen, "settings") == 0) { game_state = ST_SETTINGS; ds_fn_draw_settings(); }
     else if (strcmp(screen, "lobby") == 0) { game_state = ST_LOBBY; ds_fn_draw_lobby(); }
-    else { fprintf(stderr, "неизвестный экран: %s (классы: classes/settings/lobby)\n", screen); return 2; }
+    else { fprintf(stderr, "неизвестный экран: %s (классы: classes/settings/lobby/battle/battle_punch)\n", screen); return 2; }
     if (!write_png(out, &g_buf)) { fprintf(stderr, "не удалось записать %s\n", out); return 1; }
     printf("%s -> %s (%dx%d)\n", screen, out, W, H);
     return 0;
@@ -443,7 +503,7 @@ def compile_preview(temp: Path) -> Path:
 
 def main(argv: list[str]) -> int:
     args = argv[1:]
-    known = SCREENS + ("lobby",)
+    known = SCREENS + OPTIONAL_SCREENS
     # первый аргумент - каталог для PNG, если он не имя экрана
     if args and args[0] not in known:
         out_dir = Path(args[0])

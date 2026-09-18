@@ -60,7 +60,7 @@ public function update_remote_punches()
             if arr_get(remotes,s*remote_fields+5)==0 then
                 clear_remote_punch(s)
             else
-                local number target=punch_resolve_target(arr_get(remote_punches,rb+1),arr_get(remote_punches,rb+2),arr_get(remote_punches,rb+3),arr_get(remote_punches,rb+4),0)
+                local number target=punch_resolve_target(arr_get(remote_punches,rb+1),arr_get(remote_punches,rb+2),arr_get(remote_punches,rb+3),arr_get(remote_punches,rb+4),0,punch_front_offset(player.size))
                 if target==0||(target>=1&&target<=turret_max) then
                     local number rcls=arr_get(remotes,s*remote_fields+10), rlevel=net_player_level(s)
                     if target==0 then

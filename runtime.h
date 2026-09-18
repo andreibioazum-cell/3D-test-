@@ -74,12 +74,6 @@ const char *str_trim(const char *s);
 const char *str_lower(const char *s);
 const char *str_upper(const char *s);
 void ds_set_activity(void *activity);
-/* Апскейл: игра рендерится в виртуальном буфере screen/scale x screen/scale и
- * растягивается nearest-neighbor на всё окно (пиксельная картинка, меньше
- * работы софтрассеру). Вызывается скриптом из настроек; 1..3. */
-void ds_set_render_scale(int scale);
-/* Лимит частоты кадров для экономии заряда: 0 - без ограничения. */
-void ds_set_fps_cap(int fps);
 void keyboard_show(void);
 void keyboard_hide(void);
 const char* keyboard_get_text(void);
@@ -94,6 +88,9 @@ void keyboard_backspace(void);
 void keyboard_commit_utf8(const char *utf8);
 void rect(float x, float y, float w, float h, uint32_t color);
 void roundrect(float x, float y, float w, float h, float r, uint32_t color);
+/* Повёрнутый прямоугольник: x,y - левый верхний угол не повёрнутой фигуры,
+ * angle - поворот вокруг её центра. Рисуется с альфа-смешиванием. */
+void rect_rot(float x, float y, float w, float h, float angle, uint32_t color);
 void circle(float x, float y, float r, uint32_t color);
 void ring(float x, float y, float r, float t, uint32_t color);
 void line(float x1, float y1, float x2, float y2, float thickness, uint32_t color);
@@ -133,10 +130,6 @@ int text_height(const char *string);
 int text_ink_width(const char *string);
 int text_ink_height(const char *string);
 int text_ink_top(const char *string);
-/* Пиксельный масштаб апскейла: скрипты по-прежнему живут в физических пикселях
- * окна (интерфейс не увеличивается), а кадр рисуется в оффскрин в scale раз
- * меньше и растягивается на окно nearest-blit'ом. 1..3, по умолчанию 1. */
-void ds_graphics_set_pixel_scale(int scale);
 /* Создание Vulkan-рендера: менеджер активов плюс окно (для поверхности
  * VK_KHR_android_surface). Возвращает 1 при успехе; при 0 кадры не рисуются. */
 int ds_graphics_init(AAssetManager *assets, ANativeWindow *window);

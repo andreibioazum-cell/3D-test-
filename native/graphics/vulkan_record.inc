@@ -37,6 +37,11 @@ static int ds_vk_build_geometry(void) {
                 desc = NULL;
                 geo_roundrect(c->v.rr.x, c->v.rr.y, c->v.rr.w, c->v.rr.h, c->v.rr.r, c->v.rr.c);
                 break;
+            case DS_CMD_RECT_ROT:
+                /* pipeline 0: обычное альфа-смешивание, поэтому хитбокс
+                 * прозрачный, а не «залитый» чёрным (fill_span-конвейер). */
+                geo_rect_rot(c->v.rot.x, c->v.rot.y, c->v.rot.w, c->v.rot.h, c->v.rot.ang, c->v.rot.c);
+                break;
             case DS_CMD_CIRCLE:
                 geo_circle(c->v.ci.x, c->v.ci.y, c->v.ci.r, c->v.ci.c);
                 break;

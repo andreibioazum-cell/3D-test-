@@ -198,14 +198,19 @@ public function finish_game(number result)
         ds_log("lose -%g cups",cup_lose)
     end
 end
-public function draw_punch_box(number x, number y, number dx, number dy, number reach, number width, number alpha)
-    local number aa=floor(clamp(alpha,0,1)*aim_max_alpha)
-    if aa>0 then
-        line(x,y,x+dx*reach,y+dy*reach,width,(((unsigned)(int)aa)<<24)|((unsigned)(int)hitbox_rgb))
-    end
+-- Рисуется ровно та зона, которую проверяет попадание удара: прямоугольник от
+-- края корпуса бойца (front) длиной reach и шириной width. Раньше это была
+-- круглая капсула с центром бойца, поэтому зона выглядела «пятном», заходила под
+-- спрайт и не совпадала с проверкой попадания.
+-- Нарисованная зона удара = ровно та, что проверяет попадание: полоса от
+-- края корпуса (front) вперёд на reach, шириной width. Проверка берёт чуть
+-- шире - от центра бойца до reach+front (см. in_punch_box), чтобы удар не
+-- пропадал вплотную, но видимая часть целиком лежит впереди спрайта.
+public function draw_punch_box(number x, number y, number dx, number dy, number reach, number width, number front, number alpha)
+    draw_hit_strip(x,y,dx,dy,front,reach+front,width/2,alpha)
 end
 public function fighter_sprite(number cls, number punching, number skin)
-    if skin_is_active(cls,skin)==1 then
+    if skin_is_active(cls,skin)==1&&zombie_tex_ok()==1 then
         if punching==1 then
             return zombie_punch_tex()
         end
@@ -253,7 +258,7 @@ public function draw_player_hitbox_layer()
         return
     end
     if aim_a>0 then
-        draw_punch_box(player.x,player.y,cos(player.angle),sin(player.angle),punch_reach,punch_width,aim_a)
+        draw_punch_box(player.x,player.y,cos(player.angle),sin(player.angle),punch_reach,punch_width,punch_front_offset(player.size),aim_a)
     end
 end
 public function draw_player_body_layer()
@@ -287,7 +292,7 @@ public function draw_enemy_hitbox()
         return
     end
     if enemy_punch_a>0 then
-        draw_punch_box(enemy.x,enemy.y,cos(enemy.angle),sin(enemy.angle),enemy_punch_reach,enemy_punch_width,enemy_punch_a)
+        draw_punch_box(enemy.x,enemy.y,cos(enemy.angle),sin(enemy.angle),enemy_punch_reach,enemy_punch_width,punch_front_offset(enemy.size),enemy_punch_a)
     end
 end
 public function draw_enemy_body()
@@ -341,8 +346,9 @@ public function draw_result(string title)
     end
     ctext_scaled(tr_tap_to_return(),y+188,0xFFFFFF,0.62)
 end
--- Счётчик FPS в бою: маленькая плашка по центру сверху — между полосами
--- здоровья, они занимают только левую и правую четверть экрана.
+-- Счётчик FPS в бою: правый верхний угол, без плашки и подложки, крупным
+-- текстом. Раньше он висел плашкой по центру сверху и налезал на кнопку
+-- «Назад», а текст был мелким.
 public function draw_fps_meter()
     if show_fps==0 then
         return
@@ -352,10 +358,20 @@ public function draw_fps_meter()
     local number tw=text_ink_width(label)*sc
     local number th=text_ink_height(label)*sc
     local number tt=text_ink_top(label)*sc
-    local number w=tw+28, h=36
-    local number x=(screen_w-w)/2, y=16
-    roundrect(x,y,w,h,h/2,fps_plate_rgb)
-    text_scaled(label,x+(w-tw)/2,y+(h-th)/2-tt+1.5,text_color,sc)
+    local number x=screen_w-fps_margin_x-tw
+    -- fps_margin_y — это верх чернил текста: счётчик стоит в правом верхнем
+    -- углу сразу под полосой HP врага (иначе цифры наезжали на полосу).
+    local number y=fps_margin_y-tt
+    if x<0 then
+        x=0
+    end
+    if y<0 then
+        y=0
+    end
+    -- Тень на пиксель вниз-вправо: текст читается на любом фоне, но это не
+    -- плашка, а обычные буквы с обводкой.
+    text_scaled(label,x+2,y+2,0xB0000000,sc)
+    text_scaled(label,x,y,text_color,sc)
 end
 public function draw_dash_streak()
     return

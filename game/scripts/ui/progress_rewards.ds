@@ -43,7 +43,12 @@ public function progress_normalize()
     if azum_skin < SKIN_NORMAL || azum_skin >= SKIN_COUNT then
         azum_skin = SKIN_NORMAL
     end
+    -- Зомби-скин без своих текстур не имеет смысла: боец рисовался бы то
+    -- обычным кубом, то зомби. Откатываемся на обычный скин.
     if azum_skin == SKIN_ZOMBIE && has_achievement(ACH_LEGENDS) == 0 then
+        azum_skin = SKIN_NORMAL
+    end
+    if azum_skin == SKIN_ZOMBIE && zombie_tex_ok() == 0 then
         azum_skin = SKIN_NORMAL
     end
     local number cls = CLASS_ORDINARY
@@ -93,21 +98,13 @@ public function settings_from_storage()
     language = net_load_language()
     show_hitboxes = net_load_hitboxes()
     music_volume = net_load_music_volume()
-    fps_cap = net_load_fps_cap()
-    render_scale = net_load_render_scale()
     winter_theme = net_load_winter_theme()
     show_fps = net_load_fps_meter()
 end
 public function save_settings()
     net_save_settings(language, show_hitboxes)
-    net_save_fps_cap(fps_cap)
-    net_save_render_scale(render_scale)
     net_save_winter_theme(winter_theme)
     net_save_fps_meter(show_fps)
-end
-public function apply_video_settings()
-    ds_set_fps_cap(fps_cap)
-    ds_set_render_scale(render_scale)
 end
 public function music_volume_step(number d)
     music_volume = clamp(music_volume + d, 0, 100)

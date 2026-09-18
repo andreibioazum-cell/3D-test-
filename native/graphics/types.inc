@@ -59,7 +59,7 @@ struct Texture {
 
 typedef enum {
     DS_CMD_RECT, DS_CMD_ROUND, DS_CMD_CIRCLE, DS_CMD_RING, DS_CMD_LINE,
-    DS_CMD_TEX, DS_CMD_TEXT, DS_CMD_TEX_TINT
+    DS_CMD_TEX, DS_CMD_TEXT, DS_CMD_TEX_TINT, DS_CMD_RECT_ROT
 } DSCommand;
 typedef struct {
     DSCommand t;
@@ -71,6 +71,11 @@ typedef struct {
         struct { float x1, y1, x2, y2, th; uint32_t c; } ln;
         struct { float x, y, a, sc; Texture *tx; } tx;
         struct { float x, y, a, sc; Texture *tx; uint32_t c; } tx2;
+        /* Повёрнутый прямоугольник: x,y — левый верхний угол НЕповёрнутого
+         * прямоугольника, ang — поворот вокруг его центра (как у текстуры).
+         * Нужен хитбоксам: зона удара/рывка должна быть прямоугольником, а не
+         * круглым пятном. Рисуется обычным (смешивающим) конвейером. */
+        struct { float x, y, w, h, ang; uint32_t c; } rot;
         struct { char *s; float x, y, sc; uint32_t c; } tt;
     } v;
 } DSCmd;

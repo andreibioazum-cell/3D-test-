@@ -65,7 +65,7 @@ public function move_player()
 end
 public function in_punch_box(number px, number py, number pdx, number pdy, number tx, number ty)
     local number rx=tx-px, ry=ty-py, fw=rx*pdx+ry*pdy, side=ry*pdx-rx*pdy
-    if fw>=0&&fw<=punch_reach&&side*side<=punch_width*punch_width/4 then
+    if fw>=0&&fw<=punch_reach+punch_front_offset(player.size)&&side*side<=punch_width*punch_width/4 then
         return 1
     end
     return 0
@@ -216,7 +216,7 @@ end
 public function player_in_enemy_punch()
     local number pdx=cos(enemy.angle), pdy=sin(enemy.angle), rx=player.x-enemy.x, ry=player.y-enemy.y
     local number fw=rx*pdx+ry*pdy, side=ry*pdx-rx*pdy, pr=player.size*0.65, half=enemy_punch_width/2+pr
-    if fw>=0&&fw<=enemy_punch_reach+pr&&side*side<=half*half then
+    if fw>=0&&fw<=enemy_punch_reach+pr+punch_front_offset(enemy.size)&&side*side<=half*half then
         return 1
     end
     return 0
@@ -237,7 +237,7 @@ end
 public function enemy_in_danger()
     local number pdx=cos(player.angle), pdy=sin(player.angle), rx=enemy.x-player.x, ry=enemy.y-player.y
     local number fw=rx*pdx+ry*pdy, side=ry*pdx-rx*pdy, er=enemy.size*0.65, half=punch_width/2+er
-    if fw>=-er&&fw<=punch_reach+er&&side*side<=half*half then
+    if fw>=-er&&fw<=punch_reach+er+punch_front_offset(player.size)&&side*side<=half*half then
         return 1
     end
     return 0
