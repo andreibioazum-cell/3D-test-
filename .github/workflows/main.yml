@@ -140,11 +140,13 @@ jobs:
         env:
           NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
         run: |
+          set -o pipefail
           TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
           GLUE="$NDK_ROOT/sources/android/native_app_glue"
 
           mkdir -p staging/lib/arm64-v8a staging/lib/armeabi-v7a staging/lib/x86_64
 
+          {
           "$TOOLCHAIN/aarch64-linux-android26-clang" -O3 -s -fPIC -shared \
             game/game.c runtime.c main.c native/graphics/cpu_backend.c "$GLUE/android_native_app_glue.c" \
             -I. -I"$GLUE" -landroid -llog -lm -lvulkan \
@@ -159,6 +161,17 @@ jobs:
             game/game.c runtime.c main.c native/graphics/cpu_backend.c "$GLUE/android_native_app_glue.c" \
             -I. -I"$GLUE" -landroid -llog -lm -lvulkan \
             -o staging/lib/x86_64/libds_game.so
+          } 2>&1 | tee "$RUNNER_TEMP/ndk-build.log"
+
+      - name: Dump build log to summary on failure
+        if: failure()
+        run: |
+          {
+            echo "### NDK build log (tail)"
+            echo '```text'
+            tail -c 24000 "$RUNNER_TEMP/ndk-build.log" 2>/dev/null || echo "(нет лога)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Package and align APK
         run: |
