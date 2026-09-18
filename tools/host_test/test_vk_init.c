@@ -417,7 +417,7 @@ int32_t ANativeWindow_getHeight(ANativeWindow *w) { (void)w; return 1280; }
 int32_t ANativeWindow_setBuffersGeometry(ANativeWindow *w, int32_t width, int32_t height, int32_t format) { (void)w; (void)width; (void)height; (void)format; return 0; }
 int ANativeWindow_lock(ANativeWindow *w, ANativeWindow_Buffer *out, void *rb) { (void)w; (void)out; (void)rb; return -1; }
 int ANativeWindow_unlockAndPost(ANativeWindow *w) { (void)w; return 0; }
-ANativeWindow *ANativeWindow_acquire(ANativeWindow *w) { return w; }
+void ANativeWindow_acquire(ANativeWindow *w) { (void)w; }
 void ANativeWindow_release(ANativeWindow *w) { (void)w; }
 
 

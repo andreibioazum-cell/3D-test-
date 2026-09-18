@@ -422,7 +422,7 @@ int ANativeWindow_lock(ANativeWindow *w, ANativeWindow_Buffer *out, void *rb) {
     return 0;
 }
 int ANativeWindow_unlockAndPost(ANativeWindow *w) { (void)w; g_win_locked = 0; return 0; }
-ANativeWindow *ANativeWindow_acquire(ANativeWindow *w) { return w; }
+void ANativeWindow_acquire(ANativeWindow *w) { (void)w; }
 void ANativeWindow_release(ANativeWindow *w) { (void)w; }
 
 /* Отчёт о падении - тот же модуль, что в main.c. */

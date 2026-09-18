@@ -18,8 +18,10 @@ int ds_graphics_init_cpu(AAssetManager *a, ANativeWindow *w) {
     if (!amgr || !w) return 0;
     if (ds_cpu_win != w) {
         if (ds_cpu_win) ANativeWindow_release(ds_cpu_win);
-        ds_cpu_win = ANativeWindow_acquire(w);
-        if (!ds_cpu_win) return 0;
+        /* acquire() возвращает void и лишь поднимает сччик ссылок: окно не
+         * умрёт, пока мы в него рисуем (отпускам в shutdown_cpu). */
+        ANativeWindow_acquire(w);
+        ds_cpu_win = w;
         /* RGBA_8888: uint32-пиксели формата AARRGGBB (pack_c) ложатся в буфер
          * окна один к одному - так же выводил прежний попиксельный рендер. */
         ANativeWindow_setBuffersGeometry(ds_cpu_win, 0, 0, WINDOW_FORMAT_RGBA_8888);
