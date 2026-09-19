@@ -41,13 +41,15 @@ jobs:
       # Подпись — отладочным ключом (`androiddebugkey`, пароль `android`),
       # никаких секретов в репозитории не нужно. Ключ генерируется в самой
       # сборке и кэшируется между запусками, чтобы APK ставился «поверх»
-      # предыдущего, а не требовал удаления приложения. Для публикации в
-      # RuStore/Google Play такая подпись не годится — там нужен релизный ключ.
+      # предыдущего, а не требовал удаления приложения. Ключ кэша намеренно без
+      # имени ветки: сборки веток видят кэш main, поэтому у всех сборок одна и
+      # та же подпись. Для публикации в RuStore/Google Play такая подпись не
+      # годится — там нужен релизный ключ.
       - name: Cache debug signing key
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/cb4-debug
-          key: cb4-debug-keystore-v1-${{ github.ref_name }}
+          key: cb4-debug-keystore-v1
           restore-keys: cb4-debug-keystore-v1-
 
       - name: Install Android SDK packages
