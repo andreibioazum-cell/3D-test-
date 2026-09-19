@@ -111,7 +111,7 @@ jobs:
       # 3D-слой рендера (native/graphics/render3d.inc) проверяется на хосте
       # без Vulkan: проекция, отбор задних граней, обрезка у глаза, порядок
       # художника и вывод в общий командный список.
-      - name: Host test: 3D renderer
+      - name: "Host test: 3D renderer"
         run: |
           gcc -std=gnu99 -O1 -o /tmp/test_3d tools/host_test/test_3d.c \
             -I tools/host_test/stub -I . -lm
@@ -119,7 +119,7 @@ jobs:
 
       # 3D-платформер: настоящие скрипты игры гоняются на хосте (спавн,
       # прыжки, монеты, чекпоинты, финиш, кнопка в лобби, слои кадра).
-      - name: Host test: 3D platformer
+      - name: "Host test: 3D platformer"
         run: python3 tools/test_platformer3d.py
 
       - name: Stage assets
