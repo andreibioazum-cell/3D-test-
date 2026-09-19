@@ -38,38 +38,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Restore signing key from Secrets
-        env:
-          CB4_P12_BASE64: ${{ secrets.CB4_P12_BASE64 }}
-          CB4_P12_PASSWORD: ${{ secrets.CB4_P12_PASSWORD }}
-        run: |
-          set -euo pipefail
-
-          if [[ -z "$CB4_P12_BASE64" || -z "$CB4_P12_PASSWORD" ]]; then
-            echo "::error::Add CB4_P12_BASE64 and CB4_P12_PASSWORD repository secrets."
-            exit 1
-          fi
-
-          umask 077
-          KEY_DIR="$RUNNER_TEMP/cb4-signing"
-          mkdir -p "$KEY_DIR"
-          chmod 700 "$KEY_DIR"
-
-          if ! printf '%s' "$CB4_P12_BASE64" \
-            | tr -d '[:space:]' \
-            | base64 --decode > "$KEY_DIR/CB4.p12"; then
-            echo "::error::CB4_P12_BASE64 is not valid Base64."
-            exit 1
-          fi
-
-          chmod 600 "$KEY_DIR/CB4.p12"
-
-          if ! keytool -list -storetype PKCS12 \
-            -keystore "$KEY_DIR/CB4.p12" \
-            -storepass:env CB4_P12_PASSWORD > /dev/null; then
-            echo "::error::Cannot open the P12. Check the key and its password."
-            exit 1
-          fi
+      # Подпись — отладочным ключом (`androiddebugkey`, пароль `android`),
+      # никаких секретов в репозитории не нужно. Ключ генерируется в самой
+      # сборке и кэшируется между запусками, чтобы APK ставился «поверх»
+      # предыдущего, а не требовал удаления приложения. Ключ кэша намеренно без
+      # имени ветки: сборки веток видят кэш main, поэтому у всех сборок одна и
+      # та же подпись. Для публикации в RuStore/Google Play такая подпись не
+      # годится — там нужен релизный ключ.
+      - name: Cache debug signing key
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/cb4-debug
+          key: cb4-debug-keystore-v1
+          restore-keys: cb4-debug-keystore-v1-
 
       - name: Install Android SDK packages
         # android-actions/setup-android@v3 больше не используется: на свежих
@@ -167,26 +148,36 @@ jobs:
 
           "$BT/zipalign" -v 4 unsigned.apk aligned.apk
 
-      - name: Sign APK
-        env:
-          CB4_P12_PASSWORD: ${{ secrets.CB4_P12_PASSWORD }}
-          CB4_KEY_ALIAS: ${{ secrets.CB4_KEY_ALIAS }}
-          CB4_KEY_PASSWORD: ${{ secrets.CB4_KEY_PASSWORD || secrets.CB4_P12_PASSWORD }}
+      - name: Sign APK with debug key
         run: |
           BT="$ANDROID_HOME/build-tools/34.0.0"
+          KEY_DIR="$RUNNER_TEMP/cb4-debug"
+          KEYSTORE="$KEY_DIR/debug.keystore"
 
-          SIGN_ARGS=(
-            --ks "$RUNNER_TEMP/cb4-signing/CB4.p12"
-            --ks-type PKCS12
-            --ks-pass env:CB4_P12_PASSWORD
-            --key-pass env:CB4_KEY_PASSWORD
-          )
+          umask 077
+          mkdir -p "$KEY_DIR"
+          chmod 700 "$KEY_DIR"
 
-          if [[ -n "$CB4_KEY_ALIAS" ]]; then
-            SIGN_ARGS+=(--ks-key-alias "$CB4_KEY_ALIAS")
+          # Ключ создаётся один раз: дальше его подхватывает кэш, поэтому
+          # подпись не меняется от сборки к сборке.
+          if [[ ! -f "$KEYSTORE" ]]; then
+            keytool -genkeypair -noprompt \
+              -keystore "$KEYSTORE" \
+              -storetype PKCS12 \
+              -storepass android \
+              -keypass android \
+              -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug, O=Android, C=US"
+            chmod 600 "$KEYSTORE"
           fi
 
-          "$BT/apksigner" sign "${SIGN_ARGS[@]}" \
+          "$BT/apksigner" sign \
+            --ks "$KEYSTORE" \
+            --ks-type PKCS12 \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --ks-key-alias androiddebugkey \
             --out Game.apk aligned.apk
 
       - name: Verify APK metadata and signature
@@ -194,12 +185,10 @@ jobs:
           BT="$ANDROID_HOME/build-tools/34.0.0"
           "$BT/aapt" dump badging Game.apk | head -n 5
           "$BT/aapt" dump badging Game.apk | grep -q "versionCode='[0-9]\+'" \
-            || { echo "::error::APK has no versionCode - RuStore will reject it."; exit 1; }
+            || { echo "::error::APK has no versionCode - store checks will reject it."; exit 1; }
           "$BT/apksigner" verify --verbose --print-certs Game.apk
-
-      - name: Delete temporary signing key
-        if: ${{ always() }}
-        run: rm -rf -- "${RUNNER_TEMP:?}/cb4-signing"
+          "$BT/apksigner" verify --print-certs Game.apk | grep -q "CN=Android Debug" \
+            || { echo "::error::APK is not signed with the debug key."; exit 1; }
 
       - uses: actions/upload-artifact@v4
         with:
