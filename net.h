@@ -177,6 +177,15 @@ double net_load_playtime(void);
 void net_save_playtime(double seconds);
 void net_add_playtime(double delta);
 
+/* Задания: состояние переживает выход из игры (см. native/net/quests.inc).
+ * net_quest_now — текущий epoch, чтобы отсчёт продолжался и после выхода. */
+double net_quest_now(void);
+void net_save_quest_state(double t0, double p0, double n0, double x0,
+                          double t1, double p1, double n1, double x1,
+                          double t2, double p2, double n2, double x2);
+double net_load_quest_state(double slot, double field);
+double net_quest_has_state(void);
+
 void net_leaderboard_fetch(const char *url);
 double net_leaderboard_status(void);
 double net_leaderboard_count(void);

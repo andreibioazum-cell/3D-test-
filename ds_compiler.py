@@ -131,6 +131,7 @@ BUILTINS = frozenset({
     'net_promo_mark_used', 'net_promo_streak', 'net_promo_bump_streak',
     'net_promo_reset_streak', 'net_promo_card_found', 'net_promo_mark_card_found',
     'net_load_playtime', 'net_save_playtime', 'net_add_playtime',
+    'net_quest_now', 'net_save_quest_state', 'net_load_quest_state', 'net_quest_has_state',
     'net_load_language', 'net_load_hitboxes', 'net_save_settings',
     'net_load_music_volume', 'net_save_music_volume',
     'net_load_winter_theme', 'net_save_winter_theme',

@@ -152,6 +152,25 @@ void net_promo_mark_card_found(void) {}
 double net_load_playtime(void) { return 0; }
 void net_save_playtime(double s) { (void)s; }
 void net_add_playtime(double d) { (void)d; }
+/* Квесты: управляемое «реальное» время и хранилище состояния заданий. */
+double fake_now = 0;
+static double quest_state[12] = {0};
+static int quest_state_valid = 0;
+double net_quest_now(void) { return fake_now; }
+void net_save_quest_state(double t0, double p0, double n0, double x0,
+                          double t1, double p1, double n1, double x1,
+                          double t2, double p2, double n2, double x2) {
+    quest_state[0]=t0; quest_state[1]=p0; quest_state[2]=n0; quest_state[3]=x0;
+    quest_state[4]=t1; quest_state[5]=p1; quest_state[6]=n1; quest_state[7]=x1;
+    quest_state[8]=t2; quest_state[9]=p2; quest_state[10]=n2; quest_state[11]=x2;
+    quest_state_valid = 1;
+}
+double net_load_quest_state(double slot, double field) {
+    int s = (int)slot, f = (int)field;
+    if (s < 0 || s > 2 || f < 0 || f > 3) return 0;
+    return quest_state[s * 4 + f];
+}
+double net_quest_has_state(void) { return quest_state_valid; }
 void net_set_mode(double v) { (void)v; }
 void net_set_room(double v) { (void)v; }
 /* Публикации в сеть: в соло-тестах не нужны, но update_game тянет их в линк. */
@@ -617,27 +636,10 @@ static void test_splash_screens(void) {
     ds_fn_touch_warn(screen_w / 2, ds_fn_warn_btn_y() + 20, 1);
     assert(legal_marks == 0);
     ds_fn_touch_warn(screen_w / 2, ds_fn_warn_btn_y() + 20, 0);
-    assert(legal_marks == 1 && warn_open == 0 && studio_open == 1);
-    warn_open = 1; warn_a = 1; studio_open = 0;
-    assert(warn_open == 1 && warn_a == 1 && studio_open == 0);
-    /* Согласие (тело legal_accept): гейт закрывается и стартует заставка
-     * студии — дальше она работает как раньше. */
-    warn_open = 0; warn_a = 0;
-    studio_open = 1; studio_t = 0; studio_a = 0; studio_bg_a = 1;
-    /* Заставка: логотип проявляется и висит на цельном чёрном фоне... */
-    studio_t = 0; studio_a = 0; studio_in = 0.5; studio_hold = 1.6; studio_fade = 0.7;
-    for (int i = 0; i < 10; i++) ds_fn_update_studio();   /* 1.0 c */
-    near(studio_a, 1); near(studio_bg_a, 1);
-    for (int i = 0; i < 12; i++) ds_fn_update_studio();   /* +1.2 c = 2.2 c */
-    /* Логотип висел на цельном чёрном фоне до 2.1 c; после 2.1 c чёрный фон
-     * начал гаснуть вместе с логотипом — сейчас середина затухания. */
-    assert(studio_a > 0 && studio_a < 1);
-    near(studio_bg_a, studio_a);
-    for (int i = 0; i < 20; i++) ds_fn_update_studio();   /* +2.0 c */
-    assert(studio_open == 0 && studio_bg_a == 0);
+    /* Согласие закрывает гейт и больше НЕ стартует заставку студии. */
+    assert(legal_marks == 1 && warn_open == 0 && studio_open == 0);
     /* Отрисовка: фон предупреждения непрозрачно-чёрный, поверх — короткий
-     * текст и кнопка согласия; фон заставки прозрачнеет только вместе с
-     * логотипом. */
+     * текст и кнопка согласия. */
     warn_open = 1; warn_a = 0.5;
     call_count = 0;
     ds_fn_draw_warning();
@@ -666,16 +668,39 @@ static void test_splash_screens(void) {
     assert(strstr(last_text, "(") == NULL);            /* секунды исчезли */
     int marks_before = legal_marks;
     ds_fn_touch_warn(screen_w / 2, ds_fn_warn_btn_y() + 20, 0);
-    assert(legal_marks == marks_before + 1 && warn_open == 0 && studio_open == 1);
-    studio_open = 1; studio_a = 0.4; studio_bg_a = 0.4;
-    call_count = 0;
-    ds_fn_draw_studio();
-    assert(calls[0].kind == 'q' && calls[0].color == 0x66000000);
-    studio_a = 1; studio_bg_a = 1;
-    call_count = 0;
-    ds_fn_draw_studio();
-    assert(calls[0].kind == 'q' && calls[0].color == 0xFF000000);
-    puts("splash: warning keeps black screen, studio logo fades out with it");
+    assert(legal_marks == marks_before + 1 && warn_open == 0 && studio_open == 0);
+    puts("splash: warning keeps black screen, no studio splash after consent");
+}
+
+static void test_quest_cooldown(void) {
+    ds_main();
+    ds_fn_quest_init();
+    /* Готовое задание (тип 0, прогресс достигнут) и фиксированное «сейчас». */
+    fake_now = 1000;
+    arr_set(quest_type, 0, 0);
+    arr_set(quest_prog, 0, 1);
+    arr_set(quest_need, 0, 1);
+    int cups0 = cups;
+    int cand0 = candies;
+    ds_fn_quest_complete(0);
+    /* Награда срезана до quest_cups / quest_candies. */
+    assert(cups == cups0 + (int)quest_cups);
+    assert(candies == cand0 + (int)quest_candies);
+    /* Слот ушёл в кулдаун, метка сохранена нативно (переживёт выход). */
+    assert(arr_get(quest_type, 0) == -1);
+    near(arr_get(quest_next, 0), 1000 + quest_respawn);
+    near(quest_state[3], 1000 + quest_respawn);
+    /* До истечения 5 минут новое задание НЕ появляется. */
+    fake_now = 1000 + quest_respawn - 1;
+    ds_fn_quest_tick();
+    assert(arr_get(quest_type, 0) == -1);
+    /* Прошло quest_respawn реальных секунд — появляется новое задание. */
+    fake_now = 1000 + quest_respawn;
+    ds_fn_quest_tick();
+    assert(arr_get(quest_type, 0) != -1);
+    near(arr_get(quest_next, 0), 0);
+    near(quest_state[3], 0);
+    puts("quests: next appears after respawn, timer survives via native store");
 }
 
 static void test_punch_hitbox_fades(void) {
@@ -1116,6 +1141,7 @@ int main(void) {
     test_enemy_class_chances();
     test_poison_green();
     test_splash_screens();
+    test_quest_cooldown();
     return 0;
 }
 '''

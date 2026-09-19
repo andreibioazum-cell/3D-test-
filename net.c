@@ -5,6 +5,7 @@
 #include "native/net/settings_storage.inc"
 #include "native/net/promo.inc"
 #include "native/net/playtime.inc"
+#include "native/net/quests.inc"
 #include "native/net/profile_apply.inc"
 #include "native/net/auth_session.inc"
 #include "native/net/net_auth_flow.inc"

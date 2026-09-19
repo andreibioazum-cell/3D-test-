@@ -334,7 +334,7 @@ end
 -- предупреждения заканчивается на screen_h/2+130, кнопка встаёт ниже с
 -- отступом и даже на низких экранах (480 px) не уходит за край.
 public function warn_btn_w()
-    return fit_w(420)
+    return fit_w(560)
 end
 public function warn_btn_y()
     return screen_h / 2 + 160
