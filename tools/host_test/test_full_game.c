@@ -582,6 +582,21 @@ int main(void) {
         ds_graphics_shutdown_cpu();
         ds_graphics_shutdown();
     }
-    printf("PASS: полная игра + crash-report + CPU-режим на фейковом драйвере\n");
+    /* Счётчик падений Vulkan: инкремент только для Vulkan-сессий + сброс. */
+    fprintf(stderr, "HARNESS: vk_fails scenario\n");
+    ds_vk_fail_reset();
+    ds_crash_gpu = 1;
+    ds_crash_report_write(SIGSEGV, NULL);
+    if (ds_vk_fail_count() != 1) { printf("FAIL: vk_fails после 1 падения = %d\n", ds_vk_fail_count()); return 1; }
+    ds_crash_report_write(SIGSEGV, NULL);
+    if (ds_vk_fail_count() != 2) { printf("FAIL: vk_fails после 2 падений = %d\n", ds_vk_fail_count()); return 1; }
+    ds_vk_fail_reset();
+    if (ds_vk_fail_count() != 0) { printf("FAIL: vk_fails не сбросился\n"); return 1; }
+    ds_crash_gpu = 0;
+    ds_crash_report_write(SIGABRT, NULL);
+    if (ds_vk_fail_count() != 0) { printf("FAIL: CPU-падение не должно поднимать vk_fails\n"); return 1; }
+    ds_crash_report_clear();
+    if (ds_mem_total_mb() <= 0 && ds_mem_total_mb() != -1) { printf("FAIL: mem_total\n"); return 1; }
+    printf("PASS: полная игра + crash-report + vk_fails + CPU-режим на фейковом драйвере\n");
     return 0;
 }

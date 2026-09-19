@@ -1,16 +1,25 @@
 /* Отчёт о падении: последний крик умирающего процесса.
  *
- * Проблема: на части устройств драйвер падает внутри Vulkan-вызова (tombstone
- * «null pointer dereference» в libGLES_mali), а у игрока нет adb - причину
- * не достать. Решение: на каждом шаге запуска остаётся «крошка» (ds_crumb),
- * обработчик SIGSEGV/SIGBUS/SIGABRT/SIGILL/SIGFPE пишет крошки в файл во
- * внутренней папке приложения, а следующий запуск читает его, включает
- * безопасный CPU-режим и показывает отчёт на экране ошибки - игрок просто
- * присылает скриншот.
+ * Проблема: на части устройств драйвер падает внутри Vulkan-вызова, а у
+ * игрока нет adb - причину не достать. Решение: на каждом шаге запуска
+ * остаётся «крошка» (ds_crumb), обработчик SIGSEGV/SIGBUS/SIGABRT/SIGILL/
+ * SIGFPE пишет крошки в файл во внутренней папке приложения, а следующий
+ * запуск читает его, включает безопасный CPU-режим и показывает отчёт на
+ * экране ошибки - игрок просто присылает скриншот.
  *
- * Писать можно только async-signal-safe: open/write/close и ручное
+ * Дополнительно файл vk_fails хранит, сколько раз игра упала в Vulkan-сессии:
+ * одного падения достаточно, чтобы следующие запуски стартовали на CPU
+ * (драйвер, уронивший процесс один раз, уронит и второй). Чистый выход из
+ * Vulkan-сессии обнуляет счётчик - мимолётный сбой не лишает GPU навсегда.
+ *
+ * Писать можно только async-signal-safe: open/read/write/close и ручное
  * форматирование - никаких snprintf/stdio/locks. Крошки складываются без
- * блокировок: вызовы идут только из потока игры. */
+ * блокировок: вызовы идут только из потока игры.
+ *
+ * ВАЖНО: на Android 8.x (Go) internalDataPath в android_main бывает NULL -
+ * тогда пути уходят на жёсткий фолбэк /data/data/com.cb4 (пакет зафиксирован
+ * в манифесте и проверяется CI). Без этого фолбэка отчёт просто не
+ * записывается, и следующий запуск не может показать причину. */
 
 #ifndef DS_CRASH_REPORT_INC
 #define DS_CRASH_REPORT_INC
@@ -24,10 +33,14 @@
 #define DS_CRUMB_MAX 24
 #define DS_CRUMB_LEN 56
 #define DS_CRASH_REPORT_MAX 2048
+#define DS_VK_MAX_FAILS 1  /* сколько падений Vulkan прощаем; дальше - только CPU */
 
+static char ds_crash_path[256] = {0};
+static char ds_vk_fails_path[256] = {0};
 static char ds_crumb_buf[DS_CRUMB_MAX][DS_CRUMB_LEN];
 static volatile int ds_crumb_n = 0;
-static char ds_crash_path[256] = {0};
+/* 1 = текущая сессия рисует через Vulkan (падение поднимет vk_fails). */
+static volatile int ds_crash_gpu = 0;
 static volatile sig_atomic_t ds_in_crash = 0;
 
 /* Метка этапа запуска: «boot», «gfx-vk-init», «f240» (240-й кадр) и т.п. */
@@ -67,17 +80,21 @@ static void ds_w_hex(int fd, unsigned long v) {
     write(fd, tmp + i + 1, sizeof(tmp) - 2 - (size_t)i);
 }
 
+static int ds_open_int_file(const char *path, int flags) {
+    return open(path, flags, 0644);
+}
+
 /* Сама запись отчёта. Вынесена из обработчика, чтобы хост-тест мог вызвать
  * её без реального сигнала (ASan перехватывает SIGSEGV раньше нас). */
 static void ds_crash_report_write(int sig, void *addr) {
     if (!ds_crash_path[0]) return;
-    int fd = open(ds_crash_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    int fd = ds_open_int_file(ds_crash_path, O_WRONLY | O_CREAT | O_TRUNC);
     if (fd < 0) return;
     ds_w_str(fd, "CubicBattle4 crash: signal ");
     ds_w_int(fd, sig);
     ds_w_str(fd, " addr 0x");
     ds_w_hex(fd, (unsigned long)(uintptr_t)addr);
-    ds_w_str(fd, "\n");
+    ds_w_str(fd, ds_crash_gpu ? " (vulkan)\n" : " (cpu)\n");
     int total = ds_crumb_n;
     if (total > DS_CRUMB_MAX) total = DS_CRUMB_MAX;
     for (int i = 0; i < total; i++) {
@@ -87,6 +104,23 @@ static void ds_crash_report_write(int sig, void *addr) {
         ds_w_str(fd, "\n");
     }
     close(fd);
+    /* Падение в Vulkan-сессии: поднимаем счётчик, чтобы следующие запуски
+     * включили CPU сразу, не дожидаясь второго убытка. */
+    if (ds_crash_gpu && ds_vk_fails_path[0]) {
+        char b = '0';
+        fd = ds_open_int_file(ds_vk_fails_path, O_RDONLY);
+        if (fd >= 0) {
+            if (read(fd, &b, 1) != 1) b = '0';
+            close(fd);
+        }
+        if (b < '0' || b > '8') b = '0';
+        fd = ds_open_int_file(ds_vk_fails_path, O_WRONLY | O_CREAT | O_TRUNC);
+        if (fd >= 0) {
+            char nb = (char)(b + 1);
+            write(fd, &nb, 1);
+            close(fd);
+        }
+    }
 }
 
 static void ds_crash_handler(int sig, siginfo_t *info, void *uctx) {
@@ -101,7 +135,9 @@ static void ds_crash_handler(int sig, siginfo_t *info, void *uctx) {
 }
 
 static void ds_crash_report_init(const char *dir) {
-    if (dir && *dir) snprintf(ds_crash_path, sizeof(ds_crash_path), "%s/crash_report.txt", dir);
+    if (!dir || !*dir) dir = "/data/data/com.cb4"; /* см. ВАЖНО выше */
+    snprintf(ds_crash_path, sizeof(ds_crash_path), "%s/crash_report.txt", dir);
+    snprintf(ds_vk_fails_path, sizeof(ds_vk_fails_path), "%s/vk_fails", dir);
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_sigaction = ds_crash_handler;
@@ -118,7 +154,7 @@ static int ds_crash_report_load(char *out, size_t cap) {
     if (!out || cap < 2) return 0;
     out[0] = '\0';
     if (!ds_crash_path[0]) return 0;
-    int fd = open(ds_crash_path, O_RDONLY);
+    int fd = ds_open_int_file(ds_crash_path, O_RDONLY);
     if (fd < 0) return 0;
     size_t got = 0;
     while (got + 1 < cap) {
@@ -133,6 +169,52 @@ static int ds_crash_report_load(char *out, size_t cap) {
 
 static void ds_crash_report_clear(void) {
     if (ds_crash_path[0]) unlink(ds_crash_path);
+}
+
+/* Сколько раз уже падали в Vulkan-сессии (по файлу vk_fails). */
+static int ds_vk_fail_count(void) {
+    if (!ds_vk_fails_path[0]) return 0;
+    int fd = ds_open_int_file(ds_vk_fails_path, O_RDONLY);
+    if (fd < 0) return 0;
+    char b = '0';
+    if (read(fd, &b, 1) != 1) b = '0';
+    close(fd);
+    if (b < '0' || b > '9') return 0;
+    return b - '0';
+}
+
+/* Чистая Vulkan-сессия: снова можно пробовать Vulkan. */
+static void ds_vk_fail_reset(void) {
+    if (!ds_vk_fails_path[0]) return;
+    int fd = ds_open_int_file(ds_vk_fails_path, O_WRONLY | O_CREAT | O_TRUNC);
+    if (fd >= 0) {
+        write(fd, "0", 1);
+        close(fd);
+    }
+}
+
+/* Объём RAM в МБ по /proc/meminfo (или -1, если не смогли прочитать).
+ * Нужен, чтобы на Android Go (1 ГБ) вообще не трогать Vulkan: инициализация
+ * драйвера там может уронить процесс под OOM-киллером (SIGKILL не ловится). */
+static int ds_mem_total_mb(void) {
+    int fd = ds_open_int_file("/proc/meminfo", O_RDONLY);
+    if (fd < 0) return -1;
+    char buf[512];
+    size_t got = 0;
+    while (got + 1 < sizeof(buf)) {
+        ssize_t r = read(fd, buf + got, sizeof(buf) - 1 - got);
+        if (r <= 0) break;
+        got += (size_t)r;
+    }
+    close(fd);
+    buf[got] = '\0';
+    if (strncmp(buf, "MemTotal:", 9) != 0) return -1;
+    const char *p = buf + 9;
+    while (*p == ' ' || *p == '\t') p++;
+    int v = 0, any = 0;
+    while (*p >= '0' && *p <= '9') { v = v * 10 + (*p - '0'); p++; any = 1; }
+    if (!any) return -1;
+    return (v + 1023) / 1024; /* kB -> MB с округлением вверх */
 }
 
 #endif /* DS_CRASH_REPORT_INC */

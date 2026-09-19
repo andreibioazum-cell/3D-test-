@@ -114,6 +114,11 @@ static void handle_cmd(struct android_app *app, int32_t command) {
             }
             if (!gfx_ok) { init_done = 0; return; }
             ds_crumb(g_cpu_render ? "gfx-cpu-ok" : "gfx-vk-ok");
+            /* Падение в этой сессии поднимет vk_fails только для Vulkan. */
+            ds_crash_gpu = !g_cpu_render;
+            /* Пока на экране отчёт о падении: звук и скрипт откладываем, чтобы
+             * экран появился даже если упало бы что-то из их инициализации. */
+            if (g_show_report) { init_done = 1; script_active = 0; break; }
             /* Звуки лежат в тех же assets (sounds/...), играют через AudioTrack. */
             ds_sound_init(script_assets);
             ds_crumb("snd");
@@ -153,6 +158,13 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
             if ((AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK) == AMOTION_EVENT_ACTION_DOWN) {
                 g_show_report = 0;
                 ds_crash_report_clear();
+                /* Догружаем отложенное экраном отчёта: звук и скрипт. */
+                ds_crumb("snd");
+                ds_sound_init(script_assets);
+                ds_sound_resume();
+                restart_failures = 0;
+                ds_clear_script_restart(); (void)start_script(0);
+                ds_crumb("script");
             }
             return 1;
         }
@@ -225,14 +237,17 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
 void android_main(struct android_app *app) {
     Buffer frame = {0}; if (!app) return;
     /* Отчёт о падении ставим раньше всего: даже падение в самой инициализации
-     * должно оставить след для следующего запуска. */
+     * должно оставить след для следующего запуска. internalDataPath на
+     * Android 8 (Go) бывает NULL - внутри есть фолбэк /data/data/com.cb4. */
     ds_crash_report_init(app->activity ? app->activity->internalDataPath : NULL);
     ds_crumb("boot");
+    /* Выбор рендера ДО первого окна:
+     * 1) прошлый запуск упал - CPU и показать отчёт;
+     * 2) Vulkan уже ронял процесс (vk_fails) - CPU;
+     * 3) мало RAM (Android Go: драйвер Vulkan там может поймать OOM-килл,
+     *    а SIGKILL не ловится и отчёта не будет) - CPU;
+     * 4) иначе - Vulkan. */
     if (ds_crash_report_load(g_report, sizeof g_report)) {
-        /* Прошлый запуск упал: этот стартуем без Vulkan и показываем отчёт.
-         * Файл стирается, когда игрок закрывает отчёт касанием, - тогда
-         * следующий запуск снова пробует Vulkan (и при новом падении снова
-         * пишет отчёт и включает CPU-режим). */
         g_cpu_render = 1;
         g_show_report = 1;
         ds_log_err("предыдущий запуск упал - включён безопасный CPU-режим");
@@ -245,6 +260,16 @@ void android_main(struct android_app *app) {
             line[li] = '\0';
             if (li) ds_console_log(1, "%s", line);
         }
+    } else {
+        int fails = ds_vk_fail_count();
+        int mem_mb = ds_mem_total_mb();
+        if (fails >= DS_VK_MAX_FAILS) {
+            g_cpu_render = 1;
+            ds_log_err("Vulkan уже ронял игру (%d) - работаем на CPU", fails);
+        } else if (mem_mb > 0 && mem_mb < 1800) {
+            g_cpu_render = 1;
+            ds_log_err("мало RAM (%d МБ) - CPU-рендер надёжнее", mem_mb);
+        }
     }
     /* rand() в скриптах использует libc-генератор, который сам себя не
      * сидит: без srand() спавн леденцов, их направление полёта и прочие
@@ -253,7 +278,8 @@ void android_main(struct android_app *app) {
     app->onAppCmd = handle_cmd; app->onInputEvent = handle_input;
     net_set_java_vm(app->activity->vm);
     ds_sound_set_java_vm((void *)app->activity->vm);
-    net_set_data_path(app->activity->internalDataPath);
+    net_set_data_path(app->activity->internalDataPath ? app->activity->internalDataPath
+                                                      : "/data/data/com.cb4");
     ds_set_activity(app->activity);
     ds_crumb("jni");
     ds_log("DimScript Android + renderer + system keyboard (JNI)");
@@ -264,6 +290,8 @@ void android_main(struct android_app *app) {
             if (app->destroyRequested) {
                 init_done = 0; script_active = 0; keyboard_hide();
                 ds_graphics_shutdown_cpu(); ds_graphics_shutdown(); ds_sound_shutdown();
+                /* Vulkan пережил целую сессию - мимолётным сбоем его не считаем. */
+                if (ds_crash_gpu) ds_vk_fail_reset();
                 return;
             }
         }
