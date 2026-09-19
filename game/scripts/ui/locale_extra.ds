@@ -49,3 +49,46 @@ public function tr_quest_next_in(number m)
     end
     return "Next in " + m + " min"
 end
+-- 3D-платформер (ST_PLATFORM3D): заголовок в лобби и надписи на экране.
+public function tr_p3d_title()
+    if language == 1 then
+        return "3D платформер"
+    end
+    return "3D Platformer"
+end
+public function tr_p3d_jump()
+    if language == 1 then
+        return "Прыжок"
+    end
+    return "Jump"
+end
+public function tr_p3d_falls()
+    if language == 1 then
+        return "Падений"
+    end
+    return "Falls"
+end
+public function tr_p3d_win()
+    if language == 1 then
+        return "Уровень пройден!"
+    end
+    return "Level complete!"
+end
+public function tr_p3d_coins()
+    if language == 1 then
+        return "Монеты"
+    end
+    return "Coins"
+end
+public function tr_p3d_time()
+    if language == 1 then
+        return "Время"
+    end
+    return "Time"
+end
+public function tr_p3d_tap()
+    if language == 1 then
+        return "Нажмите, чтобы продолжить"
+    end
+    return "Tap to continue"
+end

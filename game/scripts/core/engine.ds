@@ -251,6 +251,8 @@ public function update()
         update_login()
     else if game_state == ST_PROMO then
         update_promo()
+    else if game_state == ST_PLATFORM3D then
+        p3d_update()
     end
     update_weather()
 end
@@ -281,6 +283,8 @@ public function draw_screen()
         draw_quests()
     else if game_state == ST_PRIVACY then
         draw_privacy()
+    else if game_state == ST_PLATFORM3D then
+        p3d_draw()
     else
         draw_online()
     end
@@ -324,6 +328,9 @@ public function back_pressed()
         end
         start_transition(ST_LOBBY)
         return 1
+    end
+    if game_state == ST_PLATFORM3D then
+        return p3d_back()
     end
     if game_state == ST_LEVELS || game_state == ST_SKINS then
         start_transition(ST_CLASSES)
@@ -372,6 +379,8 @@ public function touch(number x, number y, number action, number id)
         touch_lobby(x, y, action)
     else if game_state == ST_SOLO || game_state == ST_ONLINE then
         touch_game(x, y, action, id)
+    else if game_state == ST_PLATFORM3D then
+        p3d_touch(x, y, action, id)
     else
         touch_menu(x, y, action)
     end

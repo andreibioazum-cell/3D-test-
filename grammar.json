@@ -21,7 +21,7 @@
     },
     {
       "name": "support.function.builtin.dimscript",
-      "match": "\\b(rect|roundrect|circle|ring|line|tex|tex_tint|png_load|text|text_scaled|text_width|text_height|text_ink_width|text_ink_height|clear_screen|window_create|game_run|mouse_x|mouse_y|particles_spawn|sound_play|snd_play|sqrt|sin|cos|atan2|floor|rand|console_count|console_line|console_type|console_clear|ds_log)\\b"
+      "match": "\\b(rect|roundrect|circle|ring|line|tex|tex_tint|png_load|text|text_scaled|text_width|text_height|text_ink_width|text_ink_height|clear_screen|window_create|game_run|mouse_x|mouse_y|particles_spawn|sound_play|snd_play|sqrt|sin|cos|atan2|floor|rand|console_count|console_line|console_type|console_clear|cam3d|cube3d|cube3d_yaw|line3d|flush3d|ds_log)\\b"
     },
     {
       "name": "entity.name.function.dimscript",

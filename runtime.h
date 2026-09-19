@@ -96,6 +96,23 @@ void circle(float x, float y, float r, uint32_t color);
 void ring(float x, float y, float r, float t, uint32_t color);
 void line(float x1, float y1, float x2, float y2, float thickness, uint32_t color);
 void clear_screen(uint32_t color);
+/* 3D-слой (реализация в native/graphics/render3d.inc): перспективная камера
+ * и кубы поверх 2D-команд. Оси мира: Y — вверх, X/Z — земля. cam3d вызывается
+ * раз в кадр до кубов; cube3d ставит грань куба (центр + полные размеры) в
+ * очередь, очередь сортируется по глубине (алгоритм художника) и рисуется
+ * обычными треугольниками при первой 2D-команде после 3D-вызовов либо в конце
+ * кадра (flush3d — принудительно). cube3d_yaw умеет вращать куб вокруг
+ * вертикали (монеты, спиннеры), line3d проецирует отрезок (толщина — в
+ * экранных пикселях). */
+void cam3d(double ex, double ey, double ez,
+           double tx, double ty, double tz, double fov_deg);
+void cube3d(double x, double y, double z, double sx, double sy, double sz,
+            uint32_t color);
+void cube3d_yaw(double x, double y, double z, double sx, double sy, double sz,
+                double yaw, uint32_t color);
+void line3d(double x1, double y1, double z1, double x2, double y2, double z2,
+            double thickness, uint32_t color);
+void flush3d(void);
 void ds_set_asset_manager(AAssetManager *assets);
 void ds_release_assets(void);
 int png_load(const char *name);

@@ -20,6 +20,9 @@ static int ds_vk_batch_push(int pipeline, const void *desc, size_t first, size_t
 }
 
 static int ds_vk_build_geometry(void) {
+    /* Кадр мог состоять из одних 3D-команд: очередь граней выдаётся сейчас,
+     * прямо перед разбором списка команд (после 2D-команд она уже пуста). */
+    ds3d_flush_pending();
     geo_reset();
     vk_batch_n = 0;
     const void *font_desc = vk_font_desc ? (const void *)(uintptr_t)vk_font_desc : NULL;
@@ -31,6 +34,11 @@ static int ds_vk_build_geometry(void) {
         switch (c->t) {
             case DS_CMD_RECT:
                 geo_rect(c->v.rc.x, c->v.rc.y, c->v.rc.w, c->v.rc.h, c->v.rc.c);
+                break;
+            case DS_CMD_TRI:
+                /* Грань 3D-слоя: обычный конвейер со смешиванием, UV нет. */
+                geo_tri(c->v.tri.x0, c->v.tri.y0, c->v.tri.x1, c->v.tri.y1,
+                        c->v.tri.x2, c->v.tri.y2, c->v.tri.c);
                 break;
             case DS_CMD_ROUND:
                 pipeline = 3; /* fill_span: замена, без смешивания */

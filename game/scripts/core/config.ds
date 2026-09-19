@@ -2,6 +2,7 @@ public number ST_LOBBY=0, ST_SOLO=1, ST_MODES=2, ST_SETTINGS=4, ST_ONLINE=5
 public number ST_LOGIN=7, ST_CLASSES=8, ST_LEVELS=9, ST_LEADERBOARD=10
 public number ST_ACHIEVEMENTS=11, ST_SKINS=13, ST_PROMO=14
 public number ST_QUESTS=15, ST_PRIVACY=16
+public number ST_PLATFORM3D=17
 public number game_state=ST_LOBBY
 public number language=0, t_dir=0, t_target=0, t_fade=0, transition_duration=0.15
 public number ui_purple=0xFF5F10A0
