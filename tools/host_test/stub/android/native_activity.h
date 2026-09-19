@@ -17,4 +17,6 @@ typedef struct ANativeActivity {
     const char *dataPath;
     void *instance;
 } ANativeActivity;
+/* Показ системного диалога разрешения (API 26+, как у minSdk проекта). */
+void ANativeActivity_showRequestPermission(ANativeActivity *activity, const char *permission);
 #endif

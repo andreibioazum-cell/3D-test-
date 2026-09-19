@@ -597,6 +597,47 @@ int main(void) {
     if (ds_vk_fail_count() != 0) { printf("FAIL: CPU-падение не должно поднимать vk_fails\n"); return 1; }
     ds_crash_report_clear();
     if (ds_mem_total_mb() <= 0 && ds_mem_total_mb() != -1) { printf("FAIL: mem_total\n"); return 1; }
-    printf("PASS: полная игра + crash-report + vk_fails + CPU-режим на фейковом драйвере\n");
+
+    /* pcall: настоящий raise(SIGSEGV) на защищённом участке должен вернуться
+     * в sigsetjmp, записать отчёт и поднять vk_fails (сессия помечена GPU). */
+    fprintf(stderr, "HARNESS: pcall scenario\n");
+    ds_vk_fail_reset();
+    ds_crash_gpu = 1;
+    ds_crash_report_clear();
+    {
+        int jsig = sigsetjmp(ds_pcall_env, 1);
+        if (jsig == 0) {
+            ds_pcall_arm();
+            ds_crumb("gfx-vk-init");
+            raise(SIGSEGV); /* «драйвер упал» - обработчик должен уйти в siglongjmp */
+            ds_pcall_disarm();
+            printf("FAIL: pcall не сработал - raise вернулся как ни в чём не бывало\n");
+            return 1;
+        }
+        ds_pcall_disarm();
+        if (jsig != SIGSEGV) { printf("FAIL: pcall вернул %d\n", jsig); return 1; }
+    }
+    if (!ds_crash_report_load(report, sizeof report)) {
+        printf("FAIL: pcall не записал отчёт\n"); return 1;
+    }
+    if (ds_vk_fail_count() != 1) { printf("FAIL: pcall не поднял vk_fails\n"); return 1; }
+    ds_vk_fail_reset();
+    ds_crash_report_clear();
+
+    /* Внешний лог: переопределяем папку и проверяем запись событий. */
+    mkdir("/tmp/cb4_host_test/ds_logs", 0755);
+    ds_ext_log_set_dir("/tmp/cb4_host_test/ds_logs");
+    ds_ext_log_write("session start render=vulkan", 1);
+    {
+        char buf[512] = {0};
+        FILE *f = fopen("/tmp/cb4_host_test/ds_logs/ds_log.txt", "r");
+        if (!f) { printf("FAIL: ds_log.txt не создан\n"); return 1; }
+        size_t n = fread(buf, 1, sizeof buf - 1, f);
+        fclose(f);
+        if (!n || !strstr(buf, "session start render=vulkan") || !strstr(buf, "gfx-vk-init")) {
+            printf("FAIL: в ds_log.txt нет события или крошек:\n%s\n", buf); return 1;
+        }
+    }
+    printf("PASS: полная игра + crash-report + pcall + vk_fails + внешний ds_log\n");
     return 0;
 }

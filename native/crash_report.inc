@@ -25,23 +25,48 @@
 #define DS_CRASH_REPORT_INC
 
 #include <signal.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <setjmp.h>
 #include <string.h>
 #include <stdio.h>
 
 #define DS_CRUMB_MAX 24
 #define DS_CRUMB_LEN 56
 #define DS_CRASH_REPORT_MAX 2048
-#define DS_VK_MAX_FAILS 1  /* сколько падений Vulkan прощаем; дальше - только CPU */
+#define DS_VK_MAX_FAILS 2  /* сколько падений Vulkan прощаем; дальше - только CPU */
+
+/* Внешняя папка логов (видна игроку через любой файловый менеджер).
+ * На Android 8..10 нужна запись во внешнее хранилище: разрешение
+ * WRITE_EXTERNAL_STORAGE запрашивается из нативного кода, путь доступен
+ * после выдачи (со следующего запуска). Если папка недоступна, логи
+ * остаются только во внутренней папке приложения. */
+#define DS_EXT_LOG_DIR_DEFAULT "/storage/emulated/0/ds_logs"
 
 static char ds_crash_path[256] = {0};
 static char ds_vk_fails_path[256] = {0};
+static char ds_ext_log_path[256] = {0};
 static char ds_crumb_buf[DS_CRUMB_MAX][DS_CRUMB_LEN];
 static volatile int ds_crumb_n = 0;
 /* 1 = текущая сессия рисует через Vulkan (падение поднимет vk_fails). */
 static volatile int ds_crash_gpu = 0;
 static volatile sig_atomic_t ds_in_crash = 0;
+
+/* --- pcall: защита опасного участка (инициализация драйвера) ---
+ *
+ * ds_pcall_arm() ставится перед участком; если внутри драйвер роняет
+ * процесс (SIGSEGV и пр.), обработчик пишет отчёт, поднимает vk_fails и
+ * делает siglongjmp обратно в точку sigsetjmp - игра продолжает работать
+ * в ЭТОМ ЖЕ запуске на CPU-рендере. Поведение как у pcall в Lua: вызов
+ * «поймал ошибку» вместо смерти процесса. После siglongjmp из драйвера
+ * Vulkan считаем отравленным и больше его не трогаем до перезапуска. */
+static sigjmp_buf ds_pcall_env;
+static volatile sig_atomic_t ds_pcall_armed = 0;
+static void ds_pcall_arm(void) { ds_pcall_armed = 1; }
+static void ds_pcall_disarm(void) { ds_pcall_armed = 0; }
 
 /* Метка этапа запуска: «boot», «gfx-vk-init», «f240» (240-й кадр) и т.п. */
 static void ds_crumb(const char *s) {
@@ -84,41 +109,97 @@ static int ds_open_int_file(const char *path, int flags) {
     return open(path, flags, 0644);
 }
 
+/* --- внешний лог (/storage/emulated/0/ds_logs/ds_log.txt) --- */
+
+static void ds_ext_log_set_dir(const char *dir) {
+    if (!dir || !*dir) { ds_ext_log_path[0] = 0; return; }
+    snprintf(ds_ext_log_path, sizeof(ds_ext_log_path), "%s/ds_log.txt", dir);
+}
+
+static void ds_ext_log_init(void) {
+    ds_ext_log_set_dir(DS_EXT_LOG_DIR_DEFAULT);
+    if (mkdir(DS_EXT_LOG_DIR_DEFAULT, 0755) != 0 && errno != EEXIST) {
+        /* Нет разрешения или хранилище не смонтировано - попробуем в следующий
+         * запуск (разрешение запрашивает main.c). */
+        ds_ext_log_path[0] = 0;
+        return;
+    }
+    int fd = ds_open_int_file(ds_ext_log_path, O_WRONLY | O_CREAT | O_APPEND);
+    if (fd < 0) { ds_ext_log_path[0] = 0; return; }
+    close(fd);
+}
+
+/* Добавляет в ds_log.txt строку события и текущие крошки. Доступ к внешнему
+ * хранилищу безопасен и в обработчике (open/write/close AS-safe). */
+static void ds_ext_log_write(const char *event, int write_crumbs) {
+    if (!ds_ext_log_path[0]) return;
+    int fd = ds_open_int_file(ds_ext_log_path, O_WRONLY | O_CREAT | O_APPEND);
+    if (fd < 0) return;
+    ds_w_str(fd, "[");
+    ds_w_int(fd, (long)time(NULL));
+    ds_w_str(fd, "] ");
+    ds_w_str(fd, event);
+    ds_w_str(fd, "\n");
+    if (write_crumbs) {
+        int total = ds_crumb_n;
+        if (total > DS_CRUMB_MAX) total = DS_CRUMB_MAX;
+        for (int i = 0; i < total; i++) {
+            ds_w_str(fd, "  - ");
+            ds_w_str(fd, ds_crumb_buf[(ds_crumb_n - total + i) % DS_CRUMB_MAX]);
+            ds_w_str(fd, "\n");
+        }
+    }
+    close(fd);
+}
+
 /* Сама запись отчёта. Вынесена из обработчика, чтобы хост-тест мог вызвать
  * её без реального сигнала (ASan перехватывает SIGSEGV раньше нас). */
 static void ds_crash_report_write(int sig, void *addr) {
-    if (!ds_crash_path[0]) return;
-    int fd = ds_open_int_file(ds_crash_path, O_WRONLY | O_CREAT | O_TRUNC);
-    if (fd < 0) return;
-    ds_w_str(fd, "CubicBattle4 crash: signal ");
-    ds_w_int(fd, sig);
-    ds_w_str(fd, " addr 0x");
-    ds_w_hex(fd, (unsigned long)(uintptr_t)addr);
-    ds_w_str(fd, ds_crash_gpu ? " (vulkan)\n" : " (cpu)\n");
-    int total = ds_crumb_n;
-    if (total > DS_CRUMB_MAX) total = DS_CRUMB_MAX;
-    for (int i = 0; i < total; i++) {
-        const char *s = ds_crumb_buf[(ds_crumb_n - total + i) % DS_CRUMB_MAX];
-        ds_w_str(fd, "- ");
-        ds_w_str(fd, s);
-        ds_w_str(fd, "\n");
-    }
-    close(fd);
-    /* Падение в Vulkan-сессии: поднимаем счётчик, чтобы следующие запуски
-     * включили CPU сразу, не дожидаясь второго убытка. */
-    if (ds_crash_gpu && ds_vk_fails_path[0]) {
-        char b = '0';
-        fd = ds_open_int_file(ds_vk_fails_path, O_RDONLY);
+    if (ds_crash_path[0]) {
+        int fd = ds_open_int_file(ds_crash_path, O_WRONLY | O_CREAT | O_TRUNC);
         if (fd >= 0) {
-            if (read(fd, &b, 1) != 1) b = '0';
+            ds_w_str(fd, "CubicBattle4 crash: signal ");
+            ds_w_int(fd, sig);
+            ds_w_str(fd, " addr 0x");
+            ds_w_hex(fd, (unsigned long)(uintptr_t)addr);
+            ds_w_str(fd, ds_crash_gpu ? " (vulkan)\n" : " (cpu)\n");
+            int total = ds_crumb_n;
+            if (total > DS_CRUMB_MAX) total = DS_CRUMB_MAX;
+            for (int i = 0; i < total; i++) {
+                const char *s = ds_crumb_buf[(ds_crumb_n - total + i) % DS_CRUMB_MAX];
+                ds_w_str(fd, "- ");
+                ds_w_str(fd, s);
+                ds_w_str(fd, "\n");
+            }
             close(fd);
         }
+    }
+    {
+        char head[96];
+        char *h = head;
+        const char *p = "crash signal ";
+        /* Ручная склейка вместо snprintf: функция зовётся и из обработчика. */
+        while (*p) *h++ = *p++;
+        if (sig >= 10) *h++ = (char)('0' + sig / 10);
+        *h++ = (char)('0' + sig % 10);
+        *h = 0;
+        ds_ext_log_write(head, 1);
+    }
+    /* Падение в Vulkan-сессии: поднимаем счётчик, чтобы следующие запуски
+     * включили CPU сразу, не дожидаясь повторных убытков. */
+    if (ds_crash_gpu && ds_vk_fails_path[0]) {
+        char b = '0';
+        int fd2 = ds_open_int_file(ds_vk_fails_path, O_RDONLY);
+        if (fd2 >= 0) {
+            if (read(fd2, &b, 1) != 1) b = '0';
+            close(fd2);
+        }
         if (b < '0' || b > '8') b = '0';
-        fd = ds_open_int_file(ds_vk_fails_path, O_WRONLY | O_CREAT | O_TRUNC);
-        if (fd >= 0) {
+        fd2 = ds_open_int_file(ds_vk_fails_path, O_WRONLY | O_CREAT | O_TRUNC);
+        if (fd2 >= 0) {
             char nb = (char)(b + 1);
-            write(fd, &nb, 1);
-            close(fd);
+            write(fd2, &nb, 1);
+            close(fd2);
         }
     }
 }
@@ -127,7 +208,14 @@ static void ds_crash_handler(int sig, siginfo_t *info, void *uctx) {
     (void)uctx;
     if (ds_in_crash) _exit(70);
     ds_in_crash = 1;
+    ds_crumb("pcall");
     ds_crash_report_write(sig, info ? info->si_addr : NULL);
+    /* pcall: краш на защищённом участке (инициализация драйвера) - возврат
+     * в sigsetjmp, игра продолжает этот же запуск на CPU. */
+    if (ds_pcall_armed) {
+        ds_pcall_armed = 0;
+        siglongjmp(ds_pcall_env, sig ? sig : 1);
+    }
     /* Отдаём падение системе: tombstone должен появиться как обычно. */
     signal(sig, SIG_DFL);
     raise(sig);

@@ -103,12 +103,25 @@ static void handle_cmd(struct android_app *app, int32_t command) {
                 ds_crumb("gfx-cpu-init");
                 gfx_ok = ds_graphics_init_cpu(script_assets, app->window);
             } else {
+                /* pcall: если драйвер уронит процесс внутри vkCreate*, обработчик
+                 * сделает siglongjmp сюда - и этот же запуск продолжится на CPU. */
+                int jsig;
+                ds_crash_gpu = 1;
                 ds_crumb("gfx-vk-init");
-                gfx_ok = ds_graphics_init(script_assets, app->window);
+                ds_pcall_arm();
+                jsig = sigsetjmp(ds_pcall_env, 1);
+                if (jsig == 0) {
+                    gfx_ok = ds_graphics_init(script_assets, app->window);
+                    ds_pcall_disarm();
+                } else {
+                    ds_log_err("vulkan init crashed (signal %d) - pcall switched to CPU", jsig);
+                    ds_ext_log_write("vulkan init crashed - pcall caught", 1);
+                    gfx_ok = 0;
+                }
                 if (!gfx_ok) {
-                    ds_log_err("vulkan init failed - switching to CPU renderer");
                     ds_crumb("gfx-cpu-fallback");
                     g_cpu_render = 1;
+                    ds_vk_fail_reset(); /* счётчик уже поднят обработчиком падения */
                     gfx_ok = ds_graphics_init_cpu(script_assets, app->window);
                 }
             }
@@ -262,15 +275,14 @@ void android_main(struct android_app *app) {
         }
     } else {
         int fails = ds_vk_fail_count();
-        int mem_mb = ds_mem_total_mb();
         if (fails >= DS_VK_MAX_FAILS) {
             g_cpu_render = 1;
-            ds_log_err("Vulkan уже ронял игру (%d) - работаем на CPU", fails);
-        } else if (mem_mb > 0 && mem_mb < 1800) {
-            g_cpu_render = 1;
-            ds_log_err("мало RAM (%d МБ) - CPU-рендер надёжнее", mem_mb);
+            ds_log_err("Vulkan ронял игру %d раз - работаем на CPU", fails);
         }
     }
+    /* Внешние логи /storage/emulated/0/ds_logs/ds_log.txt: видны любым
+     * файловым менеджером, игрок присылает файл вместо logcat. */
+    ds_ext_log_init();
     /* rand() в скриптах использует libc-генератор, который сам себя не
      * сидит: без srand() спавн леденцов, их направление полёта и прочие
      * «случайные» броски шли бы по одной и той же последовательности. */
@@ -282,6 +294,20 @@ void android_main(struct android_app *app) {
                                                       : "/data/data/com.cb4");
     ds_set_activity(app->activity);
     ds_crumb("jni");
+    if (app->activity && !ds_ext_log_path[0]) {
+        /* Нет доступа к ds_logs - показываем системный диалог один раз;
+         * после выдачи логи начнут писаться со следующего запуска. */
+        ANativeActivity_showRequestPermission(app->activity,
+                                              "android.permission.WRITE_EXTERNAL_STORAGE");
+    }
+    {
+        char boot[160];
+        snprintf(boot, sizeof(boot), "session start render=%s vk_fails=%d ram=%dMB extlog=%s",
+                 g_cpu_render ? "cpu" : "vulkan", ds_vk_fail_count(), ds_mem_total_mb(),
+                 ds_ext_log_path[0] ? "yes" : "no");
+        ds_log("%s", boot);
+        ds_ext_log_write(boot, 1);
+    }
     ds_log("DimScript Android + renderer + system keyboard (JNI)");
     for (;;) {
         struct android_poll_source *source = NULL; int ident;
@@ -292,6 +318,7 @@ void android_main(struct android_app *app) {
                 ds_graphics_shutdown_cpu(); ds_graphics_shutdown(); ds_sound_shutdown();
                 /* Vulkan пережил целую сессию - мимолётным сбоем его не считаем. */
                 if (ds_crash_gpu) ds_vk_fail_reset();
+                ds_ext_log_write("session end (clean)", 1);
                 return;
             }
         }
