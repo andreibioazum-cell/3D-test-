@@ -56,8 +56,10 @@ def main():
     assert "warn_open = 0" in accept and "settings_mark_legal()" in accept, \
         "согласие не закрывает гейт или не пишет метку: %s" % accept
     assert "if warn_ready < 1 then" in accept
-    assert "warn_ready = clamp(warn_ready + dt / warn_wait, 0, 1)" in warn_update
-    assert "warn_ready=0, warn_wait=3" in config
+    assert "warn_t = warn_t + dt" in warn_update and \
+        "warn_ready = clamp(warn_t / warn_wait, 0, 1)" in warn_update, \
+        "отсчёт секунд должен вестись по warn_t"
+    assert "warn_t=0, warn_wait=3" in config
     touch_warn = function_body(menu_input, "touch_warn")
     assert "hit_warn_btn" in touch_warn and "legal_accept()" in touch_warn
     touch = function_body(engine, "touch")
@@ -71,6 +73,12 @@ def main():
     draw_warn = function_body(menu_input, "draw_warning")
     assert "tr_legal_accept()" in draw_warn and "warn_btn_y()" in draw_warn, \
         "на экране предупреждения нет кнопки согласия"
+    # Кнопка не «разгорается»: яркость постоянная, как в конце отсчёта.
+    assert "brightness" not in draw_warn, \
+        "кнопка согласия снова меняет яркость со временем"
+    # Пока отсчёт идёт, в подписи держатся секунды «(N)», потом пропадают.
+    assert "warn_wait - floor(warn_t)" in draw_warn and "warn_ready < 1" in draw_warn, \
+        "на кнопке нет отсчёта секунд до разблокировки"
     assert "warn_btn_w" in layout and "hit_warn_btn" in layout
 
     # --- метка согласия: локальная, переживает перезапуск ----------------

@@ -76,17 +76,17 @@ end
 public function load_textures()
     png_load(GRASS)
     png_load(ORDINARY_TEX)
-    png_load(PUNCH_TEX)
+    ordinary_punch_tex_ok = png_load(PUNCH_TEX)
     azum_tex_ok = png_load(AZUM_TEX)
-    png_load(AZUM_PUNCH_TEX)
+    azum_punch_tex_ok = png_load(AZUM_PUNCH_TEX)
     azum_zombie_tex_ok = png_load(AZUM_ZOMBIE_TEX)
     azum_zombie_punch_tex_ok = png_load(AZUM_ZOMBIE_PUNCH_TEX)
     png_load(SANTA_TEX)
-    png_load(SANTA_PUNCH_TEX)
+    santa_punch_tex_ok = png_load(SANTA_PUNCH_TEX)
     png_load(EBUC_TEX)
-    png_load(EBUC_PUNCH_TEX)
+    ebuc_punch_tex_ok = png_load(EBUC_PUNCH_TEX)
     png_load(DESPENSER_TEX)
-    png_load(CANDY_TEX)
+    candy_tex_ok = png_load(CANDY_TEX)
     png_load(SNOWFLAKE_TEX)
 end
 public function start_music()
@@ -147,7 +147,8 @@ public function update_warning()
         return
     end
     warn_a = 1
-    warn_ready = clamp(warn_ready + dt / warn_wait, 0, 1)
+    warn_t = warn_t + dt
+    warn_ready = clamp(warn_t / warn_wait, 0, 1)
 end
 public function update_studio()
     if studio_open != 1 then
@@ -239,6 +240,7 @@ public function update()
     update_studio()
     update_transition()
     update_music()
+    quest_tick()
     tick_achievement_toast()
     tick_fps_meter()
     if game_state == ST_SOLO then

@@ -14,7 +14,13 @@ public function draw_candies()
             sc=candy_scale*pop
             if sc>0.02 then
                 hw=25*sc
-                tex(arr_get(candy_x,i)-hw,arr_get(candy_y,i)-hw,CANDY_TEX,0,sc)
+                if candy_tex_ok==1 then
+                    tex(arr_get(candy_x,i)-hw,arr_get(candy_y,i)-hw,CANDY_TEX,0,sc)
+                else
+                    -- Текстура леденца не загрузилась: рисуем кружок-заглушку,
+                    -- иначе на её месте был бы «голубой шум» из памяти.
+                    circle(arr_get(candy_x,i),arr_get(candy_y,i),hw,0xFFFF4081)
+                end
             end
         end
         i=i+1
@@ -174,6 +180,10 @@ public function finish_game(number result)
         local number db=i*dash_fields
         arr_set(remote_dash,db,0)
         arr_set(remote_dash,db+1,0)
+        -- Чужой удар гаснет вместе с боем: иначе поза замаха оставалась на
+        -- экране результатов — после finished update_remote_punches не идёт.
+        clear_remote_punch(i)
+        arr_set(rpunch_a,i,0)
         i=i+1
     end
     if result==1&&cups_awarded==0 then
@@ -382,16 +392,19 @@ public function draw_game()
     draw_enemy_gift()
     draw_enemy_boom()
     draw_universe()
-    draw_station()
     draw_enemy_turrets()
     draw_player_body_layer()
+    -- Эффекты на игроке (яд/заморозка/стан) рисуются на его слое — сразу за
+    -- телом игрока и ПОД врагом, иначе они перекрывали врага.
+    draw_player_freeze()
+    draw_player_poison()
+    draw_player_stun()
+    -- Щит (станция/луч) — выше игрока, но ниже врага.
+    draw_station()
     draw_enemy_body()
     draw_freeze()
     draw_poison()
     draw_stun()
-    draw_player_freeze()
-    draw_player_poison()
-    draw_player_stun()
     draw_dash_streak()
     draw_snow()
     local number w=screen_w/4

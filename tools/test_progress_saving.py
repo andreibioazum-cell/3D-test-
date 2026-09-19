@@ -72,6 +72,16 @@ void arr_set(DSArray *a, double i, double v) {
     a->values[(int)i] = v;
 }
 double arr_len(DSArray *a) { return a ? a->len : 0; }
+/* Задания: нативное состояние в этом тесте не нужно — безопасные заглушки. */
+double net_quest_now(void) { return 0; }
+void net_save_quest_state(double t0, double p0, double n0, double x0,
+                          double t1, double p1, double n1, double x1,
+                          double t2, double p2, double n2, double x2) {
+    (void)t0;(void)p0;(void)n0;(void)x0;(void)t1;(void)p1;(void)n1;(void)x1;
+    (void)t2;(void)p2;(void)n2;(void)x2;
+}
+double net_load_quest_state(double s, double f) { (void)s; (void)f; return 0; }
+double net_quest_has_state(void) { return 0; }
 double clamp(double v, double lo, double hi) { return v < lo ? lo : v > hi ? hi : v; }
 double lerp(double a, double b, double t) { return a + (b - a) * t; }
 double dist(double x, double y, double a, double b) { return hypot(x - a, y - b); }

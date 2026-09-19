@@ -38,6 +38,17 @@ void arr_set(DSArray *a, double i, double v) {
     while (a->len <= i) arr_push(a, 0);
     a->values[(int)i] = v;
 }
+double arr_len(DSArray *a) { return a ? a->len : 0; }
+/* Задания: нативное состояние в этом тесте не нужно — безопасные заглушки. */
+double net_quest_now(void) { return 0; }
+void net_save_quest_state(double t0, double p0, double n0, double x0,
+                          double t1, double p1, double n1, double x1,
+                          double t2, double p2, double n2, double x2) {
+    (void)t0;(void)p0;(void)n0;(void)x0;(void)t1;(void)p1;(void)n1;(void)x1;
+    (void)t2;(void)p2;(void)n2;(void)x2;
+}
+double net_load_quest_state(double s, double f) { (void)s; (void)f; return 0; }
+double net_quest_has_state(void) { return 0; }
 double clamp(double v, double lo, double hi) { return v < lo ? lo : v > hi ? hi : v; }
 double dist(double x, double y, double a, double b) { return hypot(x-a, y-b); }
 void ds_log(const char *format, ...) { (void)format; }
@@ -76,6 +87,7 @@ void tex(float x, float y, const char *name, float a, float sc) {
     tex_tint(x, y, name, a, sc, 0);
 }
 void ring(float x, float y, float r, float th, uint32_t color) { (void)color; (void)x; (void)y; (void)r; (void)th; ring_calls++; }
+void circle(float x, float y, float r, uint32_t color) { (void)x; (void)y; (void)r; (void)color; }
 void roundrect(float x, float y, float w, float h, float r, uint32_t color) { plate_rects++; }
 static void near(double a, double b) { assert(fabs(a-b) < 0.001); }
 
@@ -195,6 +207,7 @@ static void test_weather(void) {
 static void test_candies(void) {
     ds_fn_reset_battle();
     game_state = ST_SOLO; candy_enabled = 1;
+    candy_tex_ok = 1;   /* текстура загружена — рисуется спрайт, не заглушка */
     player->x = -1000; player->y = -1000;   /* не подбирать случайно */
     ds_fn_spawn_all_candies();
     /* Спавн: в пределах экрана с отступом, таймеры появления/сбора обнулены. */
@@ -252,6 +265,7 @@ static void test_candies(void) {
 
 static void test_plates(void) {
     ds_fn_reset_battle();
+    candy_tex_ok = 1;   /* текстура загружена — рисуется спрайт, не заглушка */
     game_state = ST_ONLINE; cloud_event = 3; candy_enabled = 0;
     ds_fn_update_event();
     assert(event_mode == 0);

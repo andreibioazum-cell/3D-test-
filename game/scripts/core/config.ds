@@ -33,7 +33,7 @@ public number azum_revive_count=0
 public number ach_toast_bit=0, ach_toast_t=0
 public number ACH_TOAST_FADE_IN=0.14, ACH_TOAST_HOLD=1.5, ACH_TOAST_EXIT=0.24
 public number ACH_TOAST_DURATION=1.96
-public number cups=0, candies=0, cup_win=4, candy_win=3
+public number cups=0, candies=0, cup_win=5, candy_win=3
 public number cup_lose=1
 public number candy_enabled=1
 public number card_chance_base=6, card_chance_step=1, card_chance_cap=20
@@ -44,6 +44,13 @@ public number alert_hold=0.5, finish_t=0
 public number cups_awarded=0
 public number quest_count=3, quest_msg_t=0
 public array quest_type=arr_new(), quest_prog=arr_new(), quest_need=arr_new()
+-- quest_next[i]: epoch-метка, когда появится следующее задание (0 = слот жив).
+public array quest_next=arr_new()
+-- После выполнения новое задание появляется через quest_respawn секунд; отсчёт
+-- идёт по реальному времени и продолжается, даже если игра закрыта.
+public number quest_respawn=300
+-- Награды за задание (срезаны): кубков и конфет.
+public number quest_cups=5, quest_candies=2
 public number plates_finished=0
 public number match_seen_foe=0, foes_seen_t=0, foes_seen_min=1.0
 public number CLASS_ORDINARY=0, CLASS_AZUM=1, CLASS_SANTA=2, CLASS_EBUC=3
@@ -53,8 +60,13 @@ public number player_level=0, levels_unlocked=0
 public number max_level=3, level_base_cost=30, level_cost_step=10
 public number SKIN_NORMAL=0, SKIN_ZOMBIE=1, SKIN_COUNT=2
 public number azum_tex_ok=0, azum_zombie_tex_ok=0, azum_zombie_punch_tex_ok=0
+-- Загрузились ли спрайты замаха каждого класса. Незагруженная текстура просто
+-- не рисуется (tex() молча выходит), поэтому без запасного варианта боец на
+-- время удара исчезал с арены — см. class_punch_tex() в battle_rules.ds.
+public number ordinary_punch_tex_ok=0, azum_punch_tex_ok=0
+public number santa_punch_tex_ok=0, ebuc_punch_tex_ok=0
 public number azum_skin=SKIN_NORMAL
-public number arena_tile_size=256, snow_tex_ok=0, snow_t=0
+public number arena_tile_size=256, snow_tex_ok=0, snow_t=0, candy_tex_ok=0
 -- Зимняя тема — настройка из меню: снежный фон арены и снегопад включаются и
 -- выключаются одним тапом. По умолчанию она включена, а в выключенном виде
 -- арена снова в траве (grass.png), как было до зимнего оформления.
@@ -144,7 +156,7 @@ public number music_volume=70, music_vol_step=10, music_btn_gap=16
 -- пересчитывается раз в fps_interval секунд, чтобы цифры не прыгали.
 public number show_fps=0, fps_value=0, fps_acc=0, fps_frames=0, fps_interval=0.5
 public number fps_plate_rgb=0xDD171923, fps_text_scale=0.5
-public number event_mode=0, disco_t=0, event_t=0, event_flakes=44
+public number event_mode=0, disco_t=0, event_t=0, event_flakes=43
 public number plates_size=150, plates_shrink_time=0.9, plates_stand_r=80
 public number plates_xa=0.22, plates_xb=0.78, plates_yy=0.5
 public number plates_santa_size=112, plates_santa_spin=2.2, plates_throw_interval=0.35
@@ -159,9 +171,12 @@ public number plates_lock_me=0, plates_save_interval=4
 -- Предупреждение об эпилепсии: больше не гаснет само по таймеру. Экран
 -- держится, пока игрок сам не нажмёт кнопку согласия (legal_accept),
 -- поэтому пропустить его «случайно зашедший» человек не может: вход в игру
--- равен осознанному принятию риска. Нажатие фиксируется в settings.dat
--- (метка времени), системная кнопка «Назад» на этом экране выходит из игры.
-public number warn_open=1, warn_a=1, warn_ready=0, warn_wait=3
+-- равен осознанному принятию риска. Кнопка сразу в полной яркости, но пока
+-- идёт отсчёт warn_t (3-2-1 в подписи), нажатия не принимает; когда отсчёт
+-- кончается, секунды из подписи пропадают и кнопка доступна. Нажатие
+-- фиксируется в settings.dat (метка времени), системная кнопка «Назад» на
+-- этом экране выходит из игры.
+public number warn_open=1, warn_a=1, warn_ready=0, warn_t=0, warn_wait=3
 public number studio_open=0, studio_t=0, studio_a=0, studio_bg_a=1
 public number studio_in=0.5, studio_hold=1.6, studio_fade=0.7
 public string STUDIO_NAME="CUBIC CORPORATION"

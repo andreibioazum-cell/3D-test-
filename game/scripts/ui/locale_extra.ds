@@ -43,3 +43,9 @@ public function tr_quest_reward(number c, number cd)
     end
     return out
 end
+public function tr_quest_next_in(number m)
+    if language == 1 then
+        return "Новое через " + m + " мин."
+    end
+    return "Next in " + m + " min"
+end

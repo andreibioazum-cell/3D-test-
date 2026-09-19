@@ -297,7 +297,7 @@ public function tr_legal_accept()
 end
 public function tr_privacy()
     if language == 1 then
-        return "Данные и приватность"
+        return "Приватность"
     end
     return "Data & privacy"
 end

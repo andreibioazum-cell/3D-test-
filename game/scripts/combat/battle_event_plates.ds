@@ -334,7 +334,11 @@ public function draw_event_candies()
                 sc=candy_scale*pop*v
                 if sc>0.02 then
                     hw=25*sc
-                    tex(xx-hw,yy-hw,CANDY_TEX,0,sc)
+                    if candy_tex_ok==1 then
+                        tex(xx-hw,yy-hw,CANDY_TEX,0,sc)
+                    else
+                        circle(xx,yy,hw,0xFFFF4081)
+                    end
                 end
             end
         end

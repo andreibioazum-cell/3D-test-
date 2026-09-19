@@ -57,17 +57,28 @@ double clamp(double v, double lo, double hi) { return v < lo ? lo : v > hi ? hi 
 double dist(double x, double y, double a, double b) { return hypot(x - a, y - b); }
 double lerp(double a, double b, double t) { return a + (b - a) * t; }
 /* Строковые хелперы рантайма: нужны экранам боя (подписи кнопок, «+N кубков»). */
-static char s_concat[512];
+/* Как в настоящем рантайме: каждый вызов возвращает свежий буфер, чтобы
+ * вложенные конкатенации («a»+n+«b») не затирали друг друга. */
 char *ds_concat(const char *left, const char *right) {
-    snprintf(s_concat, sizeof(s_concat), "%s%s", left ? left : "", right ? right : "");
-    return s_concat;
+    const char *l = left ? left : "", *r = right ? right : "";
+    size_t la = strlen(l), lb = strlen(r);
+    char *out = malloc(la + lb + 1);
+    assert(out);
+    memcpy(out, l, la); memcpy(out + la, r, lb); out[la + lb] = 0;
+    return out;
 }
 char *ds_num_to_string(double value) {
     static char buf[64];
     snprintf(buf, sizeof(buf), "%g", value);
     return buf;
 }
-int png_load(const char *name) { (void)name; return 1; }
+/* Текстуры замаха можно «сломать»: tex() с незагруженной текстурой не рисует
+ * ничего, и боец на время удара исчезал с арены. */
+static int punch_tex_broken = 0;
+int png_load(const char *name) {
+    if (punch_tex_broken && name && strstr(name, "punch")) return 0;
+    return 1;
+}
 void tex(float x, float y, const char *name, float a, float sc) { (void)x; (void)y; (void)name; (void)a; (void)sc; }
 /* Тени рисуются tex_tint: считаем вызовы и запоминаем текстуру. */
 static int tint_calls = 0;
@@ -81,7 +92,13 @@ void tex_tint(float x, float y, const char *name, float a, float sc, uint32_t c)
 int text_ink_width(const char *s) { (void)s; return 10; }
 int text_ink_height(const char *s) { (void)s; return 10; }
 int text_ink_top(const char *s) { (void)s; return 2; }
-void text_scaled(const char *s, float x, float y, uint32_t c, float scale) { (void)s; (void)x; (void)y; (void)c; (void)scale; }
+/* Последняя нарисованная строка: кнопка согласия в конце draw_warning
+ * выводит свою подпись последней, поэтому по last_text видно её текст. */
+static char last_text[160];
+void text_scaled(const char *s, float x, float y, uint32_t c, float scale) {
+    (void)x; (void)y; (void)c; (void)scale;
+    snprintf(last_text, sizeof(last_text), "%s", s ? s : "");
+}
 
 /* Net stubs (same prototypes as net.h): purchases/saves never reach the cloud
  * in these tests, they only need to not crash. */
@@ -89,7 +106,10 @@ void net_save_progress_all(double, double, double, double, double, double,
     double, double, double, double, double, double,
     double, double, double, double, double, double) {}
 void net_save_progress(double, double, double, double, double, double, double, double) {}
-double net_slot(void) { return -1; }
+/* Снимок комнаты управляется тестами: по умолчанию слота нет (соло-режим). */
+static double stub_slot = -1;
+static double stub_online[4], stub_alive[4], stub_punch[4];
+double net_slot(void) { return stub_slot; }
 double net_event(void) { return 0; }
 void net_set_class(double v) { (void)v; }
 void net_set_level(double v) { (void)v; }
@@ -132,6 +152,25 @@ void net_promo_mark_card_found(void) {}
 double net_load_playtime(void) { return 0; }
 void net_save_playtime(double s) { (void)s; }
 void net_add_playtime(double d) { (void)d; }
+/* Квесты: управляемое «реальное» время и хранилище состояния заданий. */
+double fake_now = 0;
+static double quest_state[12] = {0};
+static int quest_state_valid = 0;
+double net_quest_now(void) { return fake_now; }
+void net_save_quest_state(double t0, double p0, double n0, double x0,
+                          double t1, double p1, double n1, double x1,
+                          double t2, double p2, double n2, double x2) {
+    quest_state[0]=t0; quest_state[1]=p0; quest_state[2]=n0; quest_state[3]=x0;
+    quest_state[4]=t1; quest_state[5]=p1; quest_state[6]=n1; quest_state[7]=x1;
+    quest_state[8]=t2; quest_state[9]=p2; quest_state[10]=n2; quest_state[11]=x2;
+    quest_state_valid = 1;
+}
+double net_load_quest_state(double slot, double field) {
+    int s = (int)slot, f = (int)field;
+    if (s < 0 || s > 2 || f < 0 || f > 3) return 0;
+    return quest_state[s * 4 + f];
+}
+double net_quest_has_state(void) { return quest_state_valid; }
 void net_set_mode(double v) { (void)v; }
 void net_set_room(double v) { (void)v; }
 /* Публикации в сеть: в соло-тестах не нужны, но update_game тянет их в линк. */
@@ -198,18 +237,18 @@ const char *str_upper(const char *s) {
 void net_event_set(double mode) { (void)mode; }
 double net_status(void) { return 0; }
 double net_count(void) { return 0; }
-double net_player_online(double s) { (void)s; return 0; }
+double net_player_online(double s) { int i=(int)s; return i>=0&&i<4?stub_online[i]:0; }
 double net_player_x(double s) { (void)s; return 0; }
 double net_player_y(double s) { (void)s; return 0; }
 double net_player_angle(double s) { (void)s; return 0; }
 double net_player_hp(double s) { (void)s; return 0; }
-double net_player_alive(double s) { (void)s; return 0; }
+double net_player_alive(double s) { int i=(int)s; return i>=0&&i<4?stub_alive[i]:0; }
 const char *net_player_nick(double s) { (void)s; return ""; }
 double net_player_punch_x(double s) { (void)s; return 0; }
 double net_player_punch_y(double s) { (void)s; return 0; }
 double net_player_punch_dx(double s) { (void)s; return 0; }
 double net_player_punch_dy(double s) { (void)s; return 0; }
-double net_player_punch(double s) { (void)s; return 0; }
+double net_player_punch(double s) { int i=(int)s; return i>=0&&i<4?stub_punch[i]:0; }
 double net_player_snow_x(double s) { (void)s; return 0; }
 double net_player_snow_y(double s) { (void)s; return 0; }
 double net_player_snow_dx(double s) { (void)s; return 0; }
@@ -582,7 +621,7 @@ static void test_splash_screens(void) {
      * до явного согласия (legal_accept в скриптах), иначе предупреждение
      * можно «проспать» и войти в игру без него. */
     ds_fn_reset_battle();
-    warn_open = 1; warn_a = 1; warn_ready = 0;
+    warn_open = 1; warn_a = 1; warn_ready = 0; warn_t = 0;
     studio_open = 0;
     dt = 0.1;
     ds_fn_legal_accept();
@@ -597,27 +636,10 @@ static void test_splash_screens(void) {
     ds_fn_touch_warn(screen_w / 2, ds_fn_warn_btn_y() + 20, 1);
     assert(legal_marks == 0);
     ds_fn_touch_warn(screen_w / 2, ds_fn_warn_btn_y() + 20, 0);
-    assert(legal_marks == 1 && warn_open == 0 && studio_open == 1);
-    warn_open = 1; warn_a = 1; studio_open = 0;
-    assert(warn_open == 1 && warn_a == 1 && studio_open == 0);
-    /* Согласие (тело legal_accept): гейт закрывается и стартует заставка
-     * студии — дальше она работает как раньше. */
-    warn_open = 0; warn_a = 0;
-    studio_open = 1; studio_t = 0; studio_a = 0; studio_bg_a = 1;
-    /* Заставка: логотип проявляется и висит на цельном чёрном фоне... */
-    studio_t = 0; studio_a = 0; studio_in = 0.5; studio_hold = 1.6; studio_fade = 0.7;
-    for (int i = 0; i < 10; i++) ds_fn_update_studio();   /* 1.0 c */
-    near(studio_a, 1); near(studio_bg_a, 1);
-    for (int i = 0; i < 12; i++) ds_fn_update_studio();   /* +1.2 c = 2.2 c */
-    /* Логотип висел на цельном чёрном фоне до 2.1 c; после 2.1 c чёрный фон
-     * начал гаснуть вместе с логотипом — сейчас середина затухания. */
-    assert(studio_a > 0 && studio_a < 1);
-    near(studio_bg_a, studio_a);
-    for (int i = 0; i < 20; i++) ds_fn_update_studio();   /* +2.0 c */
-    assert(studio_open == 0 && studio_bg_a == 0);
+    /* Согласие закрывает гейт и больше НЕ стартует заставку студии. */
+    assert(legal_marks == 1 && warn_open == 0 && studio_open == 0);
     /* Отрисовка: фон предупреждения непрозрачно-чёрный, поверх — короткий
-     * текст и кнопка согласия; фон заставки прозрачнеет только вместе с
-     * логотипом. */
+     * текст и кнопка согласия. */
     warn_open = 1; warn_a = 0.5;
     call_count = 0;
     ds_fn_draw_warning();
@@ -627,15 +649,58 @@ static void test_splash_screens(void) {
         if (calls[i].kind == 'o' && calls[i].color == 0xFF383838) saw_accept_btn = 1;
     }
     assert(saw_accept_btn);
-    studio_open = 1; studio_a = 0.4; studio_bg_a = 0.4;
+    /* Кнопка сразу в полной яркости, а подпись держит отсчёт «(3)(2)(1)»;
+     * на 4-й секунде секунды пропадают и кнопка принимает нажатие. */
+    warn_ready = 0; warn_t = 0.0;
     call_count = 0;
-    ds_fn_draw_studio();
-    assert(calls[0].kind == 'q' && calls[0].color == 0x66000000);
-    studio_a = 1; studio_bg_a = 1;
-    call_count = 0;
-    ds_fn_draw_studio();
-    assert(calls[0].kind == 'q' && calls[0].color == 0xFF000000);
-    puts("splash: warning keeps black screen, studio logo fades out with it");
+    ds_fn_draw_warning();
+    assert(strstr(last_text, "(3)") != NULL);          /* 1-я секунда */
+    for (int i = 0; i < call_count; i++)
+        if (calls[i].kind == 'o') assert(calls[i].color == 0xFF383838); /* не тусклая */
+    warn_t = 1.5; warn_ready = 0.5;
+    ds_fn_draw_warning();
+    assert(strstr(last_text, "(2)") != NULL);          /* 2-я секунда */
+    warn_t = 2.5; warn_ready = 0.83;
+    ds_fn_draw_warning();
+    assert(strstr(last_text, "(1)") != NULL);          /* 3-я секунда */
+    warn_t = 3.0; warn_ready = 1.0;
+    ds_fn_draw_warning();
+    assert(strstr(last_text, "(") == NULL);            /* секунды исчезли */
+    int marks_before = legal_marks;
+    ds_fn_touch_warn(screen_w / 2, ds_fn_warn_btn_y() + 20, 0);
+    assert(legal_marks == marks_before + 1 && warn_open == 0 && studio_open == 0);
+    puts("splash: warning keeps black screen, no studio splash after consent");
+}
+
+static void test_quest_cooldown(void) {
+    ds_main();
+    ds_fn_quest_init();
+    /* Готовое задание (тип 0, прогресс достигнут) и фиксированное «сейчас». */
+    fake_now = 1000;
+    arr_set(quest_type, 0, 0);
+    arr_set(quest_prog, 0, 1);
+    arr_set(quest_need, 0, 1);
+    int cups0 = cups;
+    int cand0 = candies;
+    ds_fn_quest_complete(0);
+    /* Награда срезана до quest_cups / quest_candies. */
+    assert(cups == cups0 + (int)quest_cups);
+    assert(candies == cand0 + (int)quest_candies);
+    /* Слот ушёл в кулдаун, метка сохранена нативно (переживёт выход). */
+    assert(arr_get(quest_type, 0) == -1);
+    near(arr_get(quest_next, 0), 1000 + quest_respawn);
+    near(quest_state[3], 1000 + quest_respawn);
+    /* До истечения 5 минут новое задание НЕ появляется. */
+    fake_now = 1000 + quest_respawn - 1;
+    ds_fn_quest_tick();
+    assert(arr_get(quest_type, 0) == -1);
+    /* Прошло quest_respawn реальных секунд — появляется новое задание. */
+    fake_now = 1000 + quest_respawn;
+    ds_fn_quest_tick();
+    assert(arr_get(quest_type, 0) != -1);
+    near(arr_get(quest_next, 0), 0);
+    near(quest_state[3], 0);
+    puts("quests: next appears after respawn, timer survives via native store");
 }
 
 static void test_punch_hitbox_fades(void) {
@@ -848,6 +913,101 @@ static void test_online_turret_punch_death(void) {
     puts("online: friend punch chips and kills buk turret (shield absorb + direct hit)");
 }
 
+static void test_punch_sprite_never_empty(void) {
+    /* tex() с незагруженной текстурой не рисует ничего, поэтому пустой спрайт
+     * замаха означал невидимого бойца: на время удара игрок пропадал с арены.
+     * Теперь поза замаха откатывается на обычный спрайт своего класса. */
+    ds_fn_reset_battle();
+    punch_tex_broken = 1;
+    ds_fn_load_textures();
+    assert(ordinary_punch_tex_ok == 0 && azum_punch_tex_ok == 0);
+    assert(santa_punch_tex_ok == 0 && ebuc_punch_tex_ok == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_ORDINARY, 1, SKIN_NORMAL), "ordinary.png") == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_AZUM, 1, SKIN_NORMAL), "azum.png") == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_SANTA, 1, SKIN_NORMAL), "santa.png") == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_EBUC, 1, SKIN_NORMAL), "ebuc.png") == 0);
+    /* Скину «Зомби» тоже есть куда падать: зомби-замах -> Азум -> обычный. */
+    azum_zombie_punch_tex_ok = 0;
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_AZUM, 1, SKIN_ZOMBIE), "azum.png") == 0);
+    azum_zombie_punch_tex_ok = 1;
+    punch_tex_broken = 0;
+    ds_fn_load_textures();
+    /* Всё на месте — играем настоящими спрайтами замаха, как и раньше. */
+    assert(ordinary_punch_tex_ok == 1 && azum_punch_tex_ok == 1);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_ORDINARY, 1, SKIN_NORMAL), "ordinary_punch.png") == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_AZUM, 1, SKIN_NORMAL), "azum_punch.png") == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_SANTA, 1, SKIN_NORMAL), "santa_punch.png") == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_EBUC, 1, SKIN_NORMAL), "ebuc_punch.png") == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_AZUM, 1, SKIN_ZOMBIE), "zombie_azum_punch.png") == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_ORDINARY, 0, SKIN_NORMAL), "ordinary.png") == 0);
+    puts("sprite: an unloaded punch texture falls back to the idle one, the fighter stays visible");
+}
+
+static void test_remote_punch_pose_expires(void) {
+    /* Поза замаха соперника живёт punch_time и гаснет сама. Раньше
+     * remote_punches чистил только update_remote_punches(), а до него не
+     * доходит ни конец боя, ни потеря слота — соперник навсегда оставался
+     * «бьющим» (спрайт замаха висел и на экране результатов, и дальше). */
+    ds_fn_reset_battle();
+    game_state = ST_ONLINE;
+    dt = 1.0 / 60.0;
+    stub_slot = 0;
+    stub_online[1] = 1; stub_alive[1] = 1; stub_punch[1] = 0;
+    arr_set(remotes, 1*remote_fields, 1);          /* слот уже виден */
+    arr_set(remotes, 1*remote_fields+5, 1);
+    stub_punch[1] = 3;                             /* соперник ударил */
+    ds_fn_read_remotes();
+    assert(arr_get(remote_punches, 1*punch_fields) == 1);
+    finished = 1;                                  /* бой закончился в тот же кадр */
+    int frames = 0;
+    while (arr_get(remote_punches, 1*punch_fields) == 1 && frames < 120) {
+        ds_fn_tick_remote_punches();
+        frames++;
+    }
+    assert(arr_get(remote_punches, 1*punch_fields) == 0);
+    assert(frames > 5 && frames < 30);             /* punch_time, а не вечность */
+    finished = 0;
+    /* finish_game() гасит чужие удары сразу, как и остальные эффекты. */
+    cups_awarded = 1;                              /* без наград и сохранения */
+    stub_punch[1] = 5;
+    ds_fn_read_remotes();
+    assert(arr_get(remote_punches, 1*punch_fields) == 1);
+    arr_set(rpunch_a, 1, 1);
+    ds_fn_finish_game(1);
+    assert(arr_get(remote_punches, 1*punch_fields) == 0);
+    assert(arr_get(rpunch_a, 1) == 0);
+    stub_online[1] = 0; stub_alive[1] = 0; stub_punch[1] = 0; stub_slot = -1;
+    puts("online: the punch pose expires on its own, finished match included");
+}
+
+static void test_no_phantom_punch_on_join(void) {
+    /* Счётчик удара живёт в комнате и не сбрасывается, а «последний виденный»
+     * после reset_battle() равен нулю: первый же снимок новой игры считался
+     * ударом — соперник рисовался бьющим, а его прошлогодний удар ещё и бил
+     * по игроку. Первый снимок теперь сверяется, а не принимается за удар. */
+    ds_fn_reset_battle();
+    game_state = ST_ONLINE;
+    online_ready = 1;
+    dt = 1.0 / 60.0;
+    stub_slot = 0;
+    stub_online[1] = 1; stub_alive[1] = 1;
+    stub_punch[1] = 7;                             /* счётчик из прошлого матча */
+    player->x = 400; player->y = 360; player->size = 25;
+    player->hp = 10; player->max_hp = 10;
+    finished = 0;
+    ds_fn_read_remotes();
+    assert(arr_get(remote_punches, 1*punch_fields) == 0);   /* замаха нет */
+    assert(arr_get(remotes, 1*remote_fields+6) == 7);       /* счётчик запомнен */
+    ds_fn_update_remote_punches();
+    near(player->hp, 10);                                   /* чужого урона нет */
+    /* Настоящий следующий удар виден как раньше. */
+    stub_punch[1] = 8;
+    ds_fn_read_remotes();
+    assert(arr_get(remote_punches, 1*punch_fields) == 1);
+    stub_online[1] = 0; stub_alive[1] = 0; stub_punch[1] = 0; stub_slot = -1;
+    puts("online: a stale punch counter is not a new punch, the next one still is");
+}
+
 static void test_turret_shadow_square(void) {
     /* Тень деспенсера — тем же спрайтом (tex_tint), что и сам деспенсер:
      * ни кругов, ни колец под турелью. Хитбокс турели — квадрат. */
@@ -972,12 +1132,16 @@ int main(void) {
     test_own_punch_spares_own_turret();
     test_enemy_shield_front_only();
     test_online_turret_punch_death();
+    test_punch_sprite_never_empty();
+    test_remote_punch_pose_expires();
+    test_no_phantom_punch_on_join();
     test_turret_shadow_square();
     test_station_beam_stable();
     test_universe_fade();
     test_enemy_class_chances();
     test_poison_green();
     test_splash_screens();
+    test_quest_cooldown();
     return 0;
 }
 '''
@@ -1052,6 +1216,20 @@ def main():
             body = fns[name][2]
             for hook in ("tick_hitbox_fades()", "tick_status_fades()"):
                 assert body.count(hook) == 1, f"{name} must call {hook} once"
+        # Поза чужого замаха гаснет сама: её тик стоит ДО ветки finished и до
+        # проверки слота, иначе соперник оставался «бьющим» навсегда.
+        online_upd = fns["update_online"][2]
+        assert online_upd.count("tick_remote_punches()") == 1, \
+            "update_online must tick remote punches exactly once"
+        assert online_upd.index("tick_remote_punches()") < online_upd.index("if finished!=0 then"), \
+            "tick_remote_punches must run before the finished early-return"
+        # Первый снимок слота не считается ударом (счётчик живёт в комнате).
+        assert "arr_set(remotes,b+6,net_player_punch(s))" in "".join(fns["read_remotes"][2]), \
+            "read_remotes must prime the punch counter of a freshly seen slot"
+        # Конец боя гасит чужие удары вместе с остальными эффектами.
+        finish_body = "".join(fns["finish_game"][2])
+        assert "clear_remote_punch(i)" in finish_body, \
+            "finish_game must clear remote punches"
         # Эффекты, наложенные врагом, рисуются и вокруг бойца (соло).
         solo_body = "".join(fns["draw_game"][2])
         for fn in ("draw_player_freeze()", "draw_player_poison()", "draw_player_stun()"):
