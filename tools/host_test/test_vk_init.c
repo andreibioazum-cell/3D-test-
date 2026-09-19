@@ -429,7 +429,7 @@ static struct { int init_ok; int frame1_ok; int frame2_ok; int frame3_ok; int fr
                 unsigned off_w, off_h, log_w, log_h, off2_w, off2_h;
                 unsigned blit_src_w, blit_src_h, blit_dst_w, blit_dst_h;
                 unsigned blit2_src_w, blit2_src_h, blit2_dst_w, blit2_dst_h;
-                int scale0, scale_miss, scale_probe, scale_rollback; } g_res;
+                int scale0, scale_miss, scale_probe, scale_rollback, scale_still; } g_res;
 
 static void *test_thread(void *arg) {
     (void)arg;
@@ -464,6 +464,9 @@ static void *test_thread(void *arg) {
      * в 1/2, окно без промахов возвращает 1:1, промах на пробе «резче» откатывает
      * масштаб обратно. Кнопки и настройки для этого больше нет. */
     g_res.scale0 = ds_graphics_pixel_scale();
+    /* Каждое пересоздание swapchain сбрасывает историю контроллера и даёт
+     * секунду кулдауна: первые кадры нового окна всегда медленные. */
+    for (int i = 0; i < 60; i++) ds_graphics_report_frame_interval(0.0167);
     for (int i = 0; i < 10; i++) ds_graphics_report_frame_interval(0.0333);
     g_res.scale_miss = ds_graphics_pixel_scale();
     g_res.frame4_ok = ds_graphics_begin_frame(&b);
@@ -473,11 +476,17 @@ static void *test_thread(void *arg) {
     g_res.blit2_src_w = g_blit_src_w; g_res.blit2_src_h = g_blit_src_h;
     g_res.blit2_dst_w = g_blit_dst_w; g_res.blit2_dst_h = g_blit_dst_h;
     for (int i = 0; i < 90; i++) ds_graphics_report_frame_interval(0.0167); /* кулдаун смены */
-    for (int i = 0; i < 45; i++) ds_graphics_report_frame_interval(0.0167); /* окно без промахов */
+    /* Проба «резче» допускается только после 300 кадров без промахов:
+     * 90 кулдауна плюс 225 оконных кадров = 315 чистых. */
+    for (int i = 0; i < 225; i++) ds_graphics_report_frame_interval(0.0167);
     g_res.scale_probe = ds_graphics_pixel_scale();
     for (int i = 0; i < 45; i++) ds_graphics_report_frame_interval(0.0167); /* кулдаун пробы */
     for (int i = 0; i < 10; i++) ds_graphics_report_frame_interval(0.0333); /* промах на пробе */
     g_res.scale_rollback = ds_graphics_pixel_scale();
+    /* После провалившейся пробы масштаб не «дышит» обратно: ещё 405 чистых
+     * кадров (90 кулдаун + 315) не допускают новую пробу (кулдаун 1800). */
+    for (int i = 0; i < 405; i++) ds_graphics_report_frame_interval(0.0167);
+    g_res.scale_still = ds_graphics_pixel_scale();
     ds_graphics_shutdown();
     return 0;
 }
@@ -526,11 +535,12 @@ int main(void) {
     }
     if (g_res.scale_probe != 1) { fail = 1; printf("FAIL: после окна без промахов автомасштаб %d, ожидался 1\n", g_res.scale_probe); }
     if (g_res.scale_rollback != 2) { fail = 1; printf("FAIL: после промаха на пробе «резче» автомасштаб %d, ожидался 2\n", g_res.scale_rollback); }
+    if (g_res.scale_still != 2) { fail = 1; printf("FAIL: после отката пробы масштаб снова поехал (%d), ожидалась фиксация 2\n", g_res.scale_still); }
     if (g_blits < 3) { fail = 1; printf("FAIL: blit не вызывался на каждом кадре (было %d)\n", g_blits); }
     if (g_violations) { fail = 1; printf("FAIL: строгий драйвер поймал невалидный create-info: %s\n", g_violation_msg); }
     if (!fail) {
-        printf("PASS: init + 4 кадра + автомасштаб (промахи vsync -> 1/2, запас -> 1:1, "
-               "промах на пробе -> откат) + смена формата swapchain; pNext/flags чистые, конвейеров создано %d\n",
+        printf("PASS: init + 4 кадра + автомасштаб (промахи vsync -> 1/2, долгий запас -> 1:1, "
+               "промах на пробе -> откат и фиксация) + смена формата swapchain; pNext/flags чистые, конвейеров создано %d\n",
                g_pipeline_creates);
     }
     return fail;

@@ -105,7 +105,12 @@ static void handle_cmd(struct android_app *app, int32_t command) {
             }
             break;
         case APP_CMD_TERM_WINDOW:
-            init_done = 0; script_active = 0; keyboard_hide(); ds_graphics_shutdown(); ds_sound_shutdown(); break;
+            /* Онлайн-потоки комнаты переживают сворачивание, а скрипт при
+             * возврате стартует заново: без явного отключения зомби-потоки
+             * продолжали бы писать в состояние, которого скрипт уже не
+             * помнит, - отсюда случайные вылеты при перезаходе. */
+            init_done = 0; script_active = 0; keyboard_hide(); net_disconnect();
+            ds_graphics_shutdown(); ds_sound_shutdown(); break;
         case APP_CMD_GAINED_FOCUS: ds_sound_resume(); break;
         case APP_CMD_LOST_FOCUS: ds_sound_pause(); break;
         default: break;

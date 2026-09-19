@@ -279,14 +279,35 @@ int ds_graphics_init(AAssetManager *a, ANativeWindow *window) {
  * в оффскрин в scale раз меньше и растягивается на окно; как только запас
  * появляется — возвращаемся к 1:1. Картинка всегда резкая, пока устройство
  * держит 60 fps; мягче она становится только вместо провала в 30.
- * Решения принимаются с гистерезисом, чтобы масштаб не дёргался каждый кадр. */
+ *
+ * Гистерезис здесь принципиально несимметричный, чтобы масштаб не «дышал»:
+ * грубее уходим быстро (10 промахов подряд или 9 из 45 кадров), а пробу
+ * «резче» допускаем только после 300 кадров (~5 с) вообще без промахов и не
+ * чаще раза в 15 с; две провалившиеся пробы за сеанс навсегда фиксируют
+ * текущий масштаб (gfx_finer_off) — лучше стабильная мягкость, чем видимая
+ * пульсация резкости и пересоздание оффскрина каждые несколько секунд.
+ * История промахов сбрасывается на каждом новом окне (gfx_autoscale_new_window):
+ * первые кадры после возврата в приложение всегда медленные и не должны
+ * сразу тянуть масштаб вниз. */
 static int gfx_auto_scale = 1;
 static int gfx_cooldown = 0;        /* кадров до любых решений после смены */
 static int gfx_finer_cooldown = 0;  /* кадров до следующей пробы «резче» */
-static int gfx_probe_finer = 0;     /* только что сделали резче: промах откатит */
+static int gfx_probe_finer = 0;     /* идёт проба «резче»: промах откатит */
+static int gfx_probe_left = 0;      /* кадров вердикта пробы; дожил до 0 - успех */
+static int gfx_probe_fails = 0;     /* сколько проб провалилось за сеанс */
+static int gfx_finer_off = 0;       /* после двух провалов пробы выключены */
+static int gfx_clean = 0;           /* кадров подряд без промаха */
 static int gfx_miss_streak = 0, gfx_win_frames = 0, gfx_win_misses = 0;
 
 int ds_graphics_pixel_scale(void) { return gfx_auto_scale; }
+
+/* Старт/возврат в приложение/смена размера окна: история скорости устарела. */
+static void gfx_autoscale_new_window(void) {
+    gfx_cooldown = 60;
+    gfx_probe_finer = 0;
+    gfx_probe_left = 0;
+    gfx_miss_streak = 0; gfx_win_frames = 0; gfx_win_misses = 0; gfx_clean = 0;
+}
 
 static void gfx_set_scale(int s, int cooldown) {
     if (s < 1) s = 1;
@@ -302,14 +323,24 @@ static void gfx_set_scale(int s, int cooldown) {
 void ds_graphics_report_frame_interval(double sec) {
     if (!(sec > 0.0) || sec > 0.25) return;   /* пауза, сворачивание, отладчик */
     if (gfx_finer_cooldown > 0) gfx_finer_cooldown--;
-    if (gfx_cooldown > 0) { gfx_cooldown--; return; }
     /* Промах по vsync 60 Гц: кадр пришёл ко второму вертикальному интервалу
      * (33 мс) или позже. 20 мс — граница с запасом против дрожания 16.7. */
     int missed = sec > 0.020;
+    gfx_clean = missed ? 0 : gfx_clean + 1;
+    if (gfx_cooldown > 0) { gfx_cooldown--; return; }
+    /* Вердикт пробы «резче»: окно кадров после её кулдауна. Одиночный поздний
+     * промах спустя минуту не должен откатывать уже прижившийся масштаб. */
+    if (gfx_probe_finer && gfx_probe_left > 0) {
+        gfx_probe_left--;
+        if (gfx_probe_left == 0) gfx_probe_finer = 0;  /* проба прижилась */
+    }
     if (missed) {
         if (gfx_probe_finer) {   /* проба «резче» провалилась — откат и надолго */
             gfx_probe_finer = 0;
-            if (gfx_finer_cooldown < 600) gfx_finer_cooldown = 600;
+            gfx_probe_left = 0;
+            gfx_probe_fails++;
+            if (gfx_probe_fails >= 2) gfx_finer_off = 1;
+            gfx_finer_cooldown = gfx_finer_off ? 1000000000 : 1800;
             gfx_set_scale(gfx_auto_scale + 1, 90);
             return;
         }
@@ -323,10 +354,12 @@ void ds_graphics_report_frame_interval(double sec) {
         int bad = gfx_miss_streak >= 10 || gfx_win_misses >= 9;
         if (bad) {
             if (gfx_auto_scale < 3) gfx_set_scale(gfx_auto_scale + 1, 90);
-        } else if (gfx_win_misses == 0 && gfx_auto_scale > 1 && gfx_finer_cooldown == 0) {
+        } else if (gfx_win_misses == 0 && gfx_clean >= 300 && gfx_auto_scale > 1 &&
+                   gfx_finer_cooldown == 0 && !gfx_finer_off) {
             gfx_probe_finer = 1;
-            gfx_finer_cooldown = 240;
+            gfx_finer_cooldown = 900;
             gfx_set_scale(gfx_auto_scale - 1, 45);
+            gfx_probe_left = 45 + 60;  /* кулдаун пробы плюс окно вердикта */
         }
         gfx_win_frames = 0; gfx_win_misses = 0;
     }

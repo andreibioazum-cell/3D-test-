@@ -1006,8 +1006,25 @@ def check_firebase_rules_cover_request_bodies():
     assert not missing, f"banner rules miss: {sorted(missing)}"
 
 
+def check_sprite_assets_exist():
+    """Каждая текстура, на которую ссылаются скрипты, лежит в game/assets.
+
+    После отката к 76ed6fc из ассетов выпали azum.png и azum_punch.png: класс
+    Азум был невидимым в бою, и игрока выдавали только эффекты удара («игрока
+    нет, при ударе видно»). Проверка читает все строковые имена *.png из
+    скриптов и требует файл под каждое из них.
+    """
+    names = set()
+    for ds in (ROOT / "game" / "scripts").rglob("*.ds"):
+        names |= set(re.findall(r'"([A-Za-z0-9_./-]+\.png)"', ds.read_text(encoding="utf-8")))
+    assert names, "не найдено ни одной ссылки на png в скриптах"
+    missing = [n for n in sorted(names) if not (ROOT / "game" / "assets" / n.split("/")[-1]).exists()]
+    assert not missing, f"в game/assets не хватает текстур: {missing}"
+
+
 def main():
     check_firebase_rules_cover_request_bodies()
+    check_sprite_assets_exist()
     with tempfile.TemporaryDirectory(prefix="cubic-fixes-") as directory:
         temp = Path(directory)
         compiler = DimScriptCompiler()

@@ -2,6 +2,10 @@
  * Часть Vulkan-бэкенда: включается из vulkan_backend.inc, всё собирается
  * одним translation unit'ом (graphics.c), поэтому состояние общее. */
 
+/* Контроллер автомасштаба живёт в lifecycle.inc (подключается позже); новое
+ * окно = устаревшая история кадров, решения на ней принимать нельзя. */
+static void gfx_autoscale_new_window(void);
+
 /* --- swapchain --- */
 
 static void ds_vk_destroy_swapchain(void) {
@@ -102,6 +106,10 @@ static int ds_vk_recreate_swapchain(void) {
     vk_sw_extent = caps.currentExtent;
     vk_need_recreate = 0;
     vk_image_held = 0;
+    /* Первое окно, возврат в приложение, поворот/ресайз: накопленные промахи
+     * относятся к прошлому окну, а первые кадры нового всегда медленные —
+     * контроллер автомасштаба начинает считать заново через секунду. */
+    gfx_autoscale_new_window();
     ds_log("vulkan: swapchain %ux%u, %u images, format %d", vk_sw_extent.width, vk_sw_extent.height,
            (unsigned)vk_sw_count, (int)vk_sw_format);
     return 1;
