@@ -10,4 +10,6 @@ int32_t ANativeWindow_getHeight(ANativeWindow *window);
 int32_t ANativeWindow_setBuffersGeometry(ANativeWindow *w, int32_t width, int32_t height, int32_t format);
 int ANativeWindow_lock(ANativeWindow *window, ANativeWindow_Buffer *outBuffer, void *inOutResizeBuffer);
 int ANativeWindow_unlockAndPost(ANativeWindow *window);
+void ANativeWindow_acquire(ANativeWindow *window);
+void ANativeWindow_release(ANativeWindow *window);
 #endif

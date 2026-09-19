@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.cb4"
-    android:versionCode="3"
-    android:versionName="1.2">
+    android:versionCode="8"
+    android:versionName="1.2.5">
 
     <!-- Android 8 (API 26) до Android 15 (API 35), arm64/arm32/x86_64 -->
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
@@ -10,17 +10,21 @@
     <!-- Онлайн-режим ходит в Firebase Realtime Database по HTTPS. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Логи вылетов в /storage/emulated/0/ds_logs (до Android 10 включительно). -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
 
-    <!-- Рендер работает только через Vulkan: без поддержки 1.0 игра не имеет
-         запасного пути, поэтому магазин не должен ставить её на такие устройства. -->
-    <uses-feature android:name="android.hardware.vulkan.version" android:required="true" android:version="0x00010000" />
+    <!-- Рендер работает через Vulkan, но с полного отказа запасным путём
+         рисует CPU-растеризатор (native/graphics/cpu_backend.c), поэтому
+         устройство без Vulkan игру не выкидывает из магазина. -->
+    <uses-feature android:name="android.hardware.vulkan.version" android:required="false" android:version="0x00010000" />
     <uses-feature android:name="android.hardware.vulkan.level" android:required="false" />
 
     <application
         android:label="Cubic Battle 4"
         android:icon="@mipmap/ic_launcher"
         android:hasCode="true"
-        android:extractNativeLibs="true">
+        android:extractNativeLibs="true"
+        android:requestLegacyExternalStorage="true">
 
         <!-- singleTask: возврат в игру из свёрнутого состояния не должен
              создавать второй экземпляр NativeActivity. Два native-цикла в одном

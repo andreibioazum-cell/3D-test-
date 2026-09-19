@@ -1,35 +1,8 @@
-/* Хост-регрессионный тест Vulkan-инициализации (native/graphics/vulkan_backend.inc).
- *
- * Воспроизводит класс краша с поля (TECNO KL4 / Mali-G57, tombstone:
- * «null pointer dereference» внутри драйвера GPU при создании конвейеров в
- * ds_graphics_init). Причина была в том, что VkPipelineShaderStageCreateInfo
- * создавался без нулевой инициализации: в pNext/flags оставался мусор стека,
- * а загрузчик Vulkan и драйвер обходят цепочку pNext каждого create-info —
- * мусорный указатель = разыменование несуществующего адреса прямо в драйвере.
- *
- * Тест запускает ds_graphics_init в потоке, чей стек ЗАРАНЕЕ заполнен 0xDE:
- * любое поле структуры, которое код не инициализировал, становится
- * ненулевым мусором (как «грязный» стек на телефоне), и строгий фейковый
- * драйвер (проверяет pNext/flags, как настоящий) ловит нарушение вместо
- * того, чтобы падать с SIGSEGV. Потоком же проверяются два полных кадра и
- * пересоздание swapchain со СМЕНОЙ ФОРМАТА (поворот) - путь пересборки
- * render pass/конвейеров (vk_rp_format) в ds_vk_begin_frame_backend.
- *
- * Фейковый драйвер моделирует реалистичный Android: окно в ландшафте на
- * портретном дисплее (currentTransform = ROTATE_90). Поэтому же проверяется
- * preTransform swapchain: игра рисует в координатах окна, и правильный
- * preTransform — IDENTITY (поворот окна к дисплею делает система).
- * preTransform = currentTransform — классическая ошибка, при которой в
- * ландшафте вся картинка оказывается повёрнутой на 90° и растянутой.
- *
- * Сборка и запуск (из корня репозитория; нужны Vulkan-заголовки,
- * например клон KhronosGroup/Vulkan-Headers):
- *   gcc -std=gnu99 -O1 -o /tmp/test_vk_init \
- *       tools/host_test/test_vk_init.c \
- *       -I tools/host_test/stub -I /tmp/vktools/Vulkan-Headers/include -I . -lm -lpthread
- *   /tmp/test_vk_init
- */
 #define VK_USE_PLATFORM_ANDROID_KHR
+#include <stdarg.h>
+#include <sys/stat.h>
+#include <jni.h>
+int __android_log_vprint(int prio, const char *tag, const char *fmt, va_list ap);
 #include <vulkan/vulkan.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -391,111 +364,279 @@ void vkCmdBlitImage(VkCommandBuffer cb, VkImage src, VkImageLayout sl, VkImage d
 }
 void vkCmdCopyImage(VkCommandBuffer cb, VkImage src, VkImageLayout sl, VkImage dst, VkImageLayout dl, uint32_t n, const VkImageCopy *rc) { (void)cb; (void)src; (void)sl; (void)dst; (void)dl; (void)n; (void)rc; g_copies++; }
 
-/* --- заглушки рантайма и Android (как в test_geometry.c) --- */
 
-void ds_log(const char *format, ...) { (void)format; }
-void ds_log_err(const char *format, ...) { (void)format; }
-void ds_console_log(int is_error, const char *format, ...) { (void)is_error; (void)format; }
-void ds_runtime_error(const char *format, ...) { (void)format; }
-const char *ds_runtime_error_message(void) { return ""; }
-int console_count(void) { return 0; }
-const char *console_line(int i) { (void)i; return ""; }
-int console_type(int i) { (void)i; return 0; }
-int screen_w = 720, screen_h = 1280;
-
+/* ==== настоящая игра: скрипты, рантайм, сеть, звук, Vulkan-бэкенд ==== */
+#include "game/game.c"
+#include "runtime.c"
+#include "net.c"
+/* Звук на устройстве живёт в JNI; на хосте включаем тот же код с заглушкой jni.h:
+ * snd_vm == NULL, поэтому бэкенд честно не стартует, как «нет аудио» на устройстве. */
+#define __ANDROID__ 1
+#include "sound.c"
+#undef __ANDROID__
 #include "graphics.c"
 
-/* Android-заглушки: типы приходят из stub/android/asset_manager.h выше. */
-AAsset *AAssetManager_open(AAssetManager *mgr, const char *name, int mode) { (void)mgr; (void)name; (void)mode; return NULL; }
-off_t AAsset_getLength(AAsset *a) { (void)a; return 0; }
-int AAsset_read(AAsset *a, void *buf, size_t n) { (void)a; (void)buf; (void)n; return -1; }
-int AAsset_close(AAsset *a) { (void)a; return 0; }
-
-/* CPU-окно в Vulkan-тесте не используется - достаточно определений для линковки. */
-int32_t ANativeWindow_getWidth(ANativeWindow *w) { (void)w; return 720; }
-int32_t ANativeWindow_getHeight(ANativeWindow *w) { (void)w; return 1280; }
-int32_t ANativeWindow_setBuffersGeometry(ANativeWindow *w, int32_t width, int32_t height, int32_t format) { (void)w; (void)width; (void)height; (void)format; return 0; }
-int ANativeWindow_lock(ANativeWindow *w, ANativeWindow_Buffer *out, void *rb) { (void)w; (void)out; (void)rb; return -1; }
-int ANativeWindow_unlockAndPost(ANativeWindow *w) { (void)w; return 0; }
-void ANativeWindow_acquire(ANativeWindow *w) { (void)w; }
-void ANativeWindow_release(ANativeWindow *w) { (void)w; }
-
-
-
-/* --- сам тест --- */
-
-#define TEST_STACK_SIZE (1u << 20)
-static char test_stack[TEST_STACK_SIZE];
-static struct { int init_ok; int frame1_ok; int frame2_ok; int frame3_ok;
-                unsigned off_w, off_h, log_w, log_h; } g_res;
-
-static void *test_thread(void *arg) {
-    (void)arg;
-    /* Весь стек потока уже заполнен 0xDE: незаинициализированные поля
-     * структур в коде будут содержать мусор, а не ноль. */
-    static int dummy_window;
-    ANativeWindow *win = (ANativeWindow *)&dummy_window;
-    g_res.init_ok = ds_graphics_init(NULL, win);
-    if (!g_res.init_ok) return 0;
-    Buffer b;
-    memset(&b, 0, sizeof b);
-    b.width = 720; b.height = 1280; b.stride = 720;
-    g_res.frame1_ok = ds_graphics_begin_frame(&b);
-    rect(0, 0, 10, 10, 0xff123456);
-    ds_graphics_end_frame();
-    /* Второй кадр: фейковый драйвер вернул SUBOPTIMAL на present, а при
-     * пересоздании swapchain - другой формат (симуляция поворота).
-     * Проверяет пересборку render pass/конвейеров (vk_rp_format). */
-    g_res.frame2_ok = ds_graphics_begin_frame(&b);
-    rect(0, 0, 10, 10, 0xff654321);
-    ds_graphics_end_frame();
-    /* Третий кадр: апскейла в настройках больше нет, поэтому оффскрин всегда
-     * ровно с окно, логический размер совпадает с ним, а blit идёт 1:1. */
-    g_res.frame3_ok = ds_graphics_begin_frame(&b);
-    rect(0, 0, 10, 10, 0xff123456);
-    ds_graphics_end_frame();
-    g_res.off_w = vk_off_w; g_res.off_h = vk_off_h;
-    g_res.log_w = vk_log_w; g_res.log_h = vk_log_h;
-    ds_graphics_shutdown();
+/* ==== Android-заглушки с НАСТОЯЩИМИ ассетами из game/assets ==== */
+struct AAsset { FILE *fp; long len; };
+static int dummy_amgr_storage;
+AAsset *AAssetManager_open(AAssetManager *mgr, const char *name, int mode) {
+    (void)mgr; (void)mode;
+    char path[512];
+    snprintf(path, sizeof path, "game/assets/%s", name);
+    FILE *fp = fopen(path, "rb");
+    if (!fp) return NULL;
+    AAsset *a = (AAsset *)calloc(1, sizeof *a);
+    if (!a) { fclose(fp); return NULL; }
+    a->fp = fp;
+    fseek(fp, 0, SEEK_END); a->len = ftell(fp); fseek(fp, 0, SEEK_SET);
+    return a;
+}
+off_t AAsset_getLength(AAsset *a) { return a ? (off_t)a->len : 0; }
+int AAsset_read(AAsset *a, void *buf, size_t n) { return a ? (int)fread(buf, 1, n, a->fp) : -1; }
+int AAsset_close(AAsset *a) { if (!a) return 0; fclose(a->fp); free(a); return 0; }
+int __android_log_print(int prio, const char *tag, const char *fmt, ...) {
+    (void)prio; (void)tag;
+    va_list ap; va_start(ap, fmt); vfprintf(stderr, fmt, ap); va_end(ap); fputc('\n', stderr);
+    return 0;
+}
+int __android_log_vprint(int prio, const char *tag, const char *fmt, va_list ap) {
+    (void)prio; (void)tag;
+    vfprintf(stderr, fmt, ap); fputc('\n', stderr);
     return 0;
 }
 
-int main(void) {
-    memset(test_stack, 0xDE, sizeof test_stack);
-    pthread_t th;
-    pthread_attr_t attr;
-    int fail = 0;
-    pthread_attr_init(&attr);
-    pthread_attr_setstack(&attr, test_stack, sizeof test_stack);
-    pthread_create(&th, &attr, test_thread, NULL);
-    pthread_join(th, NULL);
-    pthread_attr_destroy(&attr);
+/* ==== фейковое окно: RGBA-буфер 1280x720, честный lock/unlock ==== */
+static uint32_t g_win_pixels[1280 * 720];
+static int g_win_locked;
+int32_t ANativeWindow_getWidth(ANativeWindow *w) { (void)w; return 1280; }
+int32_t ANativeWindow_getHeight(ANativeWindow *w) { (void)w; return 720; }
+int32_t ANativeWindow_setBuffersGeometry(ANativeWindow *w, int32_t width, int32_t height, int32_t format) {
+    (void)w; (void)width; (void)height; (void)format; return 0;
+}
+int ANativeWindow_lock(ANativeWindow *w, ANativeWindow_Buffer *out, void *rb) {
+    (void)w; (void)rb;
+    if (g_win_locked) return -1;
+    out->bits = g_win_pixels; out->width = 1280; out->height = 720;
+    out->stride = 1280; out->format = WINDOW_FORMAT_RGBA_8888;
+    g_win_locked = 1;
+    return 0;
+}
+int ANativeWindow_unlockAndPost(ANativeWindow *w) { (void)w; g_win_locked = 0; return 0; }
+void ANativeWindow_acquire(ANativeWindow *w) { (void)w; }
+void ANativeWindow_release(ANativeWindow *w) { (void)w; }
 
-    if (!g_res.init_ok) { fail = 1; printf("FAIL: ds_graphics_init вернул 0\n"); }
-    if (!g_res.frame1_ok) { fail = 1; printf("FAIL: begin_frame первого кадра вернул 0\n"); }
-    if (!g_res.frame2_ok) { fail = 1; printf("FAIL: begin_frame второго кадра (смена формата) вернул 0\n"); }
-    if (g_swapchain_creates < 2) { fail = 1; printf("FAIL: ожидалось 2+ пересоздания swapchain, было %d\n", g_swapchain_creates); }
-    if (g_pipeline_creates < 8) { fail = 1; printf("FAIL: ожидалось 8+ созданий конвейеров (4 init + 4 после смены формата), было %d\n", g_pipeline_creates); }
-    if (!g_res.frame3_ok) { fail = 1; printf("FAIL: begin_frame третьего кадра вернул 0\n"); }
-    if (g_res.off_w != 720 || g_res.off_h != 1280) {
-        fail = 1; printf("FAIL: без апскейла оффскрин %ux%u, ожидалось 720x1280\n", g_res.off_w, g_res.off_h);
+/* Отчёт о падении - тот же модуль, что в main.c. */
+#include "native/crash_guard.h"
+#include <signal.h>
+
+/* ==== клавиатура: на устройстве это android_keyboard.inc (JNI IME) ==== */
+static int kb_up; static char kb_buf[256];
+void keyboard_show(void) { kb_up = 1; }
+void keyboard_hide(void) { kb_up = 0; }
+int keyboard_visible(void) { return kb_up; }
+const char *keyboard_get_text(void) { return kb_buf; }
+const char *keyboard_get_raw(void) { return kb_buf; }
+void keyboard_clear(void) { kb_buf[0] = 0; }
+int keyboard_enter_pressed(void) { return 0; }
+void keyboard_type(const char *s) { if (s) strncat(kb_buf, s, sizeof kb_buf - strlen(kb_buf) - 1); }
+void keyboard_commit_utf8(const char *s) { keyboard_type(s); }
+void keyboard_backspace(void) { size_t n = strlen(kb_buf); while (n > 0 && ((unsigned char)kb_buf[n-1] & 0xC0) == 0x80) n--; if (n > 0) n--; kb_buf[n] = 0; }
+
+/* ==== симуляция android_main: INIT_WINDOW -> кадры -> TERM -> INIT ==== */
+/* Обёртки как в main.c: ds_call_protected ждёт void (*)(void *). */
+static void protected_update(void *u) { (void)u; update(); }
+static void protected_draw(void *u) { draw((Buffer *)u); }
+static void protected_init(void *u) { init((AAssetManager *)u); }
+static void app_init_window(void) {
+    static int dummy_window;
+    ANativeWindow *win = (ANativeWindow *)&dummy_window;
+    screen_w = 1280; screen_h = 720;
+    if (!ds_graphics_init((AAssetManager *)&dummy_amgr_storage, win)) { fprintf(stderr, "HARNESS: ds_graphics_init failed\n"); exit(3); }
+    ds_sound_init((AAssetManager *)&dummy_amgr_storage);
+    ds_sound_resume();
+    ds_call_protected(protected_init, (AAssetManager *)&dummy_amgr_storage, "init");
+}
+static Buffer g_fb;
+static void app_frame(int n) {
+    (void)n;
+    dt = 1.0 / 60.0;
+    ds_call_protected(protected_update, NULL, "update");
+    g_fb.width = 1280; g_fb.height = 720; g_fb.stride = 1280;
+    if (ds_graphics_begin_frame(&g_fb)) {
+        ds_call_protected(protected_draw, &g_fb, "draw");
+        ds_graphics_end_frame();
     }
-    if (g_res.log_w != 720 || g_res.log_h != 1280) {
-        fail = 1; printf("FAIL: логический размер %ux%u, ожидалось 720x1280\n", g_res.log_w, g_res.log_h);
+}
+
+/* «Упавший драйвер»: тело защищаемого участка для pcall-сценария. */
+static void harness_crashy(void *ctx) {
+    (void)ctx;
+    ds_crumb("gfx-vk-init");
+    raise(SIGSEGV);
+}
+
+int main(void) {
+    setvbuf(stderr, NULL, _IONBF, 0);
+    /* Сохранения игры (progress.dirty и пр.) - во временную папку, чтобы
+     * прогон теста не сорил в корне репозитория: на устройстве этот путь
+     * задаёт main.c через net_set_data_path(internalDataPath). */
+    mkdir("/tmp/cb4_host_test", 0777);
+    net_set_data_path("/tmp/cb4_host_test");
+    app_init_window();
+    /* Лобби: 120 кадров (~2 секунды) */
+    for (int i = 0; i < 120; i++) app_frame(i);
+    fprintf(stderr, "HARNESS: lobby done, state=%f\n", game_state);
+
+    /* Настройки: открыли, потыкали строки, вернулись */
+    game_state = ST_SETTINGS;
+    for (int i = 0; i < 30; i++) app_frame(i);
+    touch(640, 300, 0, 0); touch(640, 300, 1, 0);
+    for (int i = 0; i < 30; i++) app_frame(i);
+
+    /* Бой: соло-матч, 600 кадров, с ударом в середине */
+    game_state = ST_SOLO;
+    ds_fn_init_game();
+    for (int i = 0; i < 300; i++) app_frame(i);
+    ds_fn_start_punch_now();
+    for (int i = 0; i < 300; i++) app_frame(i);
+    fprintf(stderr, "HARNESS: battle done\n");
+
+    /* Сворачивание и возврат: окно умерло, окно новое - путь, который чинит PR */
+    ds_graphics_shutdown();
+    ds_sound_shutdown();
+    app_init_window();
+    for (int i = 0; i < 240; i++) app_frame(i);
+    fprintf(stderr, "HARNESS: resume done\n");
+
+    /* Шторм пересозданий: лаунчер/поворот/IME на реальном устройстве делают
+     * TERM+INIT много раз подряд и в разные размеры окна. Каждое - полный
+     * цикл: destroy device/swapchain, новая поверхность, новое окно. */
+    for (int cycle = 0; cycle < 5; cycle++) {
+        ds_graphics_shutdown();
+        ds_sound_shutdown();
+        app_init_window();
+        for (int i = 0; i < 30; i++) app_frame(i);
     }
-    if (fabsf(g_pc[0] - 2.0f / 720.0f) > 1e-9f || fabsf(g_pc[1] - 2.0f / 1280.0f) > 1e-9f) {
-        fail = 1; printf("FAIL: push-константы кадра с апскейлом %g %g, ожидалось %g %g (шейдер должен делить на окно, не на оффскрин)\n",
-                         g_pc[0], g_pc[1], 2.0f / 720.0f, 2.0f / 1280.0f);
+    fprintf(stderr, "HARNESS: recreate storm done\n");
+
+    ds_graphics_shutdown();
+    ds_sound_shutdown();
+
+    /* Диагностика падения: крошки -> отчёт -> чтение -> CPU-режим с экраном
+     * отчёта и обычными кадрами игры. ds_crash_report_write зовётся напрямую
+     * (без реального сигнала: ASan перехватывает его раньше нашего хендлера). */
+    fprintf(stderr, "HARNESS: crash-report scenario\n");
+    ds_crash_report_init("/tmp/cb4_host_test");
+    ds_crumb("boot"); ds_crumb("jni"); ds_crumb("win"); ds_crumb("gfx-vk-init");
+    ds_crash_report_write(SIGABRT, (void *)(uintptr_t)0xdeadbeef);
+    char report[DS_CRASH_REPORT_MAX];
+    if (!ds_crash_report_load(report, sizeof report)) {
+        printf("FAIL: отчёт о падении не записан\n"); return 1;
     }
-    if (g_blit_src_w != 720 || g_blit_src_h != 1280 || g_blit_dst_w != 720 || g_blit_dst_h != 1280) {
-        fail = 1; printf("FAIL: blit %dx%d -> %dx%d, ожидалось 720x1280 -> 720x1280 (без апскейла)\n",
-                         g_blit_src_w, g_blit_src_h, g_blit_dst_w, g_blit_dst_h);
+    if (!strstr(report, "signal 6") || !strstr(report, "gfx-vk-init")) {
+        printf("FAIL: в отчёте нет сигнала или крошек:\n%s\n", report); return 1;
     }
-    if (g_blits < 3) { fail = 1; printf("FAIL: blit не вызывался на каждом кадре (было %d)\n", g_blits); }
-    if (g_violations) { fail = 1; printf("FAIL: строгий драйвер поймал невалидный create-info: %s\n", g_violation_msg); }
-    if (!fail) {
-        printf("PASS: init + 3 кадра (оффскрин всегда с окно - апскейл убран) "
-               "+ смена формата swapchain; pNext/flags чистые, конвейеров создано %d\n", g_pipeline_creates);
+    {
+        static int dummy_window2;
+        ANativeWindow *win2 = (ANativeWindow *)&dummy_window2;
+        screen_w = 1280; screen_h = 720;
+        if (!ds_graphics_init_cpu((AAssetManager *)&dummy_amgr_storage, win2)) {
+            printf("FAIL: ds_graphics_init_cpu вернул 0\n"); return 1;
+        }
+        Buffer fb2; memset(&fb2, 0, sizeof fb2);
+        for (int i = 0; i < 8; i++) {
+            dt = 1.0 / 60.0;
+            if (i == 0) ds_call_protected(init, (AAssetManager *)&dummy_amgr_storage, "init");
+            ds_call_protected(update, NULL, "update");
+            if (!ds_graphics_begin_frame_cpu(&fb2)) {
+                printf("FAIL: begin_frame_cpu вернул 0\n"); return 1;
+            }
+            if (i < 3) ds_graphics_error_screen(report); /* экран отчёта */
+            else ds_call_protected(protected_draw, &fb2, "draw"); /* игра в CPU-режиме */
+            ds_graphics_end_frame_cpu(&fb2);
+        }
+        /* Кадр лобби (нарисован выше в CPU-режиме) - в BMP для глазной проверки:
+         * фон, кнопки, текст и текстуры обязаны быть на своих местах. */
+        {
+            FILE *f = fopen("/tmp/cb4_cpu_lobby.bmp", "wb");
+            if (f) {
+                uint32_t W = 1280, H = 720, row = W * 3, pad = (4 - (row % 4)) % 4;
+                uint32_t sz = 54 + (row + pad) * H;
+                uint8_t hdr[54] = { 'B','M' };
+                memcpy(hdr + 2, &sz, 4); uint32_t off = 54; memcpy(hdr + 10, &off, 4);
+                uint32_t hs = 40; memcpy(hdr + 14, &hs, 4);
+                memcpy(hdr + 18, &W, 4); memcpy(hdr + 22, &H, 4);
+                uint16_t planes = 1, bpp = 24; memcpy(hdr + 26, &planes, 2); memcpy(hdr + 28, &bpp, 2);
+                fwrite(hdr, 1, 54, f);
+                uint8_t zero[4] = {0,0,0,0};
+                for (uint32_t y = H; y-- > 0;) {
+                    for (uint32_t x = 0; x < W; x++) {
+                        uint32_t p = g_win_pixels[y * 1280 + x];
+                        uint8_t rgb[3] = { (uint8_t)(p >> 16), (uint8_t)(p >> 8), (uint8_t)p };
+                        fwrite(rgb, 1, 3, f);
+                    }
+                    fwrite(zero, 1, pad, f);
+                }
+                fclose(f);
+                fprintf(stderr, "HARNESS: cpu lobby frame -> /tmp/cb4_cpu_lobby.bmp\n");
+            }
+        }
+        /* Отчёт стёрли - следующая загрузка прочитает пустоту. */
+        ds_crash_report_clear();
+        if (ds_crash_report_load(report, sizeof report)) {
+            printf("FAIL: отчёт не стёрлся\n"); return 1;
+        }
+        ds_graphics_shutdown_cpu();
+        ds_graphics_shutdown();
     }
-    return fail;
+    /* Счётчик падений Vulkan: инкремент только для Vulkan-сессий + сброс. */
+    fprintf(stderr, "HARNESS: vk_fails scenario\n");
+    ds_vk_fail_reset();
+    ds_crash_gpu_mode(1);
+    ds_crash_report_write(SIGSEGV, NULL);
+    if (ds_vk_fail_count() != 1) { printf("FAIL: vk_fails после 1 падения = %d\n", ds_vk_fail_count()); return 1; }
+    ds_crash_report_write(SIGSEGV, NULL);
+    if (ds_vk_fail_count() != 2) { printf("FAIL: vk_fails после 2 падений = %d\n", ds_vk_fail_count()); return 1; }
+    ds_vk_fail_reset();
+    if (ds_vk_fail_count() != 0) { printf("FAIL: vk_fails не сбросился\n"); return 1; }
+    ds_crash_gpu_mode(0);
+    ds_crash_report_write(SIGABRT, NULL);
+    if (ds_vk_fail_count() != 0) { printf("FAIL: CPU-падение не должно поднимать vk_fails\n"); return 1; }
+    ds_crash_report_clear();
+    if (ds_mem_total_mb() <= 0 && ds_mem_total_mb() != -1) { printf("FAIL: mem_total\n"); return 1; }
+
+    /* pcall (crash_guard.cpp): настоящий raise(SIGSEGV) внутри защищённого
+     * участка должен вернуться из ds_guard_run с номером сигнала, записать
+     * отчёт и поднять vk_fails (сессия помечена как GPU). */
+    fprintf(stderr, "HARNESS: pcall scenario\n");
+    ds_vk_fail_reset();
+    ds_crash_gpu_mode(1);
+    ds_crash_report_clear();
+    {
+        int jsig = ds_guard_run(harness_crashy, NULL);
+        if (jsig != SIGSEGV) { printf("FAIL: pcall вернул %d (ожидался SIGSEGV)\n", jsig); return 1; }
+    }
+    if (!ds_crash_report_load(report, sizeof report)) {
+        printf("FAIL: pcall не записал отчёт\n"); return 1;
+    }
+    if (ds_vk_fail_count() != 1) { printf("FAIL: pcall не поднял vk_fails\n"); return 1; }
+    ds_vk_fail_reset();
+    ds_crash_report_clear();
+
+    /* Внешний лог: переопределяем папку и проверяем запись событий. */
+    mkdir("/tmp/cb4_host_test/ds_logs", 0755);
+    ds_ext_log_set_dir("/tmp/cb4_host_test/ds_logs");
+    ds_ext_log_write("session start render=vulkan", 1);
+    {
+        char buf[512] = {0};
+        FILE *f = fopen("/tmp/cb4_host_test/ds_logs/ds_log.txt", "r");
+        if (!f) { printf("FAIL: ds_log.txt не создан\n"); return 1; }
+        size_t n = fread(buf, 1, sizeof buf - 1, f);
+        fclose(f);
+        if (!n || !strstr(buf, "session start render=vulkan") || !strstr(buf, "gfx-vk-init")) {
+            printf("FAIL: в ds_log.txt нет события или крошек:\n%s\n", buf); return 1;
+        }
+    }
+    printf("PASS: полная игра + crash-report + pcall + vk_fails + внешний ds_log\n");
+    return 0;
 }

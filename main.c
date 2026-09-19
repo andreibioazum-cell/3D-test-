@@ -12,13 +12,28 @@
 #include <android/native_activity.h>
 #include <errno.h>
 #include <unistd.h>
+#include "native/crash_guard.h"
 static int init_done = 0;
 static int script_active = 0;
+/* 1 = текущая сессия на Vulkan (для vk_fails и записи чистого выхода). */
+static int g_vk_session = 0;
 static AAssetManager *script_assets = NULL;
 static uint64_t restart_after_ns = 0;
 static unsigned int restart_failures = 0;
 static uint64_t prev_frame_ns = 0;
 static struct android_app *g_app = NULL;
+/* Безопасный режим: 1 - кадры рисует CPU-бэкенд без Vulkan. Включается, когда
+ * прошлый запуск упал (отчёт в crash_report.txt) или Vulkan не инициализировался. */
+static int g_cpu_render = 0;
+/* Экран с отчётом о прошлом падении: висит до первого касания. */
+static int g_show_report = 0;
+static char g_report[DS_CRASH_REPORT_MAX];
+static unsigned long g_frame_count = 0;
+/* Защищённые pcall функции (определены ниже, перед handle_input). */
+static void ds_guarded_vk_init(void *p);
+static void ds_guarded_vk_begin(void *p);
+static void ds_guarded_vk_cancel(void *p);
+static void ds_guarded_vk_end(void *p);
 static uint64_t monotonic_ns(void) {
     struct timespec now;
     if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0;
@@ -74,6 +89,7 @@ static void restart_script_if_due(void) {
     now = monotonic_ns(); if (now < restart_after_ns) return; (void)start_script(1);
 }
 static void handle_cmd(struct android_app *app, int32_t command) {
+    int gfx_ok;
     if (!app) { ds_runtime_error("no app"); return; }
     g_app = app;
     switch (command) {
@@ -85,14 +101,50 @@ static void handle_cmd(struct android_app *app, int32_t command) {
             apply_screen_size();
             script_assets = app->activity ? app->activity->assetManager : NULL;
             ds_set_activity(app->activity);
-            /* Vulkan-рендер создаётся на каждое окно заново (окно после
-             * сворачивания - новая поверхность); активы перечитываются лениво. */
-            if (!ds_graphics_init(script_assets, app->window)) { init_done = 0; return; }
-            /* Звуки лежат в тех же assets (sounds/...), играют через OpenSL ES. */
+            ds_crumb("win");
+            /* Рендер: Vulkan, а при отказе или после прошлого падения - CPU.
+             * Vulkan-инициализация на части драйверов падает внутри самого
+             * драйвера; CPU-путь гарантированно работает (так рендерила вся
+             * прошлая версия игры). */
+            if (g_cpu_render) {
+                ds_crumb("gfx-cpu-init");
+                gfx_ok = ds_graphics_init_cpu(script_assets, app->window);
+            } else {
+                /* pcall: если драйвер уронит процесс внутри vkCreate*, обработчик
+                 * сделает siglongjmp сюда - и этот же запуск продолжится на CPU. */
+                struct VkInitJob { AAssetManager *am; ANativeWindow *w; int ok; } job;
+                int jsig;
+                job.am = script_assets; job.w = app->window; job.ok = 0;
+                ds_crash_gpu_mode(1);
+                ds_crumb("gfx-vk-init");
+                jsig = ds_guard_run(ds_guarded_vk_init, &job);
+                gfx_ok = jsig ? 0 : job.ok;
+                if (jsig) {
+                    ds_log_err("vulkan init crashed (signal %d) - pcall switched to CPU", jsig);
+                    ds_ext_log_write("vulkan init crashed - pcall caught", 1);
+                }
+                if (!gfx_ok) {
+                    ds_crumb("gfx-cpu-fallback");
+                    g_cpu_render = 1;
+                    ds_crash_gpu_mode(0);
+                    ds_vk_fail_reset(); /* счётчик уже поднят обработчиком падения */
+                    gfx_ok = ds_graphics_init_cpu(script_assets, app->window);
+                }
+            }
+            if (!gfx_ok) { init_done = 0; return; }
+            ds_crumb(g_cpu_render ? "gfx-cpu-ok" : "gfx-vk-ok");
+            g_vk_session = !g_cpu_render;
+            /* Пока на экране отчёт о падении: звук и скрипт откладываем, чтобы
+             * экран появился даже если упало бы что-то из их инициализации. */
+            if (g_show_report) { init_done = 1; script_active = 0; break; }
+            /* Звуки лежат в тех же assets (sounds/...), играют через AudioTrack. */
             ds_sound_init(script_assets);
+            ds_crumb("snd");
             ds_sound_resume();
             init_done = 1; script_active = 0; restart_failures = 0;
-            ds_clear_script_restart(); (void)start_script(0); break;
+            ds_clear_script_restart(); (void)start_script(0);
+            ds_crumb("script");
+            break;
         case APP_CMD_WINDOW_RESIZED:
         case APP_CMD_CONTENT_RECT_CHANGED:
         case APP_CMD_CONFIG_CHANGED:
@@ -105,17 +157,63 @@ static void handle_cmd(struct android_app *app, int32_t command) {
             }
             break;
         case APP_CMD_TERM_WINDOW:
-            init_done = 0; script_active = 0; keyboard_hide(); ds_graphics_shutdown(); ds_sound_shutdown(); break;
+            init_done = 0; script_active = 0; keyboard_hide();
+            ds_graphics_shutdown_cpu(); /* безопасно при любом рендере */
+            ds_graphics_shutdown(); ds_sound_shutdown(); break;
         case APP_CMD_GAINED_FOCUS: ds_sound_resume(); break;
         case APP_CMD_LOST_FOCUS: ds_sound_pause(); break;
         default: break;
     }
+}
+/* --- защищаемые pcall участки (crash_guard.cpp): инициализация Vulkan и
+ * вызовы драйвера кадра. При краше внутри драйвера отчёт пишется в
+ * ds_logs, а игра продолжает этот же запуск на CPU. --- */
+static void ds_guarded_vk_init(void *p) {
+    struct { AAssetManager *am; ANativeWindow *w; int ok; } *job = p;
+    job->ok = ds_graphics_init(job->am, job->w);
+}
+static void ds_guarded_vk_begin(void *p) {
+    Buffer *frame = p;
+    if (!ds_graphics_begin_frame(frame)) frame->pixels = NULL; /* нет кадра */
+}
+static void ds_guarded_vk_cancel(void *p) {
+    ds_graphics_cancel_frame();
+    (void)p;
+}
+static void ds_guarded_vk_end(void *p) {
+    (void)p;
+    ds_graphics_end_frame();
+}
+/* Крашнулся вызов драйвера кадра: гасим Vulkan до конца запуска (отчёт
+ * обработчик уже записал в ds_logs и внутреннюю папку). */
+static void vulkan_frame_crashed(const char *what) {
+    ds_log_err("%s crashed - switching to CPU renderer", what);
+    ds_ext_log_write("vulkan frame crashed - pcall caught", 1);
+    ds_crash_gpu_mode(0);
+    g_cpu_render = 1;
+    ds_graphics_shutdown();
 }
 static int32_t handle_input(struct android_app *app, AInputEvent *event) {
     (void)app;
     if (!event) return 0;
     int32_t type = AInputEvent_getType(event);
     if (type == AINPUT_EVENT_TYPE_MOTION) {
+        /* Экран отчёта о падении: любое касание закрывает его и снимает игру
+         * с паузы (сами касания в скрипт на этом экране не передаются). */
+        if (g_show_report) {
+            if ((AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK) == AMOTION_EVENT_ACTION_DOWN) {
+                g_show_report = 0;
+                ds_crash_report_clear();
+                /* Догружаем отложенное экраном отчёта: звук и скрипт. */
+                ds_crumb("snd");
+                ds_sound_init(script_assets);
+                ds_sound_resume();
+                restart_failures = 0;
+                ds_clear_script_restart(); (void)start_script(0);
+                ds_crumb("script");
+            }
+            return 1;
+        }
         if (!script_active) return 0;
         TouchCall call; size_t count, index, i; int raw, action;
         count = AMotionEvent_getPointerCount(event); if (count == 0) return 0;
@@ -184,6 +282,40 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
 }
 void android_main(struct android_app *app) {
     Buffer frame = {0}; if (!app) return;
+    /* Отчёт о падении ставим раньше всего: даже падение в самой инициализации
+     * должно оставить след для следующего запуска. internalDataPath на
+     * Android 8 (Go) бывает NULL - внутри есть фолбэк /data/data/com.cb4. */
+    ds_crash_report_init(app->activity ? app->activity->internalDataPath : NULL);
+    ds_crumb("boot");
+    /* Выбор рендера ДО первого окна:
+     * 1) прошлый запуск упал - CPU и показать отчёт;
+     * 2) Vulkan уже ронял процесс (vk_fails) - CPU;
+     * 3) мало RAM (Android Go: драйвер Vulkan там может поймать OOM-килл,
+     *    а SIGKILL не ловится и отчёта не будет) - CPU;
+     * 4) иначе - Vulkan. */
+    if (ds_crash_report_load(g_report, sizeof g_report)) {
+        g_cpu_render = 1;
+        g_show_report = 1;
+        ds_log_err("предыдущий запуск упал - включён безопасный CPU-режим");
+        const char *rp = g_report;
+        while (*rp) {
+            char line[128];
+            size_t li = 0;
+            while (*rp && *rp != '\n' && li + 1 < sizeof(line)) line[li++] = *rp++;
+            if (*rp == '\n') rp++;
+            line[li] = '\0';
+            if (li) ds_console_log(1, "%s", line);
+        }
+    } else {
+        int fails = ds_vk_fail_count();
+        if (fails >= DS_VK_MAX_FAILS) {
+            g_cpu_render = 1;
+            ds_log_err("Vulkan ронял игру %d раз - работаем на CPU", fails);
+        }
+    }
+    /* Внешние логи /storage/emulated/0/ds_logs/ds_log.txt: видны любым
+     * файловым менеджером, игрок присылает файл вместо logcat. */
+    ds_ext_log_init();
     /* rand() в скриптах использует libc-генератор, который сам себя не
      * сидит: без srand() спавн леденцов, их направление полёта и прочие
      * «случайные» броски шли бы по одной и той же последовательности. */
@@ -191,49 +323,95 @@ void android_main(struct android_app *app) {
     app->onAppCmd = handle_cmd; app->onInputEvent = handle_input;
     net_set_java_vm(app->activity->vm);
     ds_sound_set_java_vm((void *)app->activity->vm);
-    net_set_data_path(app->activity->internalDataPath);
+    net_set_data_path(app->activity->internalDataPath ? app->activity->internalDataPath
+                                                      : "/data/data/com.cb4");
     ds_set_activity(app->activity);
-    ds_log("DimScript Android + Vulkan renderer + system keyboard (JNI)");
+    ds_crumb("jni");
+    if (app->activity && !ds_ext_log_active()) {
+        /* Нет доступа к ds_logs - показываем системный диалог один раз;
+         * после выдачи логи начнут писаться со следующего запуска. */
+        ANativeActivity_showRequestPermission(app->activity,
+                                              "android.permission.WRITE_EXTERNAL_STORAGE");
+    }
+    {
+        char boot[160];
+        snprintf(boot, sizeof(boot), "session start render=%s vk_fails=%d ram=%dMB extlog=%s",
+                 g_cpu_render ? "cpu" : "vulkan", ds_vk_fail_count(), ds_mem_total_mb(),
+                 ds_ext_log_active() ? "yes" : "no");
+        ds_log("%s", boot);
+        ds_ext_log_write(boot, 1);
+    }
+    ds_log("DimScript Android + renderer + system keyboard (JNI)");
     for (;;) {
         struct android_poll_source *source = NULL; int ident;
         while ((ident = ALooper_pollOnce(script_active ? 0 : 10, NULL, NULL, (void **)&source)) >= 0) {
             if (source && source->process) source->process(app, source);
             if (app->destroyRequested) {
-                init_done = 0; script_active = 0; keyboard_hide(); ds_graphics_shutdown(); ds_sound_shutdown(); return;
+                init_done = 0; script_active = 0; keyboard_hide();
+                ds_graphics_shutdown_cpu(); ds_graphics_shutdown(); ds_sound_shutdown();
+                /* Vulkan пережил целую сессию - мимолётным сбоем его не считаем. */
+                if (g_vk_session) ds_vk_fail_reset();
+                ds_ext_log_write(g_vk_session && !g_cpu_render
+                                 ? "session end (clean, vulkan)" : "session end (clean)", 1);
+                return;
             }
         }
         if (!app->window || !init_done || app->destroyRequested) continue;
         restart_script_if_due();
         uint64_t frame_start = monotonic_ns();
         apply_screen_size();
-        if (script_active) {
+        g_frame_count++;
+        if ((g_frame_count % 120) == 1) {
+            char mark[32];
+            snprintf(mark, sizeof(mark), "f%lu", g_frame_count);
+            ds_crumb(mark);
+        }
+        /* Экран отчёта: игра на паузе, кадр рисует только ошибку. */
+        if (script_active && !g_show_report) {
             uint64_t now = frame_start;
             dt = prev_frame_ns ? (double)(now - prev_frame_ns) / 1000000000.0 : 0.0;
             if (dt < 0.0) dt = 0.0; if (dt > 0.1) dt = 0.1;
             prev_frame_ns = now;
             if (!ds_call_protected(protected_update, NULL, "update")) mark_script_failed("update");
             else if (ds_script_restart_requested()) { script_active = 0; restart_after_ns = monotonic_ns(); }
+        } else if (g_show_report) {
+            prev_frame_ns = frame_start;
         }
-        /* Кадр = Vulkan: захватываем изображение swapchain, скрипт складывает
-         * команды, в end_frame GPU рисует их в оффскрин и делает present. */
+        /* Кадр: Vulkan (оффскрин + present) или CPU (lock + попиксельно + post). */
         frame.pixels = NULL;
         frame.width = screen_w;
         frame.height = screen_h;
         frame.stride = screen_w;
-        if (frame.width > 0 && frame.height > 0 && ds_graphics_begin_frame(&frame)) {
+        if (frame.width > 0 && frame.height > 0) {
+            /* begin/end кадра для Vulkan идут под pcall: краш драйвера на
+             * present'е ловится, Vulkan гасится, следующие кадры рисует CPU. */
+            int opened;
+            if (g_cpu_render) {
+                opened = ds_graphics_begin_frame_cpu(&frame);
+            } else if (ds_guard_run(ds_guarded_vk_begin, &frame)) {
+                vulkan_frame_crashed("vulkan begin_frame");
+                opened = 0;
+            } else {
+                opened = frame.pixels != NULL;
+            }
+            if (!opened) continue;
             int draw_failed = 0;
-            if (script_active) {
+            if (g_show_report) {
+                ds_graphics_error_screen(g_report);
+            } else if (script_active) {
                 if (!ds_call_protected(protected_draw, &frame, "draw")) { mark_script_failed("draw"); draw_failed = 1; }
                 else if (ds_script_restart_requested()) { script_active = 0; restart_after_ns = monotonic_ns(); }
             }
-            if (!script_active) {
+            if (!script_active && !g_show_report) {
                 if (draw_failed || ds_script_has_error()) {
                     /* Экран ошибки идёт теми же командами через тот же
                      * конвейер, поэтому кадр именно завершаем, а не отменяем. */
                     ds_graphics_error_screen(ds_runtime_error_message());
-                    ds_graphics_end_frame();
-                } else ds_graphics_cancel_frame();
-            } else ds_graphics_end_frame();
+                } else if (g_cpu_render) ds_graphics_cancel_frame_cpu();
+                else if (ds_guard_run(ds_guarded_vk_cancel, NULL)) vulkan_frame_crashed("vulkan cancel_frame");
+            }
+            if (g_cpu_render) ds_graphics_end_frame_cpu(&frame);
+            else if (ds_guard_run(ds_guarded_vk_end, &frame)) vulkan_frame_crashed("vulkan end_frame");
         }
     }
 }

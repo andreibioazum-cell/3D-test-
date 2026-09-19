@@ -88,20 +88,37 @@ static char ds_last_error[DS_ERROR_MESSAGE_SIZE] = {0};
  * покажет чужие символы вместо падения. */
 #define DS_STRING_ARENA_BYTES (8u * 1024u * 1024u)
 static char *ds_str_arena = NULL;
+static size_t ds_str_arena_cap = 0;
 static size_t ds_str_used = 0;
+/* Последний рубеж: если устройство отказалось выделять даже маленькую арену
+ * (сильная нехватка памяти на слабом телефоне), строки берутся из этого
+ * статического буфера. До арены аллокация строк вообще не могла уронить хук
+ * скрипта (malloc вернул NULL - функция молча отдавала "") - этот контракт
+ * должен соблюдаться и с ареной: одна неудачная аллокация на старте не имеет
+ * права зациклить перезапуск скрипта, а NULL в строковой переменной скрипта -
+ * падать в strlen(NULL). Худший случай теперь - испорченный текст, не вылет. */
+static char ds_str_fallback[4096];
+static char ds_str_empty_storage[1] = { 0 };
+static char *ds_str_empty(void) { return ds_str_empty_storage; }
 static char *ds_arena_alloc(size_t bytes) {
     if (!ds_str_arena) {
-        ds_str_arena = (char*)malloc(DS_STRING_ARENA_BYTES);
-        if (!ds_str_arena) { ds_runtime_error("out of memory for string arena"); return NULL; }
+        /* 8 МБ хватает на час боя; если система не даёт столько - пробуем
+         * меньше. Крайний случай - статический буфер: игра продолжается. */
+        static const size_t caps[3] = { DS_STRING_ARENA_BYTES, 1024u * 1024u, 64u * 1024u };
+        for (int i = 0; i < 3 && !ds_str_arena; i++) {
+            ds_str_arena = (char*)malloc(caps[i]);
+            if (ds_str_arena) ds_str_arena_cap = caps[i];
+        }
+        if (!ds_str_arena) {
+            ds_str_arena = ds_str_fallback;
+            ds_str_arena_cap = sizeof(ds_str_fallback);
+        }
     }
-    /* Строка длиннее арены (в игре такой быть не может) - отдельный блок:
-     * его никто не освободит, зато переполнения не будет. */
-    if (bytes > DS_STRING_ARENA_BYTES) {
-        char *big = (char*)malloc(bytes);
-        if (!big) ds_runtime_error("out of memory for a long string");
-        return big;
-    }
-    if (ds_str_used + bytes > DS_STRING_ARENA_BYTES) ds_str_used = 0;
+    /* Строка длиннее арены (в игре такой быть не может) - отдельный блок.
+     * NULL возможен только если отказал сам malloc; вызывающие заменяют его
+     * на пустую строку, как это было до арены. */
+    if (bytes > ds_str_arena_cap) return (char*)malloc(bytes);
+    if (ds_str_used + bytes > ds_str_arena_cap) ds_str_used = 0;
     char *out = ds_str_arena + ds_str_used;
     ds_str_used += bytes;
     return out;
@@ -111,6 +128,7 @@ static char *ds_str_copy(const char *s) {
     size_t n = strlen(s) + 1;
     char *out = ds_arena_alloc(n);
     if (out) memcpy(out, s, n);
+    else out = ds_str_empty();
     return out;
 }
 static void platform_log(int is_error, const char *format, va_list args) {
@@ -197,7 +215,7 @@ int ds_script_restart_requested(void) { return ds_restart_requested; }
 void ds_clear_script_restart(void) { ds_restart_requested = 0; }
 char *ds_num_to_string(double number) {
     char buf[32];
-    if (snprintf(buf, sizeof(buf), "%g", number) < 0) return NULL;
+    if (snprintf(buf, sizeof(buf), "%g", number) < 0) return ds_str_empty();
     return ds_str_copy(buf);
 }
 /* Сброс арены: старые строки остаются в живой памяти, поэтому висячих
@@ -206,7 +224,7 @@ void ds_string_pool_reset(void) { ds_str_used = 0; }
 char *ds_concat(const char *left, const char *right) {
     size_t la = left ? strlen(left) : 0, lb = right ? strlen(right) : 0;
     char *out = ds_arena_alloc(la + lb + 1);
-    if (!out) return NULL;
+    if (!out) return ds_str_empty(); /* как до арены: отказ кучи - пустая строка, а не NULL */
     if (la) memcpy(out, left, la);
     if (lb) memcpy(out + la, right, lb);
     out[la+lb] = '\0';

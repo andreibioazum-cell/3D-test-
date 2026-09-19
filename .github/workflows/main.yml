@@ -108,6 +108,33 @@ jobs:
       - name: Generate game.c
         run: python3 gen.py
 
+      - name: Host tests (запуск игры, арена строк, Vulkan-инициализация, геометрия)
+        # Настоящий код игры исполняется на хосте против фейкового Vulkan-драйвера:
+        # старт (лобби/настройки/бой/сворачивание) и жёсткие отказы malloc в
+        # строковой арене ловятся до сборки APK. Класс краша «захожу в
+        # приложение - вылет» больше не доезжает до телефона.
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Headers.git /tmp/vkheaders
+          gcc -std=gnu99 -O1 -o /tmp/test_vk_init tools/host_test/test_vk_init.c \
+            native/graphics/cpu_backend.c \
+            -I tools/host_test/stub -I /tmp/vkheaders/include -I . -lm -lpthread
+          /tmp/test_vk_init
+          gcc -std=gnu99 -O1 -o /tmp/test_geometry tools/host_test/test_geometry.c \
+            tools/host_test/test_geo_side.c \
+            -I tools/host_test/stub -I /tmp/vkheaders/include -I . -lm
+          /tmp/test_geometry
+          gcc -std=gnu99 -O1 -o /tmp/test_string_arena tools/host_test/test_string_arena.c \
+            -I tools/host_test/stub -I . -lm \
+            -Wl,--wrap=malloc,--wrap=calloc,--wrap=realloc,--wrap=free
+          /tmp/test_string_arena
+          g++ -std=gnu++11 -O1 -fno-exceptions -fno-rtti -c native/crash_guard.cpp \
+            -o /tmp/crash_guard.o -I tools/host_test/stub -I .
+          gcc -std=gnu99 -O1 -o /tmp/test_full_game tools/host_test/test_full_game.c \
+            native/graphics/cpu_backend.c /tmp/crash_guard.o \
+            -I tools/host_test/stub -I /tmp/vkheaders/include -I . -lm -lpthread
+          /tmp/test_full_game
+
       - name: Stage assets
         run: python3 stage_assets.py game/assets staging/assets
 
@@ -115,25 +142,35 @@ jobs:
         env:
           NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
         run: |
+          set -o pipefail
           TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
           GLUE="$NDK_ROOT/sources/android/native_app_glue"
 
           mkdir -p staging/lib/arm64-v8a staging/lib/armeabi-v7a staging/lib/x86_64
 
-          "$TOOLCHAIN/aarch64-linux-android26-clang" -O3 -s -fPIC -shared \
-            game/game.c runtime.c main.c "$GLUE/android_native_app_glue.c" \
+          {
+          "$TOOLCHAIN/aarch64-linux-android26-clang" -O3 -s -fPIC -shared -fno-exceptions -fno-rtti \
+            game/game.c runtime.c main.c native/graphics/cpu_backend.c native/crash_guard.cpp "$GLUE/android_native_app_glue.c" \
             -I. -I"$GLUE" -landroid -llog -lm -lvulkan \
             -o staging/lib/arm64-v8a/libds_game.so
 
-          "$TOOLCHAIN/armv7a-linux-androideabi26-clang" -O3 -s -fPIC -shared \
-            game/game.c runtime.c main.c "$GLUE/android_native_app_glue.c" \
+          "$TOOLCHAIN/armv7a-linux-androideabi26-clang" -O3 -s -fPIC -shared -fno-exceptions -fno-rtti \
+            game/game.c runtime.c main.c native/graphics/cpu_backend.c native/crash_guard.cpp "$GLUE/android_native_app_glue.c" \
             -I. -I"$GLUE" -landroid -llog -lm -lvulkan \
             -o staging/lib/armeabi-v7a/libds_game.so
 
-          "$TOOLCHAIN/x86_64-linux-android26-clang" -O3 -s -fPIC -shared \
-            game/game.c runtime.c main.c "$GLUE/android_native_app_glue.c" \
+          "$TOOLCHAIN/x86_64-linux-android26-clang" -O3 -s -fPIC -shared -fno-exceptions -fno-rtti \
+            game/game.c runtime.c main.c native/graphics/cpu_backend.c native/crash_guard.cpp "$GLUE/android_native_app_glue.c" \
             -I. -I"$GLUE" -landroid -llog -lm -lvulkan \
             -o staging/lib/x86_64/libds_game.so
+          } 2>&1 | tee "$RUNNER_TEMP/ndk-build.log"
+
+      - name: Dump build log to summary on failure
+        if: failure()
+        run: |
+          tail -n 8 "$RUNNER_TEMP/ndk-build.log" 2>/dev/null | cut -c1-380 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
 
       - name: Package and align APK
         run: |
