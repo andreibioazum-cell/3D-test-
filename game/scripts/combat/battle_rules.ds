@@ -1,3 +1,12 @@
+-- Спрайт замаха обязан быть загружен: tex() с незагруженной текстурой просто
+-- ничего не рисует, и боец на время удара исчезал с арены. Поэтому запасной
+-- вариант — обычный спрайт того же класса, он виден всегда.
+public function punch_tex_or_idle(string punch_tex, number ok, number cls)
+    if ok==1 then
+        return punch_tex
+    end
+    return class_idle_tex(cls)
+end
 public function azum_idle_tex()
     if azum_tex_ok==1 then
         return AZUM_TEX
@@ -5,10 +14,10 @@ public function azum_idle_tex()
     return ORDINARY_TEX
 end
 public function azum_punch_tex()
-    if azum_tex_ok==1 then
+    if azum_punch_tex_ok==1 then
         return AZUM_PUNCH_TEX
     end
-    return PUNCH_TEX
+    return punch_tex_or_idle(PUNCH_TEX,ordinary_punch_tex_ok,CLASS_AZUM)
 end
 public function zombie_tex_ok()
     if azum_zombie_tex_ok==1&&azum_zombie_punch_tex_ok==1 then
@@ -45,12 +54,12 @@ public function class_punch_tex(number cls)
         return azum_punch_tex()
     end
     if cls==CLASS_SANTA then
-        return SANTA_PUNCH_TEX
+        return punch_tex_or_idle(SANTA_PUNCH_TEX,santa_punch_tex_ok,cls)
     end
     if cls==CLASS_EBUC then
-        return EBUC_PUNCH_TEX
+        return punch_tex_or_idle(EBUC_PUNCH_TEX,ebuc_punch_tex_ok,cls)
     end
-    return PUNCH_TEX
+    return punch_tex_or_idle(PUNCH_TEX,ordinary_punch_tex_ok,cls)
 end
 public function class_punch_damage_for(number cls, number lv)
     if cls==CLASS_SANTA then

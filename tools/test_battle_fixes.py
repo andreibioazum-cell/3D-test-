@@ -67,7 +67,13 @@ char *ds_num_to_string(double value) {
     snprintf(buf, sizeof(buf), "%g", value);
     return buf;
 }
-int png_load(const char *name) { (void)name; return 1; }
+/* Текстуры замаха можно «сломать»: tex() с незагруженной текстурой не рисует
+ * ничего, и боец на время удара исчезал с арены. */
+static int punch_tex_broken = 0;
+int png_load(const char *name) {
+    if (punch_tex_broken && name && strstr(name, "punch")) return 0;
+    return 1;
+}
 void tex(float x, float y, const char *name, float a, float sc) { (void)x; (void)y; (void)name; (void)a; (void)sc; }
 /* Тени рисуются tex_tint: считаем вызовы и запоминаем текстуру. */
 static int tint_calls = 0;
@@ -89,7 +95,10 @@ void net_save_progress_all(double, double, double, double, double, double,
     double, double, double, double, double, double,
     double, double, double, double, double, double) {}
 void net_save_progress(double, double, double, double, double, double, double, double) {}
-double net_slot(void) { return -1; }
+/* Снимок комнаты управляется тестами: по умолчанию слота нет (соло-режим). */
+static double stub_slot = -1;
+static double stub_online[4], stub_alive[4], stub_punch[4];
+double net_slot(void) { return stub_slot; }
 double net_event(void) { return 0; }
 void net_set_class(double v) { (void)v; }
 void net_set_level(double v) { (void)v; }
@@ -198,18 +207,18 @@ const char *str_upper(const char *s) {
 void net_event_set(double mode) { (void)mode; }
 double net_status(void) { return 0; }
 double net_count(void) { return 0; }
-double net_player_online(double s) { (void)s; return 0; }
+double net_player_online(double s) { int i=(int)s; return i>=0&&i<4?stub_online[i]:0; }
 double net_player_x(double s) { (void)s; return 0; }
 double net_player_y(double s) { (void)s; return 0; }
 double net_player_angle(double s) { (void)s; return 0; }
 double net_player_hp(double s) { (void)s; return 0; }
-double net_player_alive(double s) { (void)s; return 0; }
+double net_player_alive(double s) { int i=(int)s; return i>=0&&i<4?stub_alive[i]:0; }
 const char *net_player_nick(double s) { (void)s; return ""; }
 double net_player_punch_x(double s) { (void)s; return 0; }
 double net_player_punch_y(double s) { (void)s; return 0; }
 double net_player_punch_dx(double s) { (void)s; return 0; }
 double net_player_punch_dy(double s) { (void)s; return 0; }
-double net_player_punch(double s) { (void)s; return 0; }
+double net_player_punch(double s) { int i=(int)s; return i>=0&&i<4?stub_punch[i]:0; }
 double net_player_snow_x(double s) { (void)s; return 0; }
 double net_player_snow_y(double s) { (void)s; return 0; }
 double net_player_snow_dx(double s) { (void)s; return 0; }
@@ -848,6 +857,101 @@ static void test_online_turret_punch_death(void) {
     puts("online: friend punch chips and kills buk turret (shield absorb + direct hit)");
 }
 
+static void test_punch_sprite_never_empty(void) {
+    /* tex() с незагруженной текстурой не рисует ничего, поэтому пустой спрайт
+     * замаха означал невидимого бойца: на время удара игрок пропадал с арены.
+     * Теперь поза замаха откатывается на обычный спрайт своего класса. */
+    ds_fn_reset_battle();
+    punch_tex_broken = 1;
+    ds_fn_load_textures();
+    assert(ordinary_punch_tex_ok == 0 && azum_punch_tex_ok == 0);
+    assert(santa_punch_tex_ok == 0 && ebuc_punch_tex_ok == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_ORDINARY, 1, SKIN_NORMAL), "ordinary.png") == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_AZUM, 1, SKIN_NORMAL), "azum.png") == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_SANTA, 1, SKIN_NORMAL), "santa.png") == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_EBUC, 1, SKIN_NORMAL), "ebuc.png") == 0);
+    /* Скину «Зомби» тоже есть куда падать: зомби-замах -> Азум -> обычный. */
+    azum_zombie_punch_tex_ok = 0;
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_AZUM, 1, SKIN_ZOMBIE), "azum.png") == 0);
+    azum_zombie_punch_tex_ok = 1;
+    punch_tex_broken = 0;
+    ds_fn_load_textures();
+    /* Всё на месте — играем настоящими спрайтами замаха, как и раньше. */
+    assert(ordinary_punch_tex_ok == 1 && azum_punch_tex_ok == 1);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_ORDINARY, 1, SKIN_NORMAL), "ordinary_punch.png") == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_AZUM, 1, SKIN_NORMAL), "azum_punch.png") == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_SANTA, 1, SKIN_NORMAL), "santa_punch.png") == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_EBUC, 1, SKIN_NORMAL), "ebuc_punch.png") == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_AZUM, 1, SKIN_ZOMBIE), "zombie_azum_punch.png") == 0);
+    assert(strcmp(ds_fn_fighter_sprite(CLASS_ORDINARY, 0, SKIN_NORMAL), "ordinary.png") == 0);
+    puts("sprite: an unloaded punch texture falls back to the idle one, the fighter stays visible");
+}
+
+static void test_remote_punch_pose_expires(void) {
+    /* Поза замаха соперника живёт punch_time и гаснет сама. Раньше
+     * remote_punches чистил только update_remote_punches(), а до него не
+     * доходит ни конец боя, ни потеря слота — соперник навсегда оставался
+     * «бьющим» (спрайт замаха висел и на экране результатов, и дальше). */
+    ds_fn_reset_battle();
+    game_state = ST_ONLINE;
+    dt = 1.0 / 60.0;
+    stub_slot = 0;
+    stub_online[1] = 1; stub_alive[1] = 1; stub_punch[1] = 0;
+    arr_set(remotes, 1*remote_fields, 1);          /* слот уже виден */
+    arr_set(remotes, 1*remote_fields+5, 1);
+    stub_punch[1] = 3;                             /* соперник ударил */
+    ds_fn_read_remotes();
+    assert(arr_get(remote_punches, 1*punch_fields) == 1);
+    finished = 1;                                  /* бой закончился в тот же кадр */
+    int frames = 0;
+    while (arr_get(remote_punches, 1*punch_fields) == 1 && frames < 120) {
+        ds_fn_tick_remote_punches();
+        frames++;
+    }
+    assert(arr_get(remote_punches, 1*punch_fields) == 0);
+    assert(frames > 5 && frames < 30);             /* punch_time, а не вечность */
+    finished = 0;
+    /* finish_game() гасит чужие удары сразу, как и остальные эффекты. */
+    cups_awarded = 1;                              /* без наград и сохранения */
+    stub_punch[1] = 5;
+    ds_fn_read_remotes();
+    assert(arr_get(remote_punches, 1*punch_fields) == 1);
+    arr_set(rpunch_a, 1, 1);
+    ds_fn_finish_game(1);
+    assert(arr_get(remote_punches, 1*punch_fields) == 0);
+    assert(arr_get(rpunch_a, 1) == 0);
+    stub_online[1] = 0; stub_alive[1] = 0; stub_punch[1] = 0; stub_slot = -1;
+    puts("online: the punch pose expires on its own, finished match included");
+}
+
+static void test_no_phantom_punch_on_join(void) {
+    /* Счётчик удара живёт в комнате и не сбрасывается, а «последний виденный»
+     * после reset_battle() равен нулю: первый же снимок новой игры считался
+     * ударом — соперник рисовался бьющим, а его прошлогодний удар ещё и бил
+     * по игроку. Первый снимок теперь сверяется, а не принимается за удар. */
+    ds_fn_reset_battle();
+    game_state = ST_ONLINE;
+    online_ready = 1;
+    dt = 1.0 / 60.0;
+    stub_slot = 0;
+    stub_online[1] = 1; stub_alive[1] = 1;
+    stub_punch[1] = 7;                             /* счётчик из прошлого матча */
+    player->x = 400; player->y = 360; player->size = 25;
+    player->hp = 10; player->max_hp = 10;
+    finished = 0;
+    ds_fn_read_remotes();
+    assert(arr_get(remote_punches, 1*punch_fields) == 0);   /* замаха нет */
+    assert(arr_get(remotes, 1*remote_fields+6) == 7);       /* счётчик запомнен */
+    ds_fn_update_remote_punches();
+    near(player->hp, 10);                                   /* чужого урона нет */
+    /* Настоящий следующий удар виден как раньше. */
+    stub_punch[1] = 8;
+    ds_fn_read_remotes();
+    assert(arr_get(remote_punches, 1*punch_fields) == 1);
+    stub_online[1] = 0; stub_alive[1] = 0; stub_punch[1] = 0; stub_slot = -1;
+    puts("online: a stale punch counter is not a new punch, the next one still is");
+}
+
 static void test_turret_shadow_square(void) {
     /* Тень деспенсера — тем же спрайтом (tex_tint), что и сам деспенсер:
      * ни кругов, ни колец под турелью. Хитбокс турели — квадрат. */
@@ -972,6 +1076,9 @@ int main(void) {
     test_own_punch_spares_own_turret();
     test_enemy_shield_front_only();
     test_online_turret_punch_death();
+    test_punch_sprite_never_empty();
+    test_remote_punch_pose_expires();
+    test_no_phantom_punch_on_join();
     test_turret_shadow_square();
     test_station_beam_stable();
     test_universe_fade();
@@ -1052,6 +1159,20 @@ def main():
             body = fns[name][2]
             for hook in ("tick_hitbox_fades()", "tick_status_fades()"):
                 assert body.count(hook) == 1, f"{name} must call {hook} once"
+        # Поза чужого замаха гаснет сама: её тик стоит ДО ветки finished и до
+        # проверки слота, иначе соперник оставался «бьющим» навсегда.
+        online_upd = fns["update_online"][2]
+        assert online_upd.count("tick_remote_punches()") == 1, \
+            "update_online must tick remote punches exactly once"
+        assert online_upd.index("tick_remote_punches()") < online_upd.index("if finished!=0 then"), \
+            "tick_remote_punches must run before the finished early-return"
+        # Первый снимок слота не считается ударом (счётчик живёт в комнате).
+        assert "arr_set(remotes,b+6,net_player_punch(s))" in "".join(fns["read_remotes"][2]), \
+            "read_remotes must prime the punch counter of a freshly seen slot"
+        # Конец боя гасит чужие удары вместе с остальными эффектами.
+        finish_body = "".join(fns["finish_game"][2])
+        assert "clear_remote_punch(i)" in finish_body, \
+            "finish_game must clear remote punches"
         # Эффекты, наложенные врагом, рисуются и вокруг бойца (соло).
         solo_body = "".join(fns["draw_game"][2])
         for fn in ("draw_player_freeze()", "draw_player_poison()", "draw_player_stun()"):

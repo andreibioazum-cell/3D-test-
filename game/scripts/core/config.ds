@@ -53,6 +53,11 @@ public number player_level=0, levels_unlocked=0
 public number max_level=3, level_base_cost=30, level_cost_step=10
 public number SKIN_NORMAL=0, SKIN_ZOMBIE=1, SKIN_COUNT=2
 public number azum_tex_ok=0, azum_zombie_tex_ok=0, azum_zombie_punch_tex_ok=0
+-- Загрузились ли спрайты замаха каждого класса. Незагруженная текстура просто
+-- не рисуется (tex() молча выходит), поэтому без запасного варианта боец на
+-- время удара исчезал с арены — см. class_punch_tex() в battle_rules.ds.
+public number ordinary_punch_tex_ok=0, azum_punch_tex_ok=0
+public number santa_punch_tex_ok=0, ebuc_punch_tex_ok=0
 public number azum_skin=SKIN_NORMAL
 public number arena_tile_size=256, snow_tex_ok=0, snow_t=0
 -- Зимняя тема — настройка из меню: снежный фон арены и снегопад включаются и

@@ -29,6 +29,11 @@ public function read_remotes()
                 arr_set(remotes,b+7,x)
                 arr_set(remotes,b+8,y)
                 arr_set(remotes,b+9,a)
+                -- Счётчик удара живёт в комнате и не сбрасывается, а наш
+                -- «последний виденный» после reset_battle() равен нулю: без
+                -- этой строки первый же снимок показывал соперника бьющим
+                -- (поза замаха и чужой урон из прошлого матча).
+                arr_set(remotes,b+6,net_player_punch(s))
             else
                 arr_set(remotes,b+7,x)
                 arr_set(remotes,b+8,y)
@@ -50,13 +55,30 @@ public function read_remotes()
         s=s+1
     end
 end
-public function update_remote_punches()
+-- Поза замаха живёт ровно punch_time и гаснет сама. Тикать она обязана даже
+-- когда бой уже закончен или слот потерян: до update_remote_punches() эти
+-- ветки не доходят, и без отдельного тика соперник оставался «бьющим»
+-- навсегда (спрайт замаха так и висел на экране результатов и после перезахода).
+public function tick_remote_punches()
     local number s=0
     while s<max_players do
         local number rb=s*punch_fields
         if arr_get(remote_punches,rb)==1 then
             local number t=arr_get(remote_punches,rb+5)+dt
-            arr_set(remote_punches,rb+5,t)
+            if t>punch_time then
+                clear_remote_punch(s)
+            else
+                arr_set(remote_punches,rb+5,t)
+            end
+        end
+        s=s+1
+    end
+end
+public function update_remote_punches()
+    local number s=0
+    while s<max_players do
+        local number rb=s*punch_fields
+        if arr_get(remote_punches,rb)==1 then
             if arr_get(remotes,s*remote_fields+5)==0 then
                 clear_remote_punch(s)
             else
@@ -88,8 +110,6 @@ public function update_remote_punches()
                             return
                         end
                     end
-                else if t>punch_time then
-                    clear_remote_punch(s)
                 end
             end
         end
@@ -303,6 +323,7 @@ public function update_online()
     tick_universe()
     tick_hitbox_fades()
     tick_status_fades()
+    tick_remote_punches()
     update_aim()
     if finished!=0 then
         return
