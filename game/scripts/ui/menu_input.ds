@@ -126,6 +126,26 @@ public function draw_warning()
     ctext_scaled(tr_warn_ru2(), y + 262, body, 0.52)
     ctext_scaled(tr_warn_ru3(), y + 290, body, 0.52)
     ctext_scaled(tr_warn_ru4(), y + 318, body, 0.52)
+    -- Кнопка согласия: вход в игру только осознанный (метка пишется в
+    -- settings.dat), поэтому предупреждение нельзя проскроллить мимо.
+    button_scaled(tr_legal_accept(), center_x(warn_btn_w()), warn_btn_y(), warn_btn_w(), btn_h, 0.8)
+end
+public function legal_accept()
+    warn_open = 0
+    warn_a = 0
+    settings_mark_legal()
+    studio_open = 1
+    studio_t = 0
+    studio_a = 0
+    studio_bg_a = 1
+end
+public function touch_warn(number x, number y, number action)
+    if action != 0 then
+        return
+    end
+    if hit_warn_btn(x, y) == 1 then
+        legal_accept()
+    end
 end
 public function studio_rgb(number rgb)
     return (1 + floor(studio_a * 254)) * 0x1000000 + rgb
@@ -247,6 +267,10 @@ public function touch_settings(number x, number y)
     if hit_settings_row(x, y, 7) == 1 then
         show_fps = 1 - show_fps
         save_settings()
+        return
+    end
+    if hit_settings_row(x, y, 8) == 1 then
+        start_transition(ST_PRIVACY)
         return
     end
 end
@@ -395,5 +419,11 @@ public function touch_menu(number x, number y, number action)
     end
     if game_state == ST_QUESTS then
         touch_quests(x, y, action)
+        return
+    end
+    if game_state == ST_PRIVACY then
+        if back_hit(x, y) == 1 then
+            start_transition(ST_SETTINGS)
+        end
     end
 end

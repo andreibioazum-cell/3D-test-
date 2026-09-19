@@ -576,14 +576,19 @@ static void test_poison_green(void) {
 }
 
 static void test_splash_screens(void) {
-    /* Предупреждение: текст тает, чёрный экран остаётся и сразу же на нём
-     * проявляется заставка студии. */
+    /* Предупреждение об эпилепсии больше не тает по таймеру: экран держится
+     * до явного согласия (legal_accept в скриптах), иначе предупреждение
+     * можно «проспать» и войти в игру без него. */
     ds_fn_reset_battle();
-    warn_open = 1; warn_t = 0; warn_a = 1; warn_hold = 2.5; warn_fade = 0.6;
+    warn_open = 1; warn_a = 1;
     studio_open = 0;
     dt = 0.1;
     for (int i = 0; i < 40; i++) ds_fn_update_warning();  /* 4.0 c */
-    assert(warn_open == 0 && studio_open == 1 && studio_bg_a == 1);
+    assert(warn_open == 1 && warn_a == 1 && studio_open == 0);
+    /* Согласие (тело legal_accept): гейт закрывается и стартует заставка
+     * студии — дальше она работает как раньше. */
+    warn_open = 0; warn_a = 0;
+    studio_open = 1; studio_t = 0; studio_a = 0; studio_bg_a = 1;
     /* Заставка: логотип проявляется и висит на цельном чёрном фоне... */
     studio_t = 0; studio_a = 0; studio_in = 0.5; studio_hold = 1.6; studio_fade = 0.7;
     for (int i = 0; i < 10; i++) ds_fn_update_studio();   /* 1.0 c */
@@ -595,12 +600,18 @@ static void test_splash_screens(void) {
     near(studio_bg_a, studio_a);
     for (int i = 0; i < 20; i++) ds_fn_update_studio();   /* +2.0 c */
     assert(studio_open == 0 && studio_bg_a == 0);
-    /* Отрисовка: фон предупреждения непрозрачно-чёрный даже при тающем
-     * тексте; фон заставки прозрачнеет только вместе с логотипом. */
+    /* Отрисовка: фон предупреждения непрозрачно-чёрный, поверх — короткий
+     * текст и кнопка согласия; фон заставки прозрачнеет только вместе с
+     * логотипом. */
     warn_open = 1; warn_a = 0.5;
     call_count = 0;
     ds_fn_draw_warning();
     assert(calls[0].kind == 'q' && calls[0].color == 0xFF000000);
+    int saw_accept_btn = 0;
+    for (int i = 0; i < call_count; i++) {
+        if (calls[i].kind == 'o' && calls[i].color == 0xFF5F10A0) saw_accept_btn = 1;
+    }
+    assert(saw_accept_btn);
     studio_open = 1; studio_a = 0.4; studio_bg_a = 0.4;
     call_count = 0;
     ds_fn_draw_studio();

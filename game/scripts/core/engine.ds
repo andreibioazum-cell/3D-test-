@@ -141,23 +141,12 @@ public function update_music()
     snd_volume(LOBBY_MUSIC, music_volume / 100 * music_level)
 end
 public function update_warning()
+    -- Предупреждение об эпилепсии держится до явного согласия (legal_accept):
+    -- авто-скрытия больше нет, иначе предупреждение можно «проспать».
     if warn_open != 1 then
         return
     end
-    warn_t = warn_t + dt
-    if warn_t <= warn_hold then
-        warn_a = 1
-        return
-    end
-    warn_a = 1 - (warn_t - warn_hold) / warn_fade
-    if warn_a <= 0 then
-        warn_a = 0
-        warn_open = 0
-        studio_open = 1
-        studio_t = 0
-        studio_a = 0
-        studio_bg_a = 1
-    end
+    warn_a = 1
 end
 public function update_studio()
     if studio_open != 1 then
@@ -287,6 +276,8 @@ public function draw_screen()
         draw_promo()
     else if game_state == ST_QUESTS then
         draw_quests()
+    else if game_state == ST_PRIVACY then
+        draw_privacy()
     else
         draw_online()
     end
@@ -309,7 +300,12 @@ public function draw()
     draw_achievement_toast()
 end
 public function back_pressed()
-    if warn_open == 1 || studio_open == 1 then
+    if warn_open == 1 then
+        -- Не нажал «принимаю риск» — системный «Назад» закрывает игру:
+        -- войти без осознанного согласия нельзя.
+        return 0
+    end
+    if studio_open == 1 then
         return 1
     end
     if t_dir != 0 then
@@ -338,6 +334,10 @@ public function back_pressed()
         start_transition(ST_LOBBY)
         return 1
     end
+    if game_state == ST_PRIVACY then
+        start_transition(ST_SETTINGS)
+        return 1
+    end
     if game_state == ST_LOGIN then
         keyboard_hide()
         keyboard_clear()
@@ -358,7 +358,11 @@ public function touch(number x, number y, number action, number id)
     if t_dir != 0 then
         return
     end
-    if warn_open == 1 || studio_open == 1 then
+    if warn_open == 1 then
+        touch_warn(x, y, action)
+        return
+    end
+    if studio_open == 1 then
         return
     end
     if game_state == ST_LOBBY then

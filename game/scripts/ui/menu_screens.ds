@@ -58,15 +58,42 @@ public function draw_modes()
 end
 public function draw_settings()
     screen_fill()
-    button(tr_back(), menu_x(), settings_row_y(0), btn_w, btn_h)
-    button("English", menu_x(), settings_row_y(1), btn_w, btn_h)
-    button("Русский", menu_x(), settings_row_y(2), btn_w, btn_h)
-    button(tr_hitboxes_toggle(), menu_x(), settings_row_y(3), btn_w, btn_h)
-    text_in_box(tr_music_vol() + ": " + music_volume + "%", menu_x(), settings_row_y(4), btn_w, btn_h, text_color, 0.7)
-    button_scaled("-" + music_vol_step + "%", music_minus_x(), settings_row_y(5), music_half_w(), btn_h, 0.7)
-    button_scaled("+" + music_vol_step + "%", music_plus_x(), settings_row_y(5), music_half_w(), btn_h, 0.7)
-    button_scaled(tr_winter_toggle(), menu_x(), settings_row_y(6), btn_w, btn_h, 0.8)
-    button_scaled(tr_fps_meter_toggle(), menu_x(), settings_row_y(7), btn_w, btn_h, 0.8)
+    button(tr_back(), menu_x(), settings_row_y(0), btn_w, settings_btn_h())
+    button("English", menu_x(), settings_row_y(1), btn_w, settings_btn_h())
+    button("Русский", menu_x(), settings_row_y(2), btn_w, settings_btn_h())
+    button(tr_hitboxes_toggle(), menu_x(), settings_row_y(3), btn_w, settings_btn_h())
+    text_in_box(tr_music_vol() + ": " + music_volume + "%", menu_x(), settings_row_y(4), btn_w, settings_btn_h(), text_color, 0.7)
+    button_scaled("-" + music_vol_step + "%", music_minus_x(), settings_row_y(5), music_half_w(), settings_btn_h(), 0.7)
+    button_scaled("+" + music_vol_step + "%", music_plus_x(), settings_row_y(5), music_half_w(), settings_btn_h(), 0.7)
+    button_scaled(tr_winter_toggle(), menu_x(), settings_row_y(6), btn_w, settings_btn_h(), 0.8)
+    button_scaled(tr_fps_meter_toggle(), menu_x(), settings_row_y(7), btn_w, settings_btn_h(), 0.8)
+    button_scaled(tr_privacy(), menu_x(), settings_row_y(8), btn_w, settings_btn_h(), 0.8)
+end
+-- Экран «Данные и приватность»: честный список того, что игра хранит на
+-- устройстве и в облаке, чего она НЕ собирает, и дисклеймер «как есть».
+-- Доступен из настроек в любой момент, текст короткий и влезает даже в
+-- низкие экраны (10 строк с шагом 26 px от y=150).
+public function draw_privacy()
+    screen_fill()
+    draw_back()
+    -- Блок текста центрируется по высоте, но на низких экранах не наезжает
+    -- на кнопку «Назад»: титул начинается не выше y=96.
+    local number top = screen_h / 2 - 160
+    if top < 96 then
+        top = 96
+    end
+    ctext_scaled(tr_privacy_title(), top, text_color, 0.9)
+    local number y = top + 54
+    ctext_scaled(tr_pv1(), y, text_color, 0.5)
+    ctext_scaled(tr_pv2(), y + 26, text_color, 0.5)
+    ctext_scaled(tr_pv3(), y + 52, text_color, 0.5)
+    ctext_scaled(tr_pv4(), y + 78, text_color, 0.5)
+    ctext_scaled(tr_pv5(), y + 104, text_color, 0.5)
+    ctext_scaled(tr_pv6(), y + 130, text_color, 0.5)
+    ctext_scaled(tr_pv7(), y + 156, text_color, 0.5)
+    ctext_scaled(tr_pv8(), y + 182, text_color, 0.5)
+    ctext_scaled(tr_pv9(), y + 208, text_color, 0.5)
+    ctext_scaled(tr_pv10(), y + 234, text_color, 0.5)
 end
 public function draw_class_card(number vi)
     local number cls = visible_class_at(vi)

@@ -1,7 +1,7 @@
 public number ST_LOBBY=0, ST_SOLO=1, ST_MODES=2, ST_SETTINGS=4, ST_ONLINE=5
 public number ST_LOGIN=7, ST_CLASSES=8, ST_LEVELS=9, ST_LEADERBOARD=10
 public number ST_ACHIEVEMENTS=11, ST_SKINS=13, ST_PROMO=14
-public number ST_QUESTS=15
+public number ST_QUESTS=15, ST_PRIVACY=16
 public number game_state=ST_LOBBY
 public number language=0, t_dir=0, t_target=0, t_fade=0, transition_duration=0.15
 public number ui_purple=0xFF5F10A0
@@ -156,7 +156,12 @@ public number plates_santa_out_time=2.5
 public number plates_charge_time=2.0
 public number plates_santa_turn_time=0.35, plates_santa_fly_acc=2600, plates_santa_fly_speed=1600
 public number plates_lock_me=0, plates_save_interval=4
-public number warn_open=1, warn_t=0, warn_a=1, warn_hold=2.5, warn_fade=0.6
+-- Предупреждение об эпилепсии: больше не гаснет само по таймеру. Экран
+-- держится, пока игрок сам не нажмёт кнопку согласия (legal_accept),
+-- поэтому пропустить его «случайно зашедший» человек не может: вход в игру
+-- равен осознанному принятию риска. Нажатие фиксируется в settings.dat
+-- (метка времени), системная кнопка «Назад» на этом экране выходит из игры.
+public number warn_open=1, warn_a=1
 public number studio_open=0, studio_t=0, studio_a=0, studio_bg_a=1
 public number studio_in=0.5, studio_hold=1.6, studio_fade=0.7
 public string STUDIO_NAME="CUBIC CORPORATION"

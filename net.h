@@ -200,6 +200,11 @@ void net_save_winter_theme(double on);
 double net_load_fps_meter(void);
 void net_save_fps_meter(double on);
 
+/* Согласие с предупреждением об эпилепсии (settings_storage.inc): метка
+ * времени нажатия кнопки согласия, хранится только на устройстве. */
+void settings_mark_legal(void);
+double settings_legal_ts(void);
+
 /* Бан система */
 double net_banned(void);
 double net_is_banned(const char *nick);

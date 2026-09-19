@@ -289,6 +289,84 @@ end
 public function tr_warn_ru4()
     return "к свету играйте осторожно."
 end
+public function tr_legal_accept()
+    if language == 1 then
+        return "Я понимаю и принимаю риск"
+    end
+    return "I understand and accept the risk"
+end
+public function tr_privacy()
+    if language == 1 then
+        return "Данные и приватность"
+    end
+    return "Data & privacy"
+end
+public function tr_privacy_title()
+    if language == 1 then
+        return "Что собирает игра"
+    end
+    return "What the game collects"
+end
+public function tr_pv1()
+    if language == 1 then
+        return "Аккаунт: ник и пароль уходят в Firebase Auth по"
+    end
+    return "Account: nick and password go to Firebase Auth"
+end
+public function tr_pv2()
+    if language == 1 then
+        return "HTTPS для входа. В облачной базе игры пароля нет;"
+    end
+    return "over HTTPS for sign-in. The game cloud DB stores"
+end
+public function tr_pv3()
+    if language == 1 then
+        return "на устройстве он лежит в файле сессии (auth.dat)."
+    end
+    return "no password; on device it lives in auth.dat."
+end
+public function tr_pv4()
+    if language == 1 then
+        return "В облаке под вашим ником: прогресс, настройки,"
+    end
+    return "Cloud under your nick: progress, settings,"
+end
+public function tr_pv5()
+    if language == 1 then
+        return "промокоды и сообщения чата."
+    end
+    return "promo codes and chat messages."
+end
+public function tr_pv6()
+    if language == 1 then
+        return "На устройстве: файлы прогресса и настроек."
+    end
+    return "On device: progress and settings files."
+end
+public function tr_pv7()
+    if language == 1 then
+        return "Нет рекламы, аналитики и сторонних трекеров;"
+    end
+    return "No ads, no analytics, no third-party trackers;"
+end
+public function tr_pv8()
+    if language == 1 then
+        return "геолокация, контакты и ID устройства не нужны."
+    end
+    return "no location, contacts or device IDs collected."
+end
+public function tr_pv9()
+    if language == 1 then
+        return "Разрешения: Интернет и состояние сети."
+    end
+    return "Permissions: Internet and network state only."
+end
+public function tr_pv10()
+    if language == 1 then
+        return "Игра предоставляется «как есть», без гарантий."
+    end
+    return "The game is provided as is, without warranty."
+end
 public function tr_hp()
     if language == 1 then
         return "Здоровье"
