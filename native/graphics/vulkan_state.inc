@@ -30,6 +30,9 @@ static uint32_t vk_queue_family;
 static int vk_ready;
 static int vk_need_recreate;
 static int vk_blit_ok = 1;
+/* Есть ли у формата swapchain линейная фильтрация для blit: растягивание
+ * уменьшенного оффскрина с LINEAR выглядит мягко, а не «пикселями». */
+static int vk_blit_linear = 0;
 
 static VkSwapchainKHR vk_swap;
 static uint32_t vk_sw_count;
@@ -109,9 +112,6 @@ static VkDescriptorSet vk_font_desc;
 static Texture *vk_pending_tex[DS_VK_PENDING_CAP];
 static int vk_pending_n;
 static int vk_pending_font;
-/* Сколько раз уже писали в лог о неудачной заливке: повторяем попытку каждый
- * кадр, но консоль не засоряем. */
-static int vk_upload_fail_logs = 0;
 
 /* Пачки треугольников одного конвейера/текстуры подряд — чтобы сотни квадов
  * текста не превращались в сотни draw call'ов. */

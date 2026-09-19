@@ -22,13 +22,8 @@
         android:hasCode="true"
         android:extractNativeLibs="true">
 
-        <!-- singleTask: возврат в игру из свёрнутого состояния не должен
-             создавать второй экземпляр NativeActivity. Два native-цикла в одном
-             процессе делят общие глобальные переменные и Vulkan, и это
-             заканчивалось вылетом. -->
         <activity
             android:name="com.cb4.GameActivity"
-            android:launchMode="singleTask"
             android:configChanges="orientation|keyboard|keyboardHidden|screenSize"
             android:screenOrientation="landscape"
             android:windowSoftInputMode="adjustResize"

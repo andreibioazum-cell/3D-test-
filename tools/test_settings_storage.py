@@ -151,12 +151,32 @@ static int run_legacy(const char *dir) {
     return 0;
 }
 
+/* Согласие с предупреждением об эпилепсии: до нажатия метки нет, после —
+ * unix-время в settings.dat, и оно переживает «перезапуск» процесса. */
+static int run_legal(const char *dir) {
+    net_set_data_path(dir);
+    assert(settings_legal_ts() == 0);
+    settings_mark_legal();
+    assert(settings_legal_ts() > 0);
+    puts("native legal: consent stamp written to settings.dat");
+    return 0;
+}
+
+static int run_legal_read(const char *dir) {
+    net_set_data_path(dir);
+    assert(settings_legal_ts() > 0);
+    puts("native legal read: a fresh process still sees the consent stamp");
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (argc < 3) { fprintf(stderr, "usage: test <write|read|cloud> <dir>\n"); return 2; }
     if (strcmp(argv[1], "write") == 0) return run_write(argv[2]);
     if (strcmp(argv[1], "read") == 0) return run_read(argv[2]);
     if (strcmp(argv[1], "cloud") == 0) return run_cloud(argv[2]);
     if (strcmp(argv[1], "legacy") == 0) return run_legacy(argv[2]);
+    if (strcmp(argv[1], "legal") == 0) return run_legal(argv[2]);
+    if (strcmp(argv[1], "legal-read") == 0) return run_legal_read(argv[2]);
     fprintf(stderr, "unknown mode '%s'\n", argv[1]);
     return 2;
 }
@@ -209,6 +229,13 @@ def main():
         assert "lang 0" in rewritten and "hitboxes 1" in rewritten, rewritten
         assert "musicvol 70" in rewritten, rewritten
         assert "mod" not in rewritten, rewritten
+
+        legal = temp / "legal-device"
+        legal.mkdir()
+        subprocess.run([*run, "legal", str(legal)], check=True)
+        stamped = (legal / "settings.dat").read_text(encoding="utf-8")
+        assert "legal " in stamped, stamped
+        subprocess.run([*run, "legal-read", str(legal)], check=True)
     return 0
 
 

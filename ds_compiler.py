@@ -135,6 +135,7 @@ BUILTINS = frozenset({
     'net_load_music_volume', 'net_save_music_volume',
     'net_load_winter_theme', 'net_save_winter_theme',
     'net_load_fps_meter', 'net_save_fps_meter',
+    'settings_mark_legal', 'settings_legal_ts',
     'keyboard_show',
     'keyboard_hide', 'keyboard_get_text', 'keyboard_get_raw', 'keyboard_clear',
     'keyboard_enter_pressed', 'keyboard_type', 'keyboard_visible', 'str_len',

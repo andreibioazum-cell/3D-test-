@@ -25,6 +25,7 @@ typedef struct {
     DSMutex lock;
     int loaded, has_file;
     int language, hitboxes, musicvol, winter, showfps;
+    int legal; /* unix-время нажатия кнопки согласия с предупреждением */
 } Settings;
 static Settings st = { .lock = DS_MUTEX_INIT };
 
@@ -35,7 +36,7 @@ static void settings_read(void) {
     char path[320], line[128];
     FILE *f;
     int language = 0, hitboxes = 1, musicvol = 70, has_file = 0;
-    int winter = 1, showfps = 0;
+    int winter = 1, showfps = 0, legal = 0;
     st_lock();
     if (st.loaded) { st_unlock(); return; }
     st_unlock();
@@ -50,6 +51,7 @@ static void settings_read(void) {
             if (sscanf(line, "musicvol %d", &value) == 1) { musicvol = value; continue; }
             if (sscanf(line, "winter %d", &value) == 1) { winter = value; continue; }
             if (sscanf(line, "showfps %d", &value) == 1) { showfps = value; continue; }
+            if (sscanf(line, "legal %d", &value) == 1) { legal = value; continue; }
         }
         fclose(f);
     }
@@ -59,6 +61,7 @@ static void settings_read(void) {
     st.musicvol = musicvol < 0 ? 0 : (musicvol > 100 ? 100 : musicvol);
     st.winter = winter ? 1 : 0;
     st.showfps = showfps ? 1 : 0;
+    st.legal = legal;
     st.has_file = has_file;
     st.loaded = 1;
     st_unlock();
@@ -66,13 +69,15 @@ static void settings_read(void) {
 
 /* Атомарная запись (временный файл + rename) - как у прогресса и достижений. */
 static void settings_write(void) {
-    char path[320], text[160];
+    char path[320], text[192];
     settings_read();
     data_file_path(path, sizeof(path), SETTINGS_FILE);
     st_lock();
     snprintf(text, sizeof(text),
-             "lang %d\nhitboxes %d\nmusicvol %d\nwinter %d\nshowfps %d\n",
-             st.language, st.hitboxes, st.musicvol, st.winter, st.showfps);
+             "lang %d\nhitboxes %d\nmusicvol %d\nwinter %d\nshowfps %d\n"
+             "legal %d\n",
+             st.language, st.hitboxes, st.musicvol, st.winter, st.showfps,
+             st.legal);
     st.has_file = 1;
     st_unlock();
     file_write_atomic(path, text);
@@ -218,4 +223,29 @@ int settings_sync_with_cloud(const char *resp) {
     if (net_log_ok()) LOG("settings restored from cloud (lang=%d hitboxes=%d musicvol=%d winter=%d showfps=%d)",
                           language, hitboxes, musicvol, winter, showfps);
     return 0;
+}
+/* Согласие с предупреждением об эпилепсии: фиксирование и чтение метки.
+ *
+ * Хранится только на устройстве (строка "legal <unix-время>" в settings.dat)
+ * и намеренно не синхронизирована с облаком: согласие принимается человеком,
+ * сидящим перед этим экраном, а не аккаунтом. settings_mark_legal вызывается
+ * скриптом при нажатии кнопки «Я понимаю и принимаю риск» на экране
+ * предупреждения; settings_legal_ts отдаёт метку для проверок и отладки.
+ */
+void settings_mark_legal(void) {
+    settings_read();
+    st_lock();
+    st.legal = (int)time(NULL);
+    st.loaded = 1;
+    st_unlock();
+    settings_write();
+}
+
+double settings_legal_ts(void) {
+    double v;
+    settings_read();
+    st_lock();
+    v = (double)st.legal;
+    st_unlock();
+    return v;
 }

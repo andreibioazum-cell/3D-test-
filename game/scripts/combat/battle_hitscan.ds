@@ -1,15 +1,6 @@
 public function turret_zone_half()
     return turret_hit_r
 end
--- С какого расстояния от центра бойца начинается зона его удара: от края
--- корпуса. И рисунок зоны, и все проверки попадания считают этот отступ
--- одинаково, поэтому визуальная зона совпадает с настоящей.
-public function punch_front_offset(number size)
-    if size<0 then
-        size=0
-    end
-    return size*punch_front_scale
-end
 public function turret_square_dist(number tx, number ty, number x, number y)
     local number dx=fabs(x-tx)-turret_zone_half()
     local number dy=fabs(y-ty)-turret_zone_half()
@@ -44,19 +35,16 @@ public function turret_square_seg_dist(number sx, number sy, number dx, number d
     end
     return best
 end
-public function punch_resolve_target(number px, number py, number pdx, number pdy, number expand_player, number front)
+public function punch_resolve_target(number px, number py, number pdx, number pdy, number expand_player)
     local number best=-1, bfw=0, i=0
     local number pr=expand_player
     if pr<0 then
         pr=0
     end
-    if front<0 then
-        front=0
-    end
     local number half=punch_width/2+pr
     local number rx=player.x-px, ry=player.y-py
     local number fw=rx*pdx+ry*pdy, side=ry*pdx-rx*pdy
-    if fw>=0&&fw<=punch_reach+pr+front&&side*side<=half*half then
+    if fw>=0&&fw<=punch_reach+pr&&side*side<=half*half then
         best=0
         bfw=fw
     end
@@ -66,7 +54,7 @@ public function punch_resolve_target(number px, number py, number pdx, number pd
         if turret_alive(i)==1 then
             local number hx=arr_get(turret_x,i)-px, hy=arr_get(turret_y,i)-py
             local number tf=hx*pdx+hy*pdy, ts=hy*pdx-hx*pdy
-            if tf>=0-back&&tf<=punch_reach+back+front&&fabs(ts)<=th then
+            if tf>=0-back&&tf<=punch_reach+back&&fabs(ts)<=th then
                 if best==-1 then
                     best=i+1
                     bfw=tf

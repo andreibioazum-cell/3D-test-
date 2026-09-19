@@ -10,7 +10,6 @@
 #include <android/input.h>
 #include <android/keycodes.h>
 #include <android/native_activity.h>
-#include <errno.h>
 #include <unistd.h>
 static int init_done = 0;
 static int script_active = 0;
@@ -18,6 +17,7 @@ static AAssetManager *script_assets = NULL;
 static uint64_t restart_after_ns = 0;
 static unsigned int restart_failures = 0;
 static uint64_t prev_frame_ns = 0;
+static uint64_t prev_loop_ns = 0;
 static struct android_app *g_app = NULL;
 static uint64_t monotonic_ns(void) {
     struct timespec now;
@@ -25,7 +25,7 @@ static uint64_t monotonic_ns(void) {
     return (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
 }
 /* Кадр всегда рисуется в полном размере окна: ни апскейла, ни лимита FPS в
- * настройках больше нет (по просьбе игрока) - оба параметра только портили
+ * настройках больше нет (по просьбе игрока) — оба параметра только портили
  * картинку и заставляли ждать кадр впустую. */
 static int phys_w = 0, phys_h = 0;
 /* screen_w/screen_h — то, что видит скрипт: всегда полный размер окна. */
@@ -105,7 +105,12 @@ static void handle_cmd(struct android_app *app, int32_t command) {
             }
             break;
         case APP_CMD_TERM_WINDOW:
-            init_done = 0; script_active = 0; keyboard_hide(); ds_graphics_shutdown(); ds_sound_shutdown(); break;
+            /* Онлайн-потоки комнаты переживают сворачивание, а скрипт при
+             * возврате стартует заново: без явного отключения зомби-потоки
+             * продолжали бы писать в состояние, которого скрипт уже не
+             * помнит, - отсюда случайные вылеты при перезаходе. */
+            init_done = 0; script_active = 0; keyboard_hide(); net_disconnect();
+            ds_graphics_shutdown(); ds_sound_shutdown(); break;
         case APP_CMD_GAINED_FOCUS: ds_sound_resume(); break;
         case APP_CMD_LOST_FOCUS: ds_sound_pause(); break;
         default: break;
@@ -127,7 +132,8 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
         i = (action == AMOTION_EVENT_ACTION_MOVE) ? 0 : index;
         count = (action == AMOTION_EVENT_ACTION_MOVE) ? count : index + 1;
         for (; i < count; i++) {
-            /* Координаты окна — те же пиксели, в которых живёт скрипт. */
+            /* Координаты окна — те же пиксели, в которых живёт скрипт:
+             * апскейл на них больше не влияет. */
             call.x = AMotionEvent_getX(event, i);
             call.y = AMotionEvent_getY(event, i);
             /* Край окна: прижимаем к виртуальному экрану, чтобы касание у самой
@@ -205,6 +211,11 @@ void android_main(struct android_app *app) {
         if (!app->window || !init_done || app->destroyRequested) continue;
         restart_script_if_due();
         uint64_t frame_start = monotonic_ns();
+        /* Фактический период кадров (включая ожидание vsync) уходит в графику:
+         * по нему автоматическое внутреннее разрешение решает, укладывается ли
+         * устройство в 60 fps полным размером окна. */
+        if (prev_loop_ns) ds_graphics_report_frame_interval((double)(frame_start - prev_loop_ns) / 1e9);
+        prev_loop_ns = frame_start;
         apply_screen_size();
         if (script_active) {
             uint64_t now = frame_start;

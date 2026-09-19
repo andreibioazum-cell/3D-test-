@@ -25,29 +25,37 @@ end
 public function hit_menu_row(number px, number py, number i)
     return hit_rect_pad(px, py, menu_x(), menu_row(i), btn_w, btn_h)
 end
--- Настройки: 10 строк (в лобби их 5) — центрируем отдельно, чтобы на низких
--- экранах последние строки не уходили за нижний край.
+-- Настройки: 9 строк (в лобби их 5) — центрируем отдельно, чтобы на низких
+-- экранах последние строки не уходили за нижний край. Апскейла и лимита FPS
+-- в настройках больше нет, зато есть строка «Данные и приватность».
 public number SETTINGS_ROWS=8
 -- Шаг строк настроек: обычный (btn_h + btn_gap), но на низких экранах он
 -- уменьшается ровно настолько, чтобы влезли все строки. Меньше высоты кнопки
 -- шаг не становится — строки не должны наезжать друг на друга.
 public function settings_stride()
     local number s = menu_stride()
-    local number avail = screen_h - 16 - btn_h
-    if avail < 0 then
-        avail = 0
-    end
-    local number fit = avail / (SETTINGS_ROWS - 1)
+    -- Девять строк обязаны влезть в любую высоту: девять полос (шаг плюс
+    -- одна кнопка) занимают не больше screen_h - 16, поэтому на низких
+    -- экранах шаг сжимается ниже высоты кнопки, а сама кнопка следует за
+    -- шагом (settings_btn_h) - строки не наезжают и не уходят за край.
+    local number fit = (screen_h - 16) / SETTINGS_ROWS
     if fit < s then
         s = fit
     end
-    if s < btn_h then
-        s = btn_h
+    if s < 24 then
+        s = 24
     end
     return s
 end
+public function settings_btn_h()
+    local number h = settings_stride()
+    if h > btn_h then
+        h = btn_h
+    end
+    return h
+end
 public function settings_top()
-    local number top = screen_h / 2 - (btn_h + (SETTINGS_ROWS - 1) * settings_stride()) / 2
+    local number top = screen_h / 2 - (settings_btn_h() + (SETTINGS_ROWS - 1) * settings_stride()) / 2
     if top < 8 then
         top = 8
     end
@@ -57,13 +65,13 @@ public function settings_row_y(number i)
     return settings_top() + i * settings_stride()
 end
 public function hit_settings_row(number px, number py, number i)
-    return hit_rect_pad(px, py, menu_x(), settings_row_y(i), btn_w, btn_h)
+    return hit_rect_pad(px, py, menu_x(), settings_row_y(i), btn_w, settings_btn_h())
 end
 public function hit_settings_music_minus(number px, number py)
-    return hit_rect_pad(px, py, music_minus_x(), settings_row_y(5), music_half_w(), btn_h)
+    return hit_rect_pad(px, py, music_minus_x(), settings_row_y(5), music_half_w(), settings_btn_h())
 end
 public function hit_settings_music_plus(number px, number py)
-    return hit_rect_pad(px, py, music_plus_x(), settings_row_y(5), music_half_w(), btn_h)
+    return hit_rect_pad(px, py, music_plus_x(), settings_row_y(5), music_half_w(), settings_btn_h())
 end
 public function music_half_w()
     return (btn_w - music_btn_gap) / 2
@@ -321,4 +329,16 @@ public function quest_row_y(number i)
 end
 public function hit_quest_row(number px, number py, number i)
     return hit_rect(px, py, quest_x(), quest_row_y(i), quest_w(), ach_card_h)
+end
+-- Кнопка согласия на экране предупреждения об эпилепсии: текст короткого
+-- предупреждения заканчивается на screen_h/2+130, кнопка встаёт ниже с
+-- отступом и даже на низких экранах (480 px) не уходит за край.
+public function warn_btn_w()
+    return fit_w(420)
+end
+public function warn_btn_y()
+    return screen_h / 2 + 160
+end
+public function hit_warn_btn(number px, number py)
+    return hit_rect_pad(px, py, center_x(warn_btn_w()), warn_btn_y(), warn_btn_w(), btn_h)
 end

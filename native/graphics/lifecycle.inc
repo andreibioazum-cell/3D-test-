@@ -1,6 +1,6 @@
 /* Публичный API графики для скриптов и main.c: загрузка текстур и шрифта,
- * команды рисования (rect/roundrect/circle/ring/line/tex/tex_tint/text),
- * кадры begin/end/cancel и экран ошибки DimScript.
+ * команды рисования (rect/roundrect/rect_rot/circle/ring/line/tex/tex_tint/
+ * text), кадры begin/end/cancel и экран ошибки DimScript.
  *
  * Команды только накапливаются: всю отрисовку делает Vulkan-бэкенд
  * (vulkan_backend.inc) в конце кадра. Растеризация на CPU больше не
@@ -39,58 +39,31 @@ static int open_asset(const char *n, uint8_t **out, size_t *sz) {
     if (off != (size_t)len) { free(buf); return 0; }
     *out = buf; *sz = (size_t)len; return 1;
 }
-/* Убирает запись из кеша: нужно, когда файл не открылся или не раскодировался.
- * Раньше неудачная загрузка оставалась в кеше навсегда (Texture без пикселей),
- * и повторный вызов load_png для того же имени уже никогда не пытался открыть
- * файл заново. Одна случайная осечка при старте (или сразу после возврата в игру
- * из свёрнутого состояния) - и спрайт пропадал до перезапуска, причём только
- * один: соседние текстуры грузились нормально. Теперь такая текстура доедет со
- * следующей попытки. */
-static void drop_tx(Texture *t) {
-    if (!t) return;
-    Texture **pp = &textures;
-    while (*pp && *pp != t) pp = &(*pp)->next;
-    if (*pp) *pp = t->next;
-    free(t->name);
-    free(t);
-}
-/* Ошибки загрузки пишем в консоль не чаще нескольких раз за запуск: при
- * повторных попытках каждые несколько секунд иначе будет спам. */
-static int tex_fail_logs = 0;
-static void tx_fail_log(const char *n, const char *why) {
-    if (tex_fail_logs < 8) {
-        ds_log_err("texture not loaded: %s: '%s' (will retry)", why, n ? n : "(null)");
-        tex_fail_logs++;
-    }
-}
 static Texture *load_png(const char *req) {
     const char *n = norm_name(req);
-    if (!n) { tx_fail_log(req, "invalid PNG asset path"); return NULL; }
+    if (!n) { ds_log_err("texture not loaded: invalid PNG asset path '%s'", req ? req : "(null)"); return NULL; }
     Texture *t = find_tx(n);
     if (t) return t->pixels ? t : NULL;
-    if (!amgr) { tx_fail_log(n, "no asset manager"); return NULL; }
+    if (!amgr) { ds_log_err("texture not loaded: no asset manager for '%s'", n); return NULL; }
     t = (Texture *)calloc(1, sizeof(*t));
-    if (!t) { tx_fail_log(n, "out of memory caching"); return NULL; }
+    if (!t) { ds_log_err("texture not loaded: out of memory caching '%s'", n); return NULL; }
     t->name = strdup_safe(n);
-    if (!t->name) { free(t); tx_fail_log(n, "out of memory caching name"); return NULL; }
+    if (!t->name) { free(t); ds_log_err("texture not loaded: out of memory caching name '%s'", n); return NULL; }
     t->next = textures; textures = t;
     uint8_t *enc = NULL; size_t enc_sz = 0;
     if (!open_asset(n, &enc, &enc_sz) || enc_sz > (size_t)INT_MAX) {
-        free(enc); tx_fail_log(n, "asset not found or unreadable"); drop_tx(t); return NULL;
+        free(enc); ds_log_err("texture not loaded: asset not found or unreadable: '%s'", n); return NULL;
     }
     int ch = 0;
     stbi_uc *dec = stbi_load_from_memory(enc, (int)enc_sz, &t->w, &t->h, &ch, STBI_rgb_alpha);
     free(enc);
     if (!dec || t->w <= 0 || t->h <= 0) {
-        tx_fail_log(n, "could not decode PNG");
-        stbi_image_free(dec); drop_tx(t); return NULL;
+        ds_log_err("texture not loaded: could not decode PNG '%s': %s", n, stbi_failure_reason() ? stbi_failure_reason() : "unknown");
+        stbi_image_free(dec); return NULL;
     }
     size_t pc = (size_t)t->w * t->h;
     t->pixels = (uint32_t *)malloc(pc * sizeof(*t->pixels));
-    if (!t->pixels) {
-        stbi_image_free(dec); tx_fail_log(n, "out of memory uploading PNG");
-        drop_tx(t); return NULL;
-    }
+    if (!t->pixels) { stbi_image_free(dec); ds_log_err("texture not loaded: out of memory uploading PNG '%s'", n); return NULL; }
     t->opaque = 1;
     for (size_t i = 0; i < pc; i++) {
         uint8_t a = dec[i*4+3];
@@ -98,7 +71,7 @@ static Texture *load_png(const char *req) {
         if (a != 255) t->opaque = 0;
     }
     stbi_image_free(dec);
-    ds_vk_pending_texture(t); /* зальётся на GPU в начале следующего кадра */
+    ds_vk_pending_texture(t); /* зальётся на GPU в конце текущего кадра */
     ds_log("texture loaded: %s (%dx%d)", n, t->w, t->h);
     return t;
 }
@@ -176,7 +149,8 @@ void roundrect(float x, float y, float w, float h, float r, uint32_t c) {
     p->v.rr.x=x; p->v.rr.y=y; p->v.rr.w=w; p->v.rr.h=h; p->v.rr.r=r; p->v.rr.c=pack_c(c);
 }
 /* Повёрнутый прямоугольник со смешиванием (обычный конвейер, как у rect):
- * зоны удара/рывка рисуются им - прямоугольник вместо круглой капсулы. */
+ * хитбоксы рисуются им — ровная фигура с острыми углами вместо круглой
+ * капсулы line() и вместо непрозрачного roundrect(). */
 void rect_rot(float x, float y, float w, float h, float ang, uint32_t c) {
     DSCmd *p = push(DS_CMD_RECT_ROT); if (!p) return;
     p->v.rot.x=x; p->v.rot.y=y; p->v.rot.w=w; p->v.rot.h=h; p->v.rot.ang=ang; p->v.rot.c=pack_c(c);
@@ -297,12 +271,109 @@ int ds_graphics_init(AAssetManager *a, ANativeWindow *window) {
     if (amgr != a) { ds_release_assets(); amgr = a; }
     return ds_vk_init_backend(window);
 }
+/* Автоматическое внутреннее разрешение: ни кнопки, ни настройки, ни сохранённого
+ * значения — только реакция на фактическую скорость кадров. Vsync (FIFO)
+ * квантует частоту: стоит кадру стать чуть дольше 16.6 мс, и вместо 60 будет 30.
+ * На слабых GPU в бою (много слоёв смешивания на весь экран) полный размер окна
+ * в этот бюджет не укладывается, поэтому при накоплении промахов кадр рисуется
+ * в оффскрин в scale раз меньше и растягивается на окно; как только запас
+ * появляется — возвращаемся к 1:1. Картинка всегда резкая, пока устройство
+ * держит 60 fps; мягче она становится только вместо провала в 30.
+ *
+ * Гистерезис здесь принципиально несимметричный, чтобы масштаб не «дышал»:
+ * грубее уходим быстро (10 промахов подряд или 9 из 45 кадров), а пробу
+ * «резче» допускаем только после 300 кадров (~5 с) вообще без промахов и не
+ * чаще раза в 15 с; две провалившиеся пробы за сеанс навсегда фиксируют
+ * текущий масштаб (gfx_finer_off) — лучше стабильная мягкость, чем видимая
+ * пульсация резкости и пересоздание оффскрина каждые несколько секунд.
+ * История промахов сбрасывается на каждом новом окне (gfx_autoscale_new_window):
+ * первые кадры после возврата в приложение всегда медленные и не должны
+ * сразу тянуть масштаб вниз. */
+static int gfx_auto_scale = 1;
+static int gfx_cooldown = 0;        /* кадров до любых решений после смены */
+static int gfx_finer_cooldown = 0;  /* кадров до следующей пробы «резче» */
+static int gfx_probe_finer = 0;     /* идёт проба «резче»: промах откатит */
+static int gfx_probe_left = 0;      /* кадров вердикта пробы; дожил до 0 - успех */
+static int gfx_probe_fails = 0;     /* сколько проб провалилось за сеанс */
+static int gfx_finer_off = 0;       /* после двух провалов пробы выключены */
+static int gfx_clean = 0;           /* кадров подряд без промаха */
+static int gfx_miss_streak = 0, gfx_win_frames = 0, gfx_win_misses = 0;
+
+int ds_graphics_pixel_scale(void) { return gfx_auto_scale; }
+
+/* Старт/возврат в приложение/смена размера окна: история скорости устарела. */
+static void gfx_autoscale_new_window(void) {
+    gfx_cooldown = 60;
+    gfx_probe_finer = 0;
+    gfx_probe_left = 0;
+    gfx_miss_streak = 0; gfx_win_frames = 0; gfx_win_misses = 0; gfx_clean = 0;
+}
+
+static void gfx_set_scale(int s, int cooldown) {
+    if (s < 1) s = 1;
+    if (s > 3) s = 3;
+    if (s == gfx_auto_scale) return;
+    gfx_auto_scale = s;
+    gfx_cooldown = cooldown;
+    gfx_miss_streak = 0; gfx_win_frames = 0; gfx_win_misses = 0;
+    ds_log("graphics: internal resolution 1/%d (auto)", s);
+}
+
+/* Кадровый интервал главного цикла (секунды): вызывается после каждого кадра. */
+void ds_graphics_report_frame_interval(double sec) {
+    if (!(sec > 0.0) || sec > 0.25) return;   /* пауза, сворачивание, отладчик */
+    if (gfx_finer_cooldown > 0) gfx_finer_cooldown--;
+    /* Промах по vsync 60 Гц: кадр пришёл ко второму вертикальному интервалу
+     * (33 мс) или позже. 20 мс — граница с запасом против дрожания 16.7. */
+    int missed = sec > 0.020;
+    gfx_clean = missed ? 0 : gfx_clean + 1;
+    if (gfx_cooldown > 0) { gfx_cooldown--; return; }
+    /* Вердикт пробы «резче»: окно кадров после её кулдауна. Одиночный поздний
+     * промах спустя минуту не должен откатывать уже прижившийся масштаб. */
+    if (gfx_probe_finer && gfx_probe_left > 0) {
+        gfx_probe_left--;
+        if (gfx_probe_left == 0) gfx_probe_finer = 0;  /* проба прижилась */
+    }
+    if (missed) {
+        if (gfx_probe_finer) {   /* проба «резче» провалилась — откат и надолго */
+            gfx_probe_finer = 0;
+            gfx_probe_left = 0;
+            gfx_probe_fails++;
+            if (gfx_probe_fails >= 2) gfx_finer_off = 1;
+            gfx_finer_cooldown = gfx_finer_off ? 1000000000 : 1800;
+            gfx_set_scale(gfx_auto_scale + 1, 90);
+            return;
+        }
+        gfx_miss_streak++;
+    } else {
+        gfx_miss_streak = 0;
+    }
+    gfx_win_frames++;
+    if (missed) gfx_win_misses++;
+    if (gfx_miss_streak >= 10 || gfx_win_frames >= 45) {
+        int bad = gfx_miss_streak >= 10 || gfx_win_misses >= 9;
+        if (bad) {
+            if (gfx_auto_scale < 3) gfx_set_scale(gfx_auto_scale + 1, 90);
+        } else if (gfx_win_misses == 0 && gfx_clean >= 300 && gfx_auto_scale > 1 &&
+                   gfx_finer_cooldown == 0 && !gfx_finer_off) {
+            gfx_probe_finer = 1;
+            gfx_finer_cooldown = 900;
+            gfx_set_scale(gfx_auto_scale - 1, 45);
+            gfx_probe_left = 45 + 60;  /* кулдаун пробы плюс окно вердикта */
+        }
+        gfx_win_frames = 0; gfx_win_misses = 0;
+    }
+}
+
 int ds_graphics_begin_frame(Buffer *b) {
     if (!b || b->width <= 0 || b->height <= 0 || b->stride < b->width) return 0;
-    /* b->pixels больше не используется: рисуем через Vulkan. Оффскрин — ровно
-     * размер окна: апскейла в настройках больше нет, кадр всегда резкий. */
-    if (!ds_vk_begin_frame_backend((uint32_t)b->width, (uint32_t)b->height,
-                                   (uint32_t)b->width, (uint32_t)b->height)) return 0;
+    /* b->pixels больше не используется: рисуем через Vulkan. Оффскрин равен
+     * окну, пока автомасштаб не увидел промахов по vsync. */
+    uint32_t s = (uint32_t)gfx_auto_scale;
+    uint32_t ow = (uint32_t)b->width / s, oh = (uint32_t)b->height / s;
+    if (ow < 1) ow = 1;
+    if (oh < 1) oh = 1;
+    if (!ds_vk_begin_frame_backend((uint32_t)b->width, (uint32_t)b->height, ow, oh)) return 0;
     discard_commands();
     cur_buf = b; frame_open = 1;
     return 1;

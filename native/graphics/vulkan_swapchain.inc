@@ -2,6 +2,10 @@
  * Часть Vulkan-бэкенда: включается из vulkan_backend.inc, всё собирается
  * одним translation unit'ом (graphics.c), поэтому состояние общее. */
 
+/* Контроллер автомасштаба живёт в lifecycle.inc (подключается позже); новое
+ * окно = устаревшая история кадров, решения на ней принимать нельзя. */
+static void gfx_autoscale_new_window(void);
+
 /* --- swapchain --- */
 
 static void ds_vk_destroy_swapchain(void) {
@@ -31,8 +35,9 @@ static int ds_vk_recreate_swapchain(void) {
     if (want < 3) want = 3;
     if (caps.maxImageCount && want > caps.maxImageCount) want = caps.maxImageCount;
 
-    /* Формат: обязательно с поддержкой blit (нужен nearest-апскейл); для
-     * R8G8B8A8/B8G8R8A8_UNORM это гарантия спецификации. */
+    /* Формат: обязательно с поддержкой blit (нужен автоматическому
+     * внутреннему масштабу); для R8G8B8A8/B8G8R8A8_UNORM это гарантия
+     * спецификации. */
     uint32_t nf = 0;
     if (!ds_vk_check_result(vkGetPhysicalDeviceSurfaceFormatsKHR(vk_phys, vk_surface, &nf, NULL),
                             "vkGetPhysicalDeviceSurfaceFormatsKHR")) return 0;
@@ -55,8 +60,10 @@ static int ds_vk_recreate_swapchain(void) {
     vkGetPhysicalDeviceFormatProperties(vk_phys, vk_sw_format, &fp);
     vk_blit_ok = (fp.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) &&
                  (fp.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT);
+    vk_blit_linear = vk_blit_ok &&
+        (fp.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT);
     if (!vk_blit_ok)
-        ds_log_err("vulkan: format %d lacks blit support, upscale degrades to copy", (int)vk_sw_format);
+        ds_log_err("vulkan: format %d lacks blit support, auto-scale degrades to copy", (int)vk_sw_format);
 
     VkSwapchainCreateInfoKHR si = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
     si.surface = vk_surface;
@@ -99,6 +106,10 @@ static int ds_vk_recreate_swapchain(void) {
     vk_sw_extent = caps.currentExtent;
     vk_need_recreate = 0;
     vk_image_held = 0;
+    /* Первое окно, возврат в приложение, поворот/ресайз: накопленные промахи
+     * относятся к прошлому окну, а первые кадры нового всегда медленные —
+     * контроллер автомасштаба начинает считать заново через секунду. */
+    gfx_autoscale_new_window();
     ds_log("vulkan: swapchain %ux%u, %u images, format %d", vk_sw_extent.width, vk_sw_extent.height,
            (unsigned)vk_sw_count, (int)vk_sw_format);
     return 1;

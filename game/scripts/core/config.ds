@@ -1,7 +1,7 @@
 public number ST_LOBBY=0, ST_SOLO=1, ST_MODES=2, ST_SETTINGS=4, ST_ONLINE=5
 public number ST_LOGIN=7, ST_CLASSES=8, ST_LEVELS=9, ST_LEADERBOARD=10
 public number ST_ACHIEVEMENTS=11, ST_SKINS=13, ST_PROMO=14
-public number ST_QUESTS=15
+public number ST_QUESTS=15, ST_PRIVACY=16
 public number game_state=ST_LOBBY
 public number language=0, t_dir=0, t_target=0, t_fade=0, transition_duration=0.15
 public number ui_purple=0xFF5F10A0
@@ -12,7 +12,7 @@ public number stat_hp_color=0xE94560, stat_power_color=0x4FC3F7
 public number btn_w=280, btn_h=56, btn_gap=16, btn_radius=20
 public number back_y=24, title_gap=12
 public number lobby_rows=5
-public number modes_rows=5
+public number modes_rows=6
 public number touch_pad_x=12, touch_pad_y=8
 public number screen_margin=40, class_action_gap=40
 public number class_count=4, class_gap=14, class_card_h=272
@@ -52,7 +52,7 @@ public number azum_cost=65, santa_candy_cost=100, ebuc_candy_cost=150
 public number player_level=0, levels_unlocked=0
 public number max_level=3, level_base_cost=30, level_cost_step=10
 public number SKIN_NORMAL=0, SKIN_ZOMBIE=1, SKIN_COUNT=2
-public number azum_tex_ok=0, azum_punch_tex_ok=0, azum_zombie_tex_ok=0, azum_zombie_punch_tex_ok=0
+public number azum_tex_ok=0, azum_zombie_tex_ok=0, azum_zombie_punch_tex_ok=0
 public number azum_skin=SKIN_NORMAL
 public number arena_tile_size=256, snow_tex_ok=0, snow_t=0
 -- Зимняя тема — настройка из меню: снежный фон арены и снегопад включаются и
@@ -60,21 +60,17 @@ public number arena_tile_size=256, snow_tex_ok=0, snow_t=0
 -- арена снова в траве (grass.png), как было до зимнего оформления.
 public number winter_theme=1
 public number show_hitboxes=1
--- Все боевые хитбоксы - одна полупрозрачная чёрная зона: и удар, и рывок, и
--- снежок, и вселенная рисуются одним цветом (hitbox_rgb) с одной альфой
--- (hitbox_zone_alpha). Раньше у каждой зоны была своя прозрачность (36/102/140/
--- 170), а зона рывка вообще шла через конвейер без смешивания и выглядела
--- залитым чёрным пятном.
+-- Хитбоксы: ОДИН цвет и ОДНА прозрачность на все зоны сразу (удар, снежок,
+-- рывок, вселенная) — hitbox_rgb + hitbox_zone_alpha. Раньше у каждой зоны
+-- была своя альфа (36 / 102 / 140 / 170) и свой цвет-псевдоним, из-за чего
+-- зоны выглядели по-разному. Скруглений нет нигде: hitbox_corner удалён,
+-- прямоугольные зоны рисуются с острыми углами (rect / rect_rot), а roundrect
+-- в хитбоксах больше не используется вовсе (он ещё и рисуется конвейером без
+-- смешивания, то есть непрозрачно).
 public number hitbox_rgb=0x00000000
 public number hitbox_zone_alpha=96
 public number hitbox_fade_in=0.16, hitbox_fade_out=0.26
--- Зона удара начинается не от центра бойца, а от края его корпуса
--- (доля размера бойца): раньше половина нарисованного прямоугольника пряталась
--- под спрайтом, и казалось, что удар бьёт «в себя», а не вперёд. Теперь и
--- рисунок, и проверка попадания начинаются от края корпуса, поэтому хитбокс
--- стоит впереди игрока и совпадает с тем, что видно.
-public number punch_front_scale=0.65
--- Радиус зоны рывка (доля от суммы корпусов): рисуется полосой той же ширины.
+public number dash_hitbox_zone_scale=1.3
 public number dash_hit_radius_scale=0.9
 public number punch_time=0.2, punch_cooldown=0.3, punch_reach=104, punch_width=104, punch_damage=1
 public number joy_speed=192, player_scale=1.8, enemy_scale=1.8
@@ -138,17 +134,16 @@ public string FB_KEY="AIzaSyDJEqopxP5EqEoxP_ehO3jFXbNztu3DgVs"
 public number lb_wait=0, lb_wait_max=8
 public number banner_show_time=6, banner_fade=0.5, banner_seen_ts=0, banner_t=0, banner_skip=1
 public number login_field=1, login_status=0, login_after=0
-public number login_ox=0, login_oy=-50, login_fh=50, login_lab=28, login_lab_ox=12
-public number login_w=460, login_btn_w=380, login_field_gap=26, login_btn_gap=22
+public number login_ox=0, login_oy=-50, login_fh=50, login_lab=34, login_lab_ox=12
+public number login_w=460, login_btn_w=380, login_field_gap=64, login_btn_gap=22
 public string login_nick="", login_pass=""
 public string LOBBY_MUSIC="lobbymusic.wav"
 public number music_ok=0, music_level=1, music_fade_in_time=0.25, music_fade_out_time=1.0
 public number music_volume=70, music_vol_step=10, music_btn_gap=16
 -- Счётчик кадров в бою: настройка (show_fps) и усреднённое значение, которое
--- пересчитывается раз в fps_interval секунд, чтобы цифры не прыгали. Рисуется
--- в правом верхнем углу без плашки, крупным текстом (см. draw_fps_meter).
+-- пересчитывается раз в fps_interval секунд, чтобы цифры не прыгали.
 public number show_fps=0, fps_value=0, fps_acc=0, fps_frames=0, fps_interval=0.5
-public number fps_text_scale=1.0, fps_margin_x=16, fps_margin_y=56
+public number fps_plate_rgb=0xDD171923, fps_text_scale=0.5
 public number event_mode=0, disco_t=0, event_t=0, event_flakes=44
 public number plates_size=150, plates_shrink_time=0.9, plates_stand_r=80
 public number plates_xa=0.22, plates_xb=0.78, plates_yy=0.5
@@ -161,7 +156,12 @@ public number plates_santa_out_time=2.5
 public number plates_charge_time=2.0
 public number plates_santa_turn_time=0.35, plates_santa_fly_acc=2600, plates_santa_fly_speed=1600
 public number plates_lock_me=0, plates_save_interval=4
-public number warn_open=1, warn_t=0, warn_a=1, warn_hold=2.5, warn_fade=0.6
+-- Предупреждение об эпилепсии: больше не гаснет само по таймеру. Экран
+-- держится, пока игрок сам не нажмёт кнопку согласия (legal_accept),
+-- поэтому пропустить его «случайно зашедший» человек не может: вход в игру
+-- равен осознанному принятию риска. Нажатие фиксируется в settings.dat
+-- (метка времени), системная кнопка «Назад» на этом экране выходит из игры.
+public number warn_open=1, warn_a=1, warn_ready=0, warn_wait=3
 public number studio_open=0, studio_t=0, studio_a=0, studio_bg_a=1
 public number studio_in=0.5, studio_hold=1.6, studio_fade=0.7
 public string STUDIO_NAME="CUBIC CORPORATION"

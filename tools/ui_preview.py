@@ -14,7 +14,7 @@
     python3 tools/ui_preview.py preview classes settings lobby
 
 Аргументы: каталог для PNG (создаётся) и имена экранов: classes (карточки
-классов с девизами), settings (настройки, 10 строк), lobby (главное меню).
+классов с девизами), settings (настройки, 8 строк), lobby (главное меню).
 Без имён экранов рисуются classes и settings. Сетевые и звуковые вызовы
 заглушены, поэтому прогресс выставляется в main() руками.
 
@@ -34,9 +34,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CC = shlex.split(__import__("os").environ.get("CC", "cc"))
 SCREENS = ("classes", "settings")
-# Экраны, которые рисуются только по явному запросу: лобби и бой (в бою видно
-# спрайты, хитбоксы и счётчик FPS - удобно ловить «пропавшего игрока»).
-OPTIONAL_SCREENS = ("lobby", "battle", "battle_punch")
 
 STUBS = r"""
 #include <assert.h>
@@ -190,49 +187,48 @@ static uint32_t prev_text_force_white(uint32_t c) {
 }
 
 void rect(float x, float y, float w, float h, uint32_t c) { render_rect(&g_buf, x, y, w, h, pack_c(c)); }
-/* Повёрнутый прямоугольник: четыре угла вокруг центра на угол ang - то же, что
- * делает geo_rect_rot в игре. */
+void roundrect(float x, float y, float w, float h, float r, uint32_t c) { render_roundrect(&g_buf, x, y, w, h, r, pack_c(c)); }
+/* Повёрнутый прямоугольник (хитбоксы): те же углы, что считает geo_rect_rot
+ * (поворот вокруг центра фигуры), заполняются по строкам со смешиванием -
+ * поэтому зона прозрачная и с острыми углами. */
 void rect_rot(float x, float y, float w, float h, float ang, uint32_t c) {
-    if (w <= 0 || h <= 0) return;
-    float hw = w * 0.5f, hh = h * 0.5f, cx = x + hw, cy = y + hh;
-    if (ang == 0.0f) { render_rect(&g_buf, x, y, w, h, pack_c(c)); return; }
+    if (!g_buf.pixels || !isfinite(x + y + w + h + ang) || w <= 0 || h <= 0) return;
+    uint32_t col = pack_c(c);
+    float hw = w * 0.5f, hh = h * 0.5f;
     float ca = cosf(ang), sa = sinf(ang);
-    float px[4], py[4];
-    const float sx[4] = { -1, 1, 1, -1 }, sy[4] = { -1, -1, 1, 1 };
+    float cx = x + hw, cy = y + hh;
+    static const float sx[4] = { -1, 1, 1, -1 }, sy[4] = { -1, -1, 1, 1 };
+    float qx[4], qy[4], miny = 0, maxy = 0;
     for (int i = 0; i < 4; i++) {
         float lx = sx[i] * hw, ly = sy[i] * hh;
-        px[i] = cx + ca * lx - sa * ly;
-        py[i] = cy + sa * lx + ca * ly;
+        qx[i] = cx + ca * lx - sa * ly;
+        qy[i] = cy + sa * lx + ca * ly;
+        if (i == 0 || qy[i] < miny) miny = qy[i];
+        if (i == 0 || qy[i] > maxy) maxy = qy[i];
     }
-    float minx = px[0], maxx = px[0], miny = py[0], maxy = py[0];
-    for (int i = 1; i < 4; i++) {
-        if (px[i] < minx) minx = px[i];
-        if (px[i] > maxx) maxx = px[i];
-        if (py[i] < miny) miny = py[i];
-        if (py[i] > maxy) maxy = py[i];
-    }
-    int x0 = (int)floorf(minx), x1 = (int)ceilf(maxx);
-    int y0 = (int)floorf(miny), y1 = (int)ceilf(maxy);
-    if (x0 < 0) x0 = 0;
-    if (y0 < 0) y0 = 0;
-    if (x1 > g_buf.width) x1 = g_buf.width;
-    if (y1 > g_buf.height) y1 = g_buf.height;
-    uint32_t col = pack_c(c);
-    for (int py_ = y0; py_ < y1; py_++) {
-        for (int px_ = x0; px_ < x1; px_++) {
-            float fx = (float)px_ + 0.5f, fy = (float)py_ + 0.5f;
-            int inside = 1;
-            for (int i = 0; i < 4 && inside; i++) {
-                int j = (i + 1) % 4;
-                float cross = (px[j] - px[i]) * (fy - py[i]) - (py[j] - py[i]) * (fx - px[i]);
-                if (cross < 0.0f) inside = 0;   /* вершины идут по часовой (y вниз) */
+    int y0 = cl_floor(floorf(miny), g_buf.height), y1 = cl_ceil(ceilf(maxy), g_buf.height);
+    for (int row = y0; row < y1; row++) {
+        float yy = (float)row + 0.5f, xs[4];
+        int n = 0;
+        for (int i = 0; i < 4; i++) {
+            int j = (i + 1) & 3;
+            float a = qy[i], b = qy[j];
+            if ((a <= yy && b > yy) || (b <= yy && a > yy))
+                xs[n++] = qx[i] + (yy - a) / (b - a) * (qx[j] - qx[i]);
+        }
+        if (n < 2) continue;
+        for (int i = 1; i < n; i++)
+            for (int k = i; k > 0 && xs[k - 1] > xs[k]; k--) {
+                float t = xs[k - 1]; xs[k - 1] = xs[k]; xs[k] = t;
             }
-            if (!inside) continue;
-            g_buf.pixels[py_ * g_buf.stride + px_] = blend(g_buf.pixels[py_ * g_buf.stride + px_], col);
+        for (int e = 0; e + 1 < n; e += 2) {
+            int l = cl_floor(floorf(xs[e]), g_buf.width);
+            int r = cl_ceil(ceilf(xs[e + 1]), g_buf.width);
+            uint32_t *d = g_buf.pixels + row * g_buf.stride + l;
+            for (int k = 0; k < r - l; k++) d[k] = blend(d[k], col);
         }
     }
 }
-void roundrect(float x, float y, float w, float h, float r, uint32_t c) { render_roundrect(&g_buf, x, y, w, h, r, pack_c(c)); }
 void circle(float x, float y, float r, uint32_t c) { render_circle(&g_buf, x, y, r, pack_c(c)); }
 void ring(float x, float y, float r, float t, uint32_t c) { render_ring(&g_buf, x, y, r, t, pack_c(c)); }
 void line(float x1, float y1, float x2, float y2, float t, uint32_t c) { render_line(&g_buf, x1, y1, x2, y2, t, pack_c(c)); }
@@ -400,26 +396,10 @@ int main(int argc, char **argv) {
     candies = 320; cups = 1200;
     player_class = CLASS_AZUM;
     ds_fn_sync_selected_class();
-    /* Бой: экран рисуется боевыми функциями поверх настоящих текстур, поэтому
-     * на PNG видно и спрайты бойцов, и хитбоксы, и счётчик FPS. */
-    if (strcmp(screen, "battle") == 0 || strcmp(screen, "battle_punch") == 0) {
-        int punching = strcmp(screen, "battle_punch") == 0;
-        game_state = ST_SOLO;
-        azum_skin = SKIN_NORMAL;
-        ds_fn_init_game();
-        dt = 1.0 / 60.0;
-        for (int i = 0; i < 45; i++) ds_fn_update();
-        fps_value = 57;
-        if (punching) {
-            ds_fn_start_punch_now();
-            for (int i = 0; i < 3; i++) ds_fn_update();
-        }
-        ds_fn_draw_game();
-    }
-    else if (strcmp(screen, "classes") == 0) { game_state = ST_CLASSES; ds_fn_draw_classes(); }
+    if (strcmp(screen, "classes") == 0) { game_state = ST_CLASSES; ds_fn_draw_classes(); }
     else if (strcmp(screen, "settings") == 0) { game_state = ST_SETTINGS; ds_fn_draw_settings(); }
     else if (strcmp(screen, "lobby") == 0) { game_state = ST_LOBBY; ds_fn_draw_lobby(); }
-    else { fprintf(stderr, "неизвестный экран: %s (классы: classes/settings/lobby/battle/battle_punch)\n", screen); return 2; }
+    else { fprintf(stderr, "неизвестный экран: %s (классы: classes/settings/lobby)\n", screen); return 2; }
     if (!write_png(out, &g_buf)) { fprintf(stderr, "не удалось записать %s\n", out); return 1; }
     printf("%s -> %s (%dx%d)\n", screen, out, W, H);
     return 0;
@@ -503,7 +483,7 @@ def compile_preview(temp: Path) -> Path:
 
 def main(argv: list[str]) -> int:
     args = argv[1:]
-    known = SCREENS + OPTIONAL_SCREENS
+    known = SCREENS + ("lobby",)
     # первый аргумент - каталог для PNG, если он не имя экрана
     if args and args[0] not in known:
         out_dir = Path(args[0])

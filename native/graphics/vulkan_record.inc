@@ -38,9 +38,11 @@ static int ds_vk_build_geometry(void) {
                 geo_roundrect(c->v.rr.x, c->v.rr.y, c->v.rr.w, c->v.rr.h, c->v.rr.r, c->v.rr.c);
                 break;
             case DS_CMD_RECT_ROT:
-                /* pipeline 0: обычное альфа-смешивание, поэтому хитбокс
-                 * прозрачный, а не «залитый» чёрным (fill_span-конвейер). */
-                geo_rect_rot(c->v.rot.x, c->v.rot.y, c->v.rot.w, c->v.rot.h, c->v.rot.ang, c->v.rot.c);
+                /* pipeline 0: обычное альфа-смешивание, поэтому повёрнутый
+                 * прямоугольник хитбокса прозрачный, а не «залитый» наглухо,
+                 * как roundrect на fill_span-конвейере. */
+                geo_rect_rot(c->v.rot.x, c->v.rot.y, c->v.rot.w, c->v.rot.h,
+                             c->v.rot.ang, c->v.rot.c);
                 break;
             case DS_CMD_CIRCLE:
                 geo_circle(c->v.ci.x, c->v.ci.y, c->v.ci.r, c->v.ci.c);
@@ -159,8 +161,15 @@ static void ds_vk_record_present_blit(VkCommandBuffer cmd) {
         bl.dstOffsets[1].x = (int32_t)vk_sw_extent.width;
         bl.dstOffsets[1].y = (int32_t)vk_sw_extent.height;
         bl.dstOffsets[1].z = 1;
+        /* 1:1 копируем без фильтрации; растягивание уменьшенного оффскрина
+         * (автомасштаб) - LINEAR, если формат позволяет: картинка мягкая,
+         * а не «пиксели», которыми прежний апскейл бесил игрока. */
+        VkFilter filter = VK_FILTER_NEAREST;
+        if (vk_blit_linear && (vk_off_w != vk_sw_extent.width ||
+                               vk_off_h != vk_sw_extent.height))
+            filter = VK_FILTER_LINEAR;
         vkCmdBlitImage(cmd, vk_off_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                       sw_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bl, VK_FILTER_NEAREST);
+                       sw_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bl, filter);
     } else {
         /* Запасной путь без blit: попиксельная копия 1:1 (без апскейла). */
         VkImageCopy cp;

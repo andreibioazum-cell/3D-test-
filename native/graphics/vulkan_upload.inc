@@ -203,33 +203,23 @@ static int ds_vk_upload_font_atlas(void) {
 }
 
 static void ds_vk_font_gpu_release(void) {
-    /* Состояние чистим ВСЕГДА, даже если устройства уже нет: иначе при
-     * пересоздании устройства остаются ручки старого, и атлас текста больше
-     * никогда не заливается (текст исчезает до перезапуска). */
-    VkImageView view = vk_font_view;
-    VkImage image = vk_font_image;
-    VkDeviceMemory mem = vk_font_memory;
+    if (!vk_device) return;
+    if (vk_font_view != VK_NULL_HANDLE) vkDestroyImageView(vk_device, vk_font_view, NULL);
+    if (vk_font_image != VK_NULL_HANDLE) vkDestroyImage(vk_device, vk_font_image, NULL);
+    if (vk_font_memory != VK_NULL_HANDLE) vkFreeMemory(vk_device, vk_font_memory, NULL);
     vk_font_image = VK_NULL_HANDLE; vk_font_memory = VK_NULL_HANDLE;
     vk_font_view = VK_NULL_HANDLE; vk_font_desc = VK_NULL_HANDLE;
-    if (!vk_device) return;
-    if (view != VK_NULL_HANDLE) vkDestroyImageView(vk_device, view, NULL);
-    if (image != VK_NULL_HANDLE) vkDestroyImage(vk_device, image, NULL);
-    if (mem != VK_NULL_HANDLE) vkFreeMemory(vk_device, mem, NULL);
 }
 
 static void ds_vk_texture_gpu_release(Texture *t) {
-    if (!t) return;
-    long long view = t->gpu.view, image = t->gpu.image, mem = t->gpu.memory;
-    /* Как и у шрифта: сначала забываем ручки, потом освобождаем - иначе после
-     * пересоздания устройства текстура осталась бы с ручками старого. */
+    if (!t || !vk_device) return;
+    if (t->gpu.view) vkDestroyImageView(vk_device, (VkImageView)(uintptr_t)t->gpu.view, NULL);
+    if (t->gpu.image) vkDestroyImage(vk_device, (VkImage)(uintptr_t)t->gpu.image, NULL);
+    if (t->gpu.memory) vkFreeMemory(vk_device, (VkDeviceMemory)(uintptr_t)t->gpu.memory, NULL);
     memset(&t->gpu, 0, sizeof(t->gpu));
-    if (!vk_device) return;
-    if (view) vkDestroyImageView(vk_device, (VkImageView)(uintptr_t)view, NULL);
-    if (image) vkDestroyImage(vk_device, (VkImage)(uintptr_t)image, NULL);
-    if (mem) vkFreeMemory(vk_device, (VkDeviceMemory)(uintptr_t)mem, NULL);
 }
 
-static void ds_vk_pending_reset(void) { vk_pending_n = 0; vk_pending_font = 0; vk_upload_fail_logs = 0; }
+static void ds_vk_pending_reset(void) { vk_pending_n = 0; vk_pending_font = 0; }
 
 static void ds_vk_pending_texture(Texture *t) {
     if (!t) return;
@@ -237,35 +227,12 @@ static void ds_vk_pending_texture(Texture *t) {
     if (vk_pending_n < DS_VK_PENDING_CAP) vk_pending_tex[vk_pending_n++] = t;
 }
 
-/* Отложенные загрузки обрабатываются в начале кадра.
- *
- * Неудачная заливка ОСТАЁТСЯ в очереди и повторяется в следующем кадре. Раньше
- * очередь очищалась целиком, поэтому одна сетевая/драйверная заминка (например,
- * сразу после возврата в игру из свёрнутого состояния) навсегда оставляла
- * текстуру без GPU-копии: спрайт просто не рисовался до перезапуска - игрок
- * «пропадал» и «иногда появлялся». Теперь такая текстура доедет на следующем
- * кадре, а в лог уходит только первое сообщение об ошибке. */
-/* Все текстуры с CPU-пикселями, но без GPU-копии, снова встают в очередь.
- *
- * После пересоздания устройства (возврат в игру из свёрнутого состояния,
- * device lost) GPU-копии умирают вместе с устройством, а кеш текстур с
- * пикселями остаётся. Очередь загрузок при этом наполнялась только в момент
- * чтения файла, поэтому такие текстуры не перезаливались НИКОГДА - спрайты
- * оставались невидимыми до перезапуска (и «сами» появлялись только после
- * повторного входа в игру). Теперь они доезжают в начале следующего кадра. */
-static void ds_vk_requeue_missing_textures(void) {
-    for (Texture *t = textures; t; t = t->next)
-        if (t->pixels && !t->gpu.uploaded) ds_vk_pending_texture(t);
-    if (font && vk_font_desc == VK_NULL_HANDLE) vk_pending_font = 1;
-}
+/* Отложенные загрузки обрабатываются в начале end_frame. */
 static void ds_vk_process_pending_uploads(void) {
     if (!vk_ready) { vk_pending_n = 0; vk_pending_font = 0; return; }
-    ds_vk_requeue_missing_textures();
-    int failed = 0, logged = 0;
     for (int i = 0; i < vk_pending_n; i++) {
         Texture *t = vk_pending_tex[i];
-        if (!t) continue;
-        if (t->gpu.uploaded) continue; /* уже залилась */
+        if (!t || !t->pixels || t->gpu.uploaded) continue;
         VkImage img; VkDeviceMemory mem; VkImageView view; VkDescriptorSet desc;
         if (ds_vk_upload_image((uint32_t)t->w, (uint32_t)t->h, t->pixels, &img, &mem, &view, &desc)) {
             t->gpu.image = (long long)(intptr_t)img;
@@ -274,23 +241,13 @@ static void ds_vk_process_pending_uploads(void) {
             t->gpu.desc = (long long)(intptr_t)desc;
             t->gpu.uploaded = 1;
         } else {
-            if (vk_upload_fail_logs < 8) {
-                ds_log_err("vulkan: texture upload failed for '%s' (retrying next frame)",
-                           t->name ? t->name : "?");
-                vk_upload_fail_logs++;
-                logged = 1;
-            }
-            vk_pending_tex[failed++] = t; /* остаётся в очереди на следующий кадр */
+            ds_log_err("vulkan: texture upload failed for '%s'", t->name ? t->name : "?");
         }
     }
-    (void)logged;
-    vk_pending_n = failed;
+    vk_pending_n = 0;
     if (vk_pending_font) {
-        if (ds_vk_upload_font_atlas()) {
-            vk_pending_font = 0;
-        } else if (vk_upload_fail_logs < 8) {
-            ds_log_err("vulkan: font atlas upload failed (retrying next frame)");
-            vk_upload_fail_logs++;
-        }
+        vk_pending_font = 0;
+        if (!ds_vk_upload_font_atlas())
+            ds_log_err("vulkan: font atlas upload failed");
     }
 }

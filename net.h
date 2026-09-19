@@ -185,12 +185,11 @@ double net_leaderboard_cups(double idx);
 
 /* Настройки игрока: язык (0 — English, 1 — русский, как в ui/locale_core.ds),
  * хитбоксы (1 — видны), громкость музыки (0..100, по умолчанию 70),
- * лимит FPS (0 — без ограничения, по умолчанию), апскейл (1..3 — игра
- * рендерится в screen/scale и растягивается на окно, по умолчанию 1),
  * зимняя тема (1 — снежный фон арены и снегопад, по умолчанию) и счётчик FPS
- * в бою (0 — выключен, по умолчанию). Живут в settings.dat на устройстве и в
- * профиле /users/<ник> в облаке — то есть сохраняются и там, и там, как
- * прогресс. Реализация — settings_storage.inc. */
+ * в бою (0 — выключен, по умолчанию). Лимита FPS и апскейла в игре больше нет
+ * (по просьбе игрока), поэтому и настроек таких не осталось. Живут в
+ * settings.dat на устройстве и в профиле /users/<ник> в облаке — то есть
+ * сохраняются и там, и там, как прогресс. Реализация — settings_storage.inc. */
 double net_load_language(void);
 double net_load_hitboxes(void);
 void net_save_settings(double language, double hitboxes);
@@ -200,6 +199,11 @@ double net_load_winter_theme(void);
 void net_save_winter_theme(double on);
 double net_load_fps_meter(void);
 void net_save_fps_meter(double on);
+
+/* Согласие с предупреждением об эпилепсии (settings_storage.inc): метка
+ * времени нажатия кнопки согласия, хранится только на устройстве. */
+void settings_mark_legal(void);
+double settings_legal_ts(void);
 
 /* Бан система */
 double net_banned(void);

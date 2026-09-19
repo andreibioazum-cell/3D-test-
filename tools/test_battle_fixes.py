@@ -34,6 +34,8 @@ int mouse_clicked = 0;
 Joy joy;
 double ds_mouse_x = 0, ds_mouse_y = 0;
 
+static int legal_marks;
+void settings_mark_legal(void) { legal_marks++; }
 void ds_log(const char *format, ...) { (void)format; }
 void ds_log_err(const char *format, ...) { (void)format; }
 void ds_console_log(int is_error, const char *format, ...) { (void)is_error; (void)format; }
@@ -254,9 +256,10 @@ void line(float x1, float y1, float x2, float y2, float t, uint32_t c) {
     calls[call_count - 1].t = t;   /* толщина полосы — она и есть ширина зоны */
 }
 void rect(float x, float y, float w, float h, uint32_t c) { record('q', x, y, w, h, c); }
+/* Повёрнутый прямоугольник (ровные зоны удара и полосы): угол пишем в .t. */
 void rect_rot(float x, float y, float w, float h, float ang, uint32_t c) {
-    record('x', x, y, w, h, c);
-    calls[call_count - 1].r = ang;   /* r — угол поворота полосы */
+    record('t', x, y, w, h, c);
+    calls[call_count - 1].t = ang;
 }
 /* roundrect пишут и меню, и зоны рывка: запоминаем вызов вместе с радиусом. */
 void roundrect(float x, float y, float w, float h, float r, uint32_t color) {
@@ -470,87 +473,83 @@ static void test_hitbox_drawing(void) {
     show_hitboxes = 1;
     player_class = CLASS_SANTA;
     enemy_class = CLASS_ORDINARY;
-    player->x = 400; player->y = 400; player->size = 25; player->angle = 0;
+    player->x = 400; player->y = 400; player->size = 25;
     enemy->x = 1000; enemy->y = 400; enemy->size = 25;
     enemy->hp = 999; enemy->max_hp = 999;
     player->hp = 999; player->max_hp = 999;
-    uint32_t dark = 0x00000000;             /* hitbox_rgb: тёмные, как раньше */
-    uint32_t zone = (96u << 24) | dark;     /* hitbox_zone_alpha=96 */
-    /* Снежинка: снаряд, взрыв и линия пути - всё одной полупрозрачной зоной
-     * (раньше были отдельные заливка/контур с разными альфами). */
+    uint32_t dark = 0x00000000;            /* hitbox_rgb: тёмные, как раньше */
+    uint32_t zone = (96u << 24) | dark;    /* hitbox_zone_alpha: одна на всех */
+    /* Снежинка: снаряд и взрыв залиты ОДНИМ цветом и одной прозрачностью,
+     * путь - ровная полоса (rect_rot): ни круглых заглушек line(), ни
+     * контуров ring() поверх заливки. */
     gift->active = 1; snow_ball_a = 1;
     gift->x = 400; gift->y = 400; gift->dx = 1; gift->dy = 0; gift->t = 0;
     boom_t = 1; boom_x = 700; boom_y = 400; snow_boom_a = 1;
     call_count = 0;
     ds_fn_draw_ability_hitboxes();
-    assert(count_kind_color('c', zone) >= 2);   /* снаряд + взрыв */
-    assert(count_kind_color('l', zone) >= 1);   /* линия пути */
-    assert(count_kind_color('r', zone) == 0);   /* отдельных контуров нет */
-    /* Половина альфы: прозрачность считается от общей hitbox_zone_alpha. */
+    assert(count_kind_color('c', zone) >= 2);   /* снаряд + взрыв залиты */
+    assert(count_kind_color('t', zone) >= 1);   /* полоса пути */
+    assert(count_kind_color('r', zone) == 0);   /* контуров больше нет */
+    /* При альфе 0.5 зона полупрозрачная (плавное появление работает). */
     snow_ball_a = 0.5;
     call_count = 0;
     ds_fn_draw_ability_hitboxes();
     assert(count_kind_color('c', (48u << 24) | dark) >= 1);
-    gift->active = 0; boom_t = 0; snow_ball_a = 0; snow_boom_a = 0;
-    /* Рывок: ровно ОДНА полупрозрачная полоса по уже проеханному отрезку -
-     * rect_rot в направлении рывка, а не цепочка чёрных плит. */
+    gift->active = 0; boom_t = 0;
+    snow_ball_a = 0; snow_boom_a = 0;
+    /* Рывок: клетки зоны урона - ОСТРЫЕ квадраты (rect) того же цвета и той же
+     * прозрачности, что и остальные зоны; скруглений нет нигде. Клетки по
+     * уже проеханному отрезку, один слой. */
     dash_active = 1; dash_box_a = 1;
     dash_x0 = 300; dash_y0 = 400; dash_dx = 1; dash_dy = 0;
     player->x = 700; player->y = 400;
     call_count = 0;
     ds_fn_draw_ability_hitboxes();
-    double pr = ds_fn_dash_hit_radius_solo();            /* радиус урона */
-    double travel = azum_dash_speed * azum_dash_time;    /* 382.5 из 400 пути */
-    assert(count_kind_color('x', zone) == 1);
-    assert(count_kind_color('o', zone) == 0);       /* скруглённых клеток нет */
-    assert(count_kind_color('q', zone) == 0);       /* и голых квадратов тоже */
-    assert(count_kind_color('c', zone) == 0);
-    assert(count_kind_color('l', zone) == 0);
+    double pr = ds_fn_dash_hit_radius_solo();    /* тот же радиус, что и урон */
+    double side = pr * dash_hitbox_zone_scale;   /* сторона большого квадрата */
+    double travel = azum_dash_speed * azum_dash_time;   /* 382.5 из 400 пути */
+    int squares = count_kind_color('q', zone);
+    assert(squares >= (int)(travel / side));
+    assert(squares >= 8);
+    assert(count_kind_color('o', zone) == 0);       /* roundrect в хитбоксах нет */
     for (int i = 0; i < call_count; i++) {
-        if (calls[i].kind != 'x' || calls[i].color != zone) continue;
-        /* Полоса = капсула рывка: длина = путь + два радиуса, толщина = диаметр,
-         * центр посередине пройденного отрезка, поворот по направлению. */
-        assert(fabs(calls[i].w - (travel + pr * 2)) < 1e-3);
-        assert(fabs(calls[i].h - pr * 2) < 1e-3);
-        near(calls[i].r, 0.0);
-        near(calls[i].x + calls[i].w / 2, 300 + travel / 2);
-        near(calls[i].y + calls[i].h / 2, 400);
+        if (calls[i].kind != 'q' || calls[i].color != zone) continue;
+        /* Все клетки одного большого размера и сидят на сетке мира. */
+        assert(fabs(calls[i].w - side) < 1e-3);
+        assert(fabs(calls[i].h - side) < 1e-3);
+        double gx = calls[i].x / side, gy = calls[i].y / side;
+        assert(fabs(gx - floor(gx + 0.5)) < 1e-3);   /* центр клетки сетки */
+        assert(fabs(gy - floor(gy + 0.5)) < 1e-3);
     }
-    /* Рывок бота в соло рисуется тем же радиусом, которым он бьёт. */
+    /* Ни капсул line(), ни кругов: слой ровно один. */
+    assert(count_kind_color('l', zone) == 0);
+    assert(count_kind_color('c', zone) == 0);
+    /* Рывок бота в соло рисуется тем же радиусом и тем же цветом. */
     dash_active = 0; dash_box_a = 0;
     enemy_dash_active = 1; edash_box_a = 1;
     enemy_dash_x0 = 1100; enemy_dash_y0 = 400; enemy_dash_dx = -1; enemy_dash_dy = 0;
     enemy->x = 800; enemy->y = 400;
     call_count = 0;
     ds_fn_draw_ability_hitboxes();
-    assert(count_kind_color('x', zone) == 1);
+    assert(count_kind_color('q', zone) >= 5);
     assert(count_kind_color('o', zone) == 0);
-    for (int i = 0; i < call_count; i++) {
-        if (calls[i].kind != 'x' || calls[i].color != zone) continue;
-        assert(fabs(fabs(calls[i].r) - 3.14159265) < 1e-3);  /* рывок влево */
-    }
-    enemy_dash_active = 0; edash_box_a = 0;
-    /* Турель: ровный полупрозрачный квадрат той же общей альфой. */
+    assert(count_kind_color('l', zone) == 0);
+    assert(count_kind_color('c', zone) == 0);
+    enemy_dash_active = 0;
+    /* Квадрат зоны вокруг деспенсера больше не рисуется: ни заливки, ни
+     * контура - у турели остаётся только тень-спрайт. */
+    edash_box_a = 0;
     own_turret(0, 500, 460, 10);
     arr_set(turret_box_a, 0, 1);
     call_count = 0;
     ds_fn_draw_ability_hitboxes();
-    double hs = ds_fn_turret_zone_half();
-    assert(count_kind_color('q', zone) == 1);
-    assert(count_kind_color('x', zone) == 0);
-    for (int i = 0; i < call_count; i++) {
-        if (calls[i].kind != 'q' || calls[i].color != zone) continue;
-        assert(fabs(calls[i].w - hs * 2) < 1e-3);
-        assert(fabs(calls[i].h - hs * 2) < 1e-3);
-        near(calls[i].x, 500 - hs);
-        near(calls[i].y, 460 - hs);
-    }
-    /* Совпадение рисунка и проверки: дальний край нарисованной полосы удара
-     * ещё бьёт, а точка за ним - уже нет. */
-    double front = ds_fn_punch_front_offset(player->size);
-    assert(ds_fn_in_punch_box(400, 400, 1, 0, 400 + front + punch_reach, 400) == 1);
-    assert(ds_fn_in_punch_box(400, 400, 1, 0, 400 + front + punch_reach + 20, 400) == 0);
-    puts("hitboxes: one color and one alpha for every zone, dash is a single strip");
+    assert(count_kind_color('q', zone) == 0);  /* без заливки квадрата */
+    assert(count_kind_color('o', zone) == 0);  /* без скруглённой заливки */
+    assert(count_kind_color('t', zone) == 0);  /* без полос */
+    assert(count_kind_color('l', zone) == 0);  /* без капсул */
+    assert(count_kind_color('r', zone) == 0);  /* без круглого контура */
+    assert(count_kind_color('c', zone) == 0);  /* без круглой заливки */
+    puts("hitboxes: one transparent colour everywhere, sharp corners only");
 }
 
 static void test_poison_green(void) {
@@ -579,14 +578,32 @@ static void test_poison_green(void) {
 }
 
 static void test_splash_screens(void) {
-    /* Предупреждение: текст тает, чёрный экран остаётся и сразу же на нём
-     * проявляется заставка студии. */
+    /* Предупреждение об эпилепсии больше не тает по таймеру: экран держится
+     * до явного согласия (legal_accept в скриптах), иначе предупреждение
+     * можно «проспать» и войти в игру без него. */
     ds_fn_reset_battle();
-    warn_open = 1; warn_t = 0; warn_a = 1; warn_hold = 2.5; warn_fade = 0.6;
+    warn_open = 1; warn_a = 1; warn_ready = 0;
     studio_open = 0;
     dt = 0.1;
-    for (int i = 0; i < 40; i++) ds_fn_update_warning();  /* 4.0 c */
-    assert(warn_open == 0 && studio_open == 1 && studio_bg_a == 1);
+    ds_fn_legal_accept();
+    assert(warn_open == 1 && studio_open == 0);
+    for (int i = 0; i < 15; i++) ds_fn_update_warning();
+    near(warn_ready, 0.5);
+    ds_fn_touch_warn(screen_w / 2, ds_fn_warn_btn_y() + 20, 0);
+    assert(warn_open == 1 && studio_open == 0);
+    for (int i = 0; i < 25; i++) ds_fn_update_warning();
+    near(warn_ready, 1);
+    assert(legal_marks == 0);
+    ds_fn_touch_warn(screen_w / 2, ds_fn_warn_btn_y() + 20, 1);
+    assert(legal_marks == 0);
+    ds_fn_touch_warn(screen_w / 2, ds_fn_warn_btn_y() + 20, 0);
+    assert(legal_marks == 1 && warn_open == 0 && studio_open == 1);
+    warn_open = 1; warn_a = 1; studio_open = 0;
+    assert(warn_open == 1 && warn_a == 1 && studio_open == 0);
+    /* Согласие (тело legal_accept): гейт закрывается и стартует заставка
+     * студии — дальше она работает как раньше. */
+    warn_open = 0; warn_a = 0;
+    studio_open = 1; studio_t = 0; studio_a = 0; studio_bg_a = 1;
     /* Заставка: логотип проявляется и висит на цельном чёрном фоне... */
     studio_t = 0; studio_a = 0; studio_in = 0.5; studio_hold = 1.6; studio_fade = 0.7;
     for (int i = 0; i < 10; i++) ds_fn_update_studio();   /* 1.0 c */
@@ -598,12 +615,18 @@ static void test_splash_screens(void) {
     near(studio_bg_a, studio_a);
     for (int i = 0; i < 20; i++) ds_fn_update_studio();   /* +2.0 c */
     assert(studio_open == 0 && studio_bg_a == 0);
-    /* Отрисовка: фон предупреждения непрозрачно-чёрный даже при тающем
-     * тексте; фон заставки прозрачнеет только вместе с логотипом. */
+    /* Отрисовка: фон предупреждения непрозрачно-чёрный, поверх — короткий
+     * текст и кнопка согласия; фон заставки прозрачнеет только вместе с
+     * логотипом. */
     warn_open = 1; warn_a = 0.5;
     call_count = 0;
     ds_fn_draw_warning();
     assert(calls[0].kind == 'q' && calls[0].color == 0xFF000000);
+    int saw_accept_btn = 0;
+    for (int i = 0; i < call_count; i++) {
+        if (calls[i].kind == 'o' && calls[i].color == 0xFF383838) saw_accept_btn = 1;
+    }
+    assert(saw_accept_btn);
     studio_open = 1; studio_a = 0.4; studio_bg_a = 0.4;
     call_count = 0;
     ds_fn_draw_studio();
@@ -632,25 +655,13 @@ static void test_punch_hitbox_fades(void) {
     assert(enemy_punch_a > 0 && enemy_punch_a < 1);
     for (int i = 0; i < 10; i++) ds_fn_tick_hitbox_fades();
     near(enemy_punch_a, 0);
-    /* Рисуется она той же альфой, а не единицей, и стоит впереди бойца:
-     * полоса начинается от края корпуса, а не от центра спрайта. */
+    /* Рисуется она той же альфой, а не единицей. */
     enemy_punch_a = 0.5;
     enemy->x = 400; enemy->y = 300; enemy->angle = 0;
     call_count = 0;
     ds_fn_draw_enemy_hitbox();
-    assert(count_kind_color('x', (48u << 24) | 0x00000000) == 1);  /* floor(0.5*96) */
-    {
-        int found = 0;
-        for (int i = 0; i < call_count; i++) {
-            if (calls[i].kind != 'x') continue;
-            near(calls[i].x, 400 + ds_fn_punch_front_offset(enemy->size));
-            near(calls[i].y, 300 - enemy_punch_width / 2);
-            assert(fabs(calls[i].w - enemy_punch_reach) < 1e-3);
-            assert(fabs(calls[i].h - enemy_punch_width) < 1e-3);
-            found = 1;
-        }
-        assert(found == 1);
-    }
+    assert(count_kind_color('t', (48u << 24) | 0x00000000) == 1);  /* floor(0.5*96) */
+    assert(count_kind_color('l', (48u << 24) | 0x00000000) == 0);  /* без капсул line() */
     /* Конец боя: все хитбоксы гаснут плавно, а не исчезают разом. */
     ds_fn_reset_battle();
     game_state = ST_SOLO;
@@ -721,6 +732,7 @@ static void test_dash_zone_narrow(void) {
     near(pr, old_r * dash_hit_radius_scale);
     assert(dash_hit_radius_scale < 1.0);
     assert(dash_hit_radius_scale >= 0.85);
+    assert(pr * dash_hitbox_zone_scale < old_r * 2);   /* полоса уже прежнего диаметра */
     /* Рывок, прошедший в стороне между новым и старым радиусом, больше не бьёт. */
     game_state = ST_ONLINE;
     double remote_old = player->size * 0.65 + 14;
@@ -730,7 +742,7 @@ static void test_dash_zone_narrow(void) {
     assert(ds_fn_dash_resolve_target(200, 500, 1, 0, 600) == -1);
     player->y = 500 + remote_pr - 1;
     assert(ds_fn_dash_resolve_target(200, 500, 1, 0, 600) == 0);
-    puts("dash: narrower damage zone, the drawn strip follows it");
+    puts("dash: narrower damage zone, the drawn squares follow it");
 }
 
 static void test_own_punch_spares_own_turret(void) {
@@ -848,15 +860,11 @@ static void test_turret_shadow_square(void) {
     assert(tint_calls == 1);
     assert(strcmp(tint_last, "despenser.png") == 0);
     assert(call_count == 0);                    /* тень — спрайт, не круг */
-    /* Сам хитбокс турели — обычный полупрозрачный квадрат той же общей
-     * альфой, что у остальных зон (раньше он был чёрной плитой без
-     * смешивания — теперь это один цвет и одна прозрачность на всё). */
     arr_set(turret_box_a, 0, 1);
     call_count = 0;
     ds_fn_draw_ability_hitboxes();
-    assert(count_kind_color('q', (96u << 24) | 0x00000000) == 1);
-    assert(call_count == 1);
-    puts("turret: square sprite shadow stays, translucent zone square of one style");
+    assert(call_count == 0);   /* квадрат зоны вокруг деспенсера убран */
+    puts("turret: square sprite shadow stays, no hit square around the despenser");
 }
 
 static void test_station_beam_stable(void) {
@@ -1013,8 +1021,25 @@ def check_firebase_rules_cover_request_bodies():
     assert not missing, f"banner rules miss: {sorted(missing)}"
 
 
+def check_sprite_assets_exist():
+    """Каждая текстура, на которую ссылаются скрипты, лежит в game/assets.
+
+    После отката к 76ed6fc из ассетов выпали azum.png и azum_punch.png: класс
+    Азум был невидимым в бою, и игрока выдавали только эффекты удара («игрока
+    нет, при ударе видно»). Проверка читает все строковые имена *.png из
+    скриптов и требует файл под каждое из них.
+    """
+    names = set()
+    for ds in (ROOT / "game" / "scripts").rglob("*.ds"):
+        names |= set(re.findall(r'"([A-Za-z0-9_./-]+\.png)"', ds.read_text(encoding="utf-8")))
+    assert names, "не найдено ни одной ссылки на png в скриптах"
+    missing = [n for n in sorted(names) if not (ROOT / "game" / "assets" / n.split("/")[-1]).exists()]
+    assert not missing, f"в game/assets не хватает текстур: {missing}"
+
+
 def main():
     check_firebase_rules_cover_request_bodies()
+    check_sprite_assets_exist()
     with tempfile.TemporaryDirectory(prefix="cubic-fixes-") as directory:
         temp = Path(directory)
         compiler = DimScriptCompiler()
@@ -1053,16 +1078,22 @@ def main():
         # Dash resolution takes the traveled length.
         params = [p[1] for p in fns["dash_resolve_target"][1]]
         assert params == ["sx", "sy", "dx", "dy", "len"]
-        # Dash hitbox: одна общая полупрозрачная полоса вдоль пути (rect_rot),
-        # без скруглённых клеток и без цепочки кубиков.
+        # Dash hitbox: one layer of big rounded cells, no small trailing cube
+        # chain and no stripe; cells are reused from one shared array.
         assert "draw_hit_dash_cube" not in fns and "draw_hit_dash_zone" not in fns
         dash_body = "".join(fns["draw_hit_dash_path"][2])
-        assert "draw_hit_strip(" in dash_body, "dash zone must be one strip"
+        assert "rect(" in dash_body and "roundrect(" not in dash_body
+        assert "line(" not in dash_body
+        assert "hitbox_corner" not in dash_body, "dash cells must be sharp squares"
+        assert "arr_new()" not in dash_body, "dash cells must reuse one array"
+        # Зоны с острыми углами: удар и все полосы - rect_rot, не line().
+        punch_body = "".join(fns["draw_punch_box"][2])
+        assert "draw_hit_strip(" in punch_body and "line(" not in punch_body
         strip_body = "".join(fns["draw_hit_strip"][2])
-        assert "rect_rot(" in strip_body and "hb_zone_col(" in strip_body, \
-            "strip must be a plain translucent rect_rot"
-        assert "roundrect(" not in strip_body, "no roundrect: it ignores blending"
-        assert "arr_new()" not in strip_body
+        assert "rect_rot(" in strip_body and "line(" not in strip_body
+        # Прозрачность одна на все зоны: альфы берёт hb_zone_col.
+        zone_body = "".join(fns["hb_zone_col"][2])
+        assert "hitbox_zone_alpha" in zone_body
         # Own turret can never intercept the owner's punch.
         assert "punch_turret_target" not in fns
         # Turret shadow is the despenser sprite itself (square, tinted).

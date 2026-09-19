@@ -50,8 +50,7 @@
         "santa_levels": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3" },
         "ebuc_level": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3" },
         "ebuc_levels": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3" },
-        "fps": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 240" },
-        "bp": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5" },
+                "bp": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5" },
         "azum_skin": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1" },
         "ach_flags": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 255" },
         "ach_revives": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000" },
@@ -61,8 +60,7 @@
         "promo": { ".validate": "newData.isString() && newData.val().length >= 4 && newData.val().length <= 24" },
         "playtime": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000000" },
         "promo_used": { ".validate": "newData.isNumber() && (newData.val() == 0 || newData.val() == 1)" },
-        "scale": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 3" },
-        "winter": { ".validate": "newData.isNumber() && (newData.val() == 0 || newData.val() == 1)" },
+                "winter": { ".validate": "newData.isNumber() && (newData.val() == 0 || newData.val() == 1)" },
         "showfps": { ".validate": "newData.isNumber() && (newData.val() == 0 || newData.val() == 1)" },
         "$other": { ".validate": false }
       }
