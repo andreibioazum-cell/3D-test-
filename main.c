@@ -17,6 +17,7 @@ static AAssetManager *script_assets = NULL;
 static uint64_t restart_after_ns = 0;
 static unsigned int restart_failures = 0;
 static uint64_t prev_frame_ns = 0;
+static uint64_t prev_loop_ns = 0;
 static struct android_app *g_app = NULL;
 static uint64_t monotonic_ns(void) {
     struct timespec now;
@@ -205,6 +206,11 @@ void android_main(struct android_app *app) {
         if (!app->window || !init_done || app->destroyRequested) continue;
         restart_script_if_due();
         uint64_t frame_start = monotonic_ns();
+        /* Фактический период кадров (включая ожидание vsync) уходит в графику:
+         * по нему автоматическое внутреннее разрешение решает, укладывается ли
+         * устройство в 60 fps полным размером окна. */
+        if (prev_loop_ns) ds_graphics_report_frame_interval((double)(frame_start - prev_loop_ns) / 1e9);
+        prev_loop_ns = frame_start;
         apply_screen_size();
         if (script_active) {
             uint64_t now = frame_start;

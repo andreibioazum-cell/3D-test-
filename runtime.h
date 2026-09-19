@@ -131,6 +131,13 @@ int text_height(const char *string);
 int text_ink_width(const char *string);
 int text_ink_height(const char *string);
 int text_ink_top(const char *string);
+/* Автоматическое внутреннее разрешение (без кнопки и без настройки): главный
+ * цикл сообщает фактический интервал кадров, а графика при накоплении промахов
+ * по vsync рисует кадр в оффскрин в 2..3 раза меньше окна и растягивает его
+ * (LINEAR), возвращаясь к 1:1, как только появляется запас. ds_graphics_pixel_scale
+ * нужен логам и хост-тестам. */
+void ds_graphics_report_frame_interval(double seconds);
+int ds_graphics_pixel_scale(void);
 /* Создание Vulkan-рендера: менеджер активов плюс окно (для поверхности
  * VK_KHR_android_surface). Возвращает 1 при успехе; при 0 кадры не рисуются. */
 int ds_graphics_init(AAssetManager *assets, ANativeWindow *window);

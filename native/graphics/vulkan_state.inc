@@ -30,6 +30,9 @@ static uint32_t vk_queue_family;
 static int vk_ready;
 static int vk_need_recreate;
 static int vk_blit_ok = 1;
+/* Есть ли у формата swapchain линейная фильтрация для blit: растягивание
+ * уменьшенного оффскрина с LINEAR выглядит мягко, а не «пикселями». */
+static int vk_blit_linear = 0;
 
 static VkSwapchainKHR vk_swap;
 static uint32_t vk_sw_count;

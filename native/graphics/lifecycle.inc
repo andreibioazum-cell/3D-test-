@@ -271,13 +271,76 @@ int ds_graphics_init(AAssetManager *a, ANativeWindow *window) {
     if (amgr != a) { ds_release_assets(); amgr = a; }
     return ds_vk_init_backend(window);
 }
-/* Апскейла в настройках больше нет (по просьбе игрока): кадр всегда рисуется
- * в полном размере окна, поэтому оффскрин ровно с окно и blit идёт 1:1. */
+/* Автоматическое внутреннее разрешение: ни кнопки, ни настройки, ни сохранённого
+ * значения — только реакция на фактическую скорость кадров. Vsync (FIFO)
+ * квантует частоту: стоит кадру стать чуть дольше 16.6 мс, и вместо 60 будет 30.
+ * На слабых GPU в бою (много слоёв смешивания на весь экран) полный размер окна
+ * в этот бюджет не укладывается, поэтому при накоплении промахов кадр рисуется
+ * в оффскрин в scale раз меньше и растягивается на окно; как только запас
+ * появляется — возвращаемся к 1:1. Картинка всегда резкая, пока устройство
+ * держит 60 fps; мягче она становится только вместо провала в 30.
+ * Решения принимаются с гистерезисом, чтобы масштаб не дёргался каждый кадр. */
+static int gfx_auto_scale = 1;
+static int gfx_cooldown = 0;        /* кадров до любых решений после смены */
+static int gfx_finer_cooldown = 0;  /* кадров до следующей пробы «резче» */
+static int gfx_probe_finer = 0;     /* только что сделали резче: промах откатит */
+static int gfx_miss_streak = 0, gfx_win_frames = 0, gfx_win_misses = 0;
+
+int ds_graphics_pixel_scale(void) { return gfx_auto_scale; }
+
+static void gfx_set_scale(int s, int cooldown) {
+    if (s < 1) s = 1;
+    if (s > 3) s = 3;
+    if (s == gfx_auto_scale) return;
+    gfx_auto_scale = s;
+    gfx_cooldown = cooldown;
+    gfx_miss_streak = 0; gfx_win_frames = 0; gfx_win_misses = 0;
+    ds_log("graphics: internal resolution 1/%d (auto)", s);
+}
+
+/* Кадровый интервал главного цикла (секунды): вызывается после каждого кадра. */
+void ds_graphics_report_frame_interval(double sec) {
+    if (!(sec > 0.0) || sec > 0.25) return;   /* пауза, сворачивание, отладчик */
+    if (gfx_finer_cooldown > 0) gfx_finer_cooldown--;
+    if (gfx_cooldown > 0) { gfx_cooldown--; return; }
+    /* Промах по vsync 60 Гц: кадр пришёл ко второму вертикальному интервалу
+     * (33 мс) или позже. 20 мс — граница с запасом против дрожания 16.7. */
+    int missed = sec > 0.020;
+    if (missed) {
+        if (gfx_probe_finer) {   /* проба «резче» провалилась — откат и надолго */
+            gfx_probe_finer = 0;
+            if (gfx_finer_cooldown < 600) gfx_finer_cooldown = 600;
+            gfx_set_scale(gfx_auto_scale + 1, 90);
+            return;
+        }
+        gfx_miss_streak++;
+    } else {
+        gfx_miss_streak = 0;
+    }
+    gfx_win_frames++;
+    if (missed) gfx_win_misses++;
+    if (gfx_miss_streak >= 10 || gfx_win_frames >= 45) {
+        int bad = gfx_miss_streak >= 10 || gfx_win_misses >= 9;
+        if (bad) {
+            if (gfx_auto_scale < 3) gfx_set_scale(gfx_auto_scale + 1, 90);
+        } else if (gfx_win_misses == 0 && gfx_auto_scale > 1 && gfx_finer_cooldown == 0) {
+            gfx_probe_finer = 1;
+            gfx_finer_cooldown = 240;
+            gfx_set_scale(gfx_auto_scale - 1, 45);
+        }
+        gfx_win_frames = 0; gfx_win_misses = 0;
+    }
+}
+
 int ds_graphics_begin_frame(Buffer *b) {
     if (!b || b->width <= 0 || b->height <= 0 || b->stride < b->width) return 0;
-    /* b->pixels больше не используется: рисуем через Vulkan. */
-    if (!ds_vk_begin_frame_backend((uint32_t)b->width, (uint32_t)b->height,
-                                   (uint32_t)b->width, (uint32_t)b->height)) return 0;
+    /* b->pixels больше не используется: рисуем через Vulkan. Оффскрин равен
+     * окну, пока автомасштаб не увидел промахов по vsync. */
+    uint32_t s = (uint32_t)gfx_auto_scale;
+    uint32_t ow = (uint32_t)b->width / s, oh = (uint32_t)b->height / s;
+    if (ow < 1) ow = 1;
+    if (oh < 1) oh = 1;
+    if (!ds_vk_begin_frame_backend((uint32_t)b->width, (uint32_t)b->height, ow, oh)) return 0;
     discard_commands();
     cur_buf = b; frame_open = 1;
     return 1;

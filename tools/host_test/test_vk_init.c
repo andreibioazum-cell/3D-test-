@@ -100,7 +100,8 @@ static void g_fill_format_props(VkFormatProperties *fp) {
     memset(fp, 0, sizeof *fp);
     fp->optimalTilingFeatures = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
                                 VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT |
-                                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+                                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                                VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
 }
 
 /* --- фейковые реализации (только то, что использует графический TU) --- */
@@ -385,7 +386,14 @@ void vkCmdBlitImage(VkCommandBuffer cb, VkImage src, VkImageLayout sl, VkImage d
     if (n == 1 && rc) {
         g_blit_src_w = rc[0].srcOffsets[1].x; g_blit_src_h = rc[0].srcOffsets[1].y;
         g_blit_dst_w = rc[0].dstOffsets[1].x; g_blit_dst_h = rc[0].dstOffsets[1].y;
-        if (f != VK_FILTER_NEAREST) g_violation("blit: фильтр не NEAREST (апскейл обязан быть пиксельным)");
+        int same_size = rc[0].srcOffsets[1].x == rc[0].dstOffsets[1].x &&
+                        rc[0].srcOffsets[1].y == rc[0].dstOffsets[1].y;
+        /* 1:1 - без фильтрации; растягивание автомасштаба - LINEAR (формат
+         * фейкового драйвера линейную фильтрацию рекламирует). */
+        if (same_size && f != VK_FILTER_NEAREST)
+            g_violation("blit 1:1: фильтр не NEAREST");
+        if (!same_size && f != VK_FILTER_LINEAR)
+            g_violation("blit автомасштаба: фильтр не LINEAR (растягивание обязано быть мягким)");
     }
     g_blits++;
 }
@@ -417,8 +425,11 @@ int AAsset_close(AAsset *a) { (void)a; return 0; }
 
 #define TEST_STACK_SIZE (1u << 20)
 static char test_stack[TEST_STACK_SIZE];
-static struct { int init_ok; int frame1_ok; int frame2_ok; int frame3_ok;
-                unsigned off_w, off_h, log_w, log_h; } g_res;
+static struct { int init_ok; int frame1_ok; int frame2_ok; int frame3_ok; int frame4_ok;
+                unsigned off_w, off_h, log_w, log_h, off2_w, off2_h;
+                unsigned blit_src_w, blit_src_h, blit_dst_w, blit_dst_h;
+                unsigned blit2_src_w, blit2_src_h, blit2_dst_w, blit2_dst_h;
+                int scale0, scale_miss, scale_probe, scale_rollback; } g_res;
 
 static void *test_thread(void *arg) {
     (void)arg;
@@ -447,6 +458,26 @@ static void *test_thread(void *arg) {
     ds_graphics_end_frame();
     g_res.off_w = vk_off_w; g_res.off_h = vk_off_h;
     g_res.log_w = vk_log_w; g_res.log_h = vk_log_h;
+    g_res.blit_src_w = g_blit_src_w; g_res.blit_src_h = g_blit_src_h;
+    g_res.blit_dst_w = g_blit_dst_w; g_res.blit_dst_h = g_blit_dst_h;
+    /* Автоматическое внутреннее разрешение: промахи по vsync уводят оффскрин
+     * в 1/2, окно без промахов возвращает 1:1, промах на пробе «резче» откатывает
+     * масштаб обратно. Кнопки и настройки для этого больше нет. */
+    g_res.scale0 = ds_graphics_pixel_scale();
+    for (int i = 0; i < 10; i++) ds_graphics_report_frame_interval(0.0333);
+    g_res.scale_miss = ds_graphics_pixel_scale();
+    g_res.frame4_ok = ds_graphics_begin_frame(&b);
+    rect(0, 0, 10, 10, 0xff123456);
+    ds_graphics_end_frame();
+    g_res.off2_w = vk_off_w; g_res.off2_h = vk_off_h;
+    g_res.blit2_src_w = g_blit_src_w; g_res.blit2_src_h = g_blit_src_h;
+    g_res.blit2_dst_w = g_blit_dst_w; g_res.blit2_dst_h = g_blit_dst_h;
+    for (int i = 0; i < 90; i++) ds_graphics_report_frame_interval(0.0167); /* кулдаун смены */
+    for (int i = 0; i < 45; i++) ds_graphics_report_frame_interval(0.0167); /* окно без промахов */
+    g_res.scale_probe = ds_graphics_pixel_scale();
+    for (int i = 0; i < 45; i++) ds_graphics_report_frame_interval(0.0167); /* кулдаун пробы */
+    for (int i = 0; i < 10; i++) ds_graphics_report_frame_interval(0.0333); /* промах на пробе */
+    g_res.scale_rollback = ds_graphics_pixel_scale();
     ds_graphics_shutdown();
     return 0;
 }
@@ -478,15 +509,29 @@ int main(void) {
         fail = 1; printf("FAIL: push-константы кадра с апскейлом %g %g, ожидалось %g %g (шейдер должен делить на окно, не на оффскрин)\n",
                          g_pc[0], g_pc[1], 2.0f / 720.0f, 2.0f / 1280.0f);
     }
-    if (g_blit_src_w != 720 || g_blit_src_h != 1280 || g_blit_dst_w != 720 || g_blit_dst_h != 1280) {
-        fail = 1; printf("FAIL: blit %dx%d -> %dx%d, ожидалось 720x1280 -> 720x1280 (без апскейла)\n",
-                         g_blit_src_w, g_blit_src_h, g_blit_dst_w, g_blit_dst_h);
+    if (g_res.blit_src_w != 720 || g_res.blit_src_h != 1280 || g_res.blit_dst_w != 720 || g_res.blit_dst_h != 1280) {
+        fail = 1; printf("FAIL: blit %dx%d -> %dx%d, ожидалось 720x1280 -> 720x1280 (масштаб 1:1)\n",
+                         g_res.blit_src_w, g_res.blit_src_h, g_res.blit_dst_w, g_res.blit_dst_h);
     }
+    if (!g_res.frame4_ok) { fail = 1; printf("FAIL: begin_frame кадра с автомасштабом вернул 0\n"); }
+    if (g_res.scale0 != 1) { fail = 1; printf("FAIL: стартовый автомасштаб %d, ожидался 1\n", g_res.scale0); }
+    if (g_res.scale_miss != 2) { fail = 1; printf("FAIL: после промахов по vsync автомасштаб %d, ожидался 2\n", g_res.scale_miss); }
+    if (g_res.off2_w != 360 || g_res.off2_h != 640) {
+        fail = 1; printf("FAIL: оффскрин автомасштаба %ux%u, ожидалось 360x640\n", g_res.off2_w, g_res.off2_h);
+    }
+    if (g_res.blit2_src_w != 360 || g_res.blit2_src_h != 640 ||
+        g_res.blit2_dst_w != 720 || g_res.blit2_dst_h != 1280) {
+        fail = 1; printf("FAIL: blit автомасштаба %dx%d -> %dx%d, ожидалось 360x640 -> 720x1280\n",
+                         g_res.blit2_src_w, g_res.blit2_src_h, g_res.blit2_dst_w, g_res.blit2_dst_h);
+    }
+    if (g_res.scale_probe != 1) { fail = 1; printf("FAIL: после окна без промахов автомасштаб %d, ожидался 1\n", g_res.scale_probe); }
+    if (g_res.scale_rollback != 2) { fail = 1; printf("FAIL: после промаха на пробе «резче» автомасштаб %d, ожидался 2\n", g_res.scale_rollback); }
     if (g_blits < 3) { fail = 1; printf("FAIL: blit не вызывался на каждом кадре (было %d)\n", g_blits); }
     if (g_violations) { fail = 1; printf("FAIL: строгий драйвер поймал невалидный create-info: %s\n", g_violation_msg); }
     if (!fail) {
-        printf("PASS: init + 3 кадра (оффскрин всегда с окно - апскейл убран) "
-               "+ смена формата swapchain; pNext/flags чистые, конвейеров создано %d\n", g_pipeline_creates);
+        printf("PASS: init + 4 кадра + автомасштаб (промахи vsync -> 1/2, запас -> 1:1, "
+               "промах на пробе -> откат) + смена формата swapchain; pNext/flags чистые, конвейеров создано %d\n",
+               g_pipeline_creates);
     }
     return fail;
 }
