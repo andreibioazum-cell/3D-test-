@@ -134,8 +134,8 @@ public string FB_KEY="AIzaSyDJEqopxP5EqEoxP_ehO3jFXbNztu3DgVs"
 public number lb_wait=0, lb_wait_max=8
 public number banner_show_time=6, banner_fade=0.5, banner_seen_ts=0, banner_t=0, banner_skip=1
 public number login_field=1, login_status=0, login_after=0
-public number login_ox=0, login_oy=-50, login_fh=50, login_lab=28, login_lab_ox=12
-public number login_w=460, login_btn_w=380, login_field_gap=26, login_btn_gap=22
+public number login_ox=0, login_oy=-50, login_fh=50, login_lab=34, login_lab_ox=12
+public number login_w=460, login_btn_w=380, login_field_gap=70, login_btn_gap=22
 public string login_nick="", login_pass=""
 public string LOBBY_MUSIC="lobbymusic.wav"
 public number music_ok=0, music_level=1, music_fade_in_time=0.25, music_fade_out_time=1.0
