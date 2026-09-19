@@ -27,10 +27,11 @@ public function hb_env(number a)
     end
     return a
 end
--- Общий цвет и общая прозрачность всех боевых хитбоксов: hitbox_rgb (чёрный)
--- плюс hitbox_zone_alpha, умноженные на «конверт» конкретной зоны (появление и
--- затухание). Раньше у каждой зоны была своя альфа (36 / 102 / 140 / 170), и
--- зоны выглядели по-разному.
+-- Цвет всех боевых зон ОДИН: hitbox_rgb плюс hitbox_zone_alpha, умноженная на
+-- «конверт» конкретной зоны (её плавное появление и затухание). Раньше у
+-- каждой зоны была своя альфа (36 / 102 / 140 / 170) и свой контур поверх
+-- заливки, поэтому хитбоксы выглядели по-разному; теперь прозрачность у всех
+-- одинаковая.
 public function hb_zone_col(number env)
     local number a=floor(hitbox_zone_alpha*hb_env(env))
     if a<0 then
@@ -41,22 +42,21 @@ public function hb_zone_col(number env)
     end
     return (((unsigned)(int)a)<<24)|((unsigned)(int)hitbox_rgb)
 end
--- Полоса вдоль направления (dx,dy) от точки (sx,sy): от отступа off0 до off1,
--- шириной 2*half_w. Этим рисуются зона удара и зона рывка - в игре обе
--- проверяются как отрезок с радиусом, поэтому рисуются прямоугольником, а не
--- круглой капсулой: «пятно» читалось плохо и заходило под спрайт.
---
--- rect_rot поворачивает прямоугольник вокруг его ЦЕНТРА на угол ang, поэтому
--- центр полосы считаем сами (середина между off0 и off1), а длина идёт по
--- направлению взгляда: atan2(dy,dx) без всяких поправок на 90 градусов.
+-- Ровная полоса от точки (sx,sy) вдоль направления (dx,dy): от отступа off0 до
+-- off1, шириной 2*half_w. Ей рисуются все «линейные» зоны хитбоксов (удар,
+-- путь снежка, рамка вселенной) вместо line(): у линии круглые заглушки на
+-- концах, а скруглений в хитбоксах быть не должно вообще. rect_rot рисует
+-- обычным конвейером со смешиванием, поэтому полоса прозрачная.
 public function draw_hit_strip(number sx, number sy, number dx, number dy, number off0, number off1, number half_w, number env)
+    if show_hitboxes==0||env<=0||half_w<=0 then
+        return
+    end
     local number len=off1-off0
-    if show_hitboxes==0||env<=0||len<=0||half_w<=0 then
+    if len<=0 then
         return
     end
     local number mid=(off0+off1)/2
-    local number cx=sx+dx*mid, cy=sy+dy*mid
-    rect_rot(cx-len/2,cy-half_w,len,half_w*2,atan2(dy,dx),hb_zone_col(env))
+    rect_rot(sx+dx*mid-len/2,sy+dy*mid-half_w,len,half_w*2,atan2(dy,dx),hb_zone_col(env))
 end
 public function draw_hit_circle(number x, number y, number r, number env)
     if show_hitboxes==0 then
@@ -68,19 +68,18 @@ public function draw_hit_circle(number x, number y, number r, number env)
     circle(x,y,r,hb_zone_col(env))
 end
 public function draw_hit_line(number x1, number y1, number x2, number y2, number w, number env)
-    if show_hitboxes==0 then
+    local number dx=x2-x1, dy=y2-y1
+    local number len=sqrt(dx*dx+dy*dy)
+    if w<=0||env<=0||len<=0 then
         return
     end
-    if w<=0||env<=0 then
-        return
-    end
-    line(x1,y1,x2,y2,w,hb_zone_col(env))
+    draw_hit_strip(x1,y1,dx/len,dy/len,0,len,w/2,env)
 end
 public function draw_hit_snowball(number x, number y, number dx, number dy, number t, number r, number env)
     draw_hit_circle(x,y,r,env)
     local number left=super_range-t*super_speed
     if left>0 then
-        draw_hit_line(x,y,x+dx*left,y+dy*left,r*2,env)
+        draw_hit_strip(x,y,dx,dy,0,left,r,env)
     end
 end
 public function snow_hit_radius(number target_size)
@@ -125,10 +124,14 @@ public function draw_hit_snow()
         s=s+1
     end
 end
--- Зона рывка - одна ровная полупрозрачная полоса вдоль уже пройденного пути:
--- половина ширины равна радиусу урона, концы выдвинуты на тот же радиус (это
--- капсула рывка). Раньше это была цепочка клеток через конвейер без
--- смешивания, поэтому зона выглядела залитыми чёрными плитами.
+-- Клетки зоны рывка: один общий массив на все вызовы (раньше на каждый кадр
+-- рывка создавался и выбрасывался свой), а повтор предыдущей клетки отсекается
+-- сравнением с соседом — путь прямой, поэтому в одну клетку можно попасть
+-- только дважды подряд. Клетки рисуются острыми квадратами (rect) того же
+-- цвета и той же прозрачности, что и все остальные хитбоксы: roundrect здесь
+-- больше не используется — у него и углы скруглённые, и конвейер без
+-- смешивания (зона выглядела залитыми чёрными плитами, а не полупрозрачной).
+public array dash_cells=arr_new()
 public function draw_hit_dash_path(number sx, number sy, number dx, number dy, number cx, number cy, number pr, number env)
     if pr<=0||env<=0 then
         return
@@ -141,7 +144,34 @@ public function draw_hit_dash_path(number sx, number sy, number dx, number dy, n
     if travel>len then
         travel=len
     end
-    draw_hit_strip(sx,sy,dx,dy,0-pr,travel+pr,pr,env)
+    local number side=pr*dash_hitbox_zone_scale
+    if side<=0 then
+        side=2
+    end
+    arr_clear(dash_cells)
+    local number off=0, step=side*0.5, px=0, py=0, gx=0, gy=0, prev_x=0, prev_y=0, first=1
+    while off<=travel do
+        px=sx+dx*off
+        py=sy+dy*off
+        gx=floor(px/side)
+        gy=floor(py/side)
+        if first==1||gx!=prev_x||gy!=prev_y then
+            arr_push(dash_cells,gx)
+            arr_push(dash_cells,gy)
+            prev_x=gx
+            prev_y=gy
+            first=0
+        end
+        off=off+step
+    end
+    local number col=hb_zone_col(env)
+    local number k=0
+    while k<arr_len(dash_cells) do
+        gx=arr_get(dash_cells,k)
+        gy=arr_get(dash_cells,k+1)
+        rect(gx*side,gy*side,side,side,col)
+        k=k+2
+    end
 end
 public function draw_hit_dash()
     if dash_box_a>0 then
@@ -170,58 +200,6 @@ public function draw_hit_dash()
             local number gone=azum_dash_speed*(azum_dash_time-arr_get(remote_dash,b+6))
             local number pr=dash_hit_radius_remote()
             draw_hit_dash_path(rx,ry,rdx,rdy,rx+rdx*gone,ry+rdy*gone,pr,arr_get(rdash_box_a,s))
-        end
-        s=s+1
-    end
-end
--- Квадратные зоны турелей: раньше они рисовались «сплошным» конвейером без
--- смешивания и выглядели залитыми чёрными плитами. Теперь это обычные
--- полупрозрачные квадраты того же цвета и той же прозрачности, что и остальные
--- хитбоксы.
-public function draw_hit_station_box(number x, number y, number hs, number env)
-    if show_hitboxes==0 then
-        return
-    end
-    if hs<=0||env<=0 then
-        return
-    end
-    rect(x-hs,y-hs,hs*2,hs*2,hb_zone_col(env))
-end
-public function draw_station_hitboxes()
-    if show_hitboxes==0 then
-        return
-    end
-    local number i=0
-    while i<turret_max do
-        if arr_get(turret_box_a,i)>0 then
-            draw_hit_station_box(arr_get(turret_x,i),arr_get(turret_y,i),turret_zone_half(),arr_get(turret_box_a,i))
-        end
-        i=i+1
-    end
-    if game_state==ST_SOLO then
-        i=0
-        while i<turret_max do
-            if arr_get(enemy_turret_box_a,i)>0 then
-                draw_hit_station_box(arr_get(enemy_turret_x,i),arr_get(enemy_turret_y,i),turret_zone_half(),arr_get(enemy_turret_box_a,i))
-            end
-            i=i+1
-        end
-        return
-    end
-    if net_slot()<0 then
-        return
-    end
-    local number s=0
-    while s<max_players do
-        if s!=net_slot() then
-            local number stb=s*max_players*5
-            local number k=0
-            while k<turret_max do
-                if arr_get(rstation_box_a,s*turret_max+k)>0 then
-                    draw_hit_station_box(arr_get(remote_station,stb+1+k*5),arr_get(remote_station,stb+2+k*5),turret_zone_half(),arr_get(rstation_box_a,s*turret_max+k))
-                end
-                k=k+1
-            end
         end
         s=s+1
     end
@@ -260,6 +238,5 @@ public function draw_ability_hitboxes()
     end
     draw_hit_snow()
     draw_hit_dash()
-    draw_station_hitboxes()
     draw_hit_universe()
 end

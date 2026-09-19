@@ -76,43 +76,9 @@ static int ds_error_handler_active = 0;
 static int ds_has_error = 0;
 static int ds_restart_requested = 0;
 static char ds_last_error[DS_ERROR_MESSAGE_SIZE] = {0};
-/* --- арена строк скрипта ---
- *
- * Раньше каждая склейка строк и каждое число выделялись в куче и жили до
- * перезапуска скрипта: за час боя так набегали десятки мегабайт, а само
- * освобождение (при возврате в игру после сворачивания) оставляло висячие
- * указатели в строковых переменных скрипта - чтение освобождённой памяти даёт
- * мусорный текст и падения. Арена решает обе задачи: память выделяется один
- * раз (потолок известен), а сброс просто возвращает указатель записи в начало -
- * старый указатель продолжает смотреть в живую память и в худшем случае
- * покажет чужие символы вместо падения. */
-#define DS_STRING_ARENA_BYTES (8u * 1024u * 1024u)
-static char *ds_str_arena = NULL;
-static size_t ds_str_used = 0;
-static char *ds_arena_alloc(size_t bytes) {
-    if (!ds_str_arena) {
-        ds_str_arena = (char*)malloc(DS_STRING_ARENA_BYTES);
-        if (!ds_str_arena) { ds_runtime_error("out of memory for string arena"); return NULL; }
-    }
-    /* Строка длиннее арены (в игре такой быть не может) - отдельный блок:
-     * его никто не освободит, зато переполнения не будет. */
-    if (bytes > DS_STRING_ARENA_BYTES) {
-        char *big = (char*)malloc(bytes);
-        if (!big) ds_runtime_error("out of memory for a long string");
-        return big;
-    }
-    if (ds_str_used + bytes > DS_STRING_ARENA_BYTES) ds_str_used = 0;
-    char *out = ds_str_arena + ds_str_used;
-    ds_str_used += bytes;
-    return out;
-}
-static char *ds_str_copy(const char *s) {
-    if (!s) s = "";
-    size_t n = strlen(s) + 1;
-    char *out = ds_arena_alloc(n);
-    if (out) memcpy(out, s, n);
-    return out;
-}
+typedef struct DSStringNode DSStringNode;
+struct DSStringNode { DSStringNode *next; char *string; };
+static DSStringNode *ds_strings = NULL;
 static void platform_log(int is_error, const char *format, va_list args) {
     __android_log_vprint(is_error ? ANDROID_LOG_ERROR : ANDROID_LOG_INFO, "DimScript", format, args);
 }
@@ -195,22 +161,38 @@ void ds_clear_runtime_error(void) { ds_has_error = 0; ds_last_error[0] = '\0'; }
 void ds_request_script_restart(void) { ds_restart_requested = 1; }
 int ds_script_restart_requested(void) { return ds_restart_requested; }
 void ds_clear_script_restart(void) { ds_restart_requested = 0; }
-char *ds_num_to_string(double number) {
-    char buf[32];
-    if (snprintf(buf, sizeof(buf), "%g", number) < 0) return NULL;
-    return ds_str_copy(buf);
+static char *ds_strdup(const char *s) {
+    if (!s) s = "";
+    size_t n = strlen(s)+1;
+    char *c = (char*)malloc(n);
+    if (c) memcpy(c, s, n);
+    return c;
 }
-/* Сброс арены: старые строки остаются в живой памяти, поэтому висячих
- * указателей не возникает. */
-void ds_string_pool_reset(void) { ds_str_used = 0; }
+static char *ds_track_string(char *s) {
+    if (!s) { ds_runtime_error("out of memory string"); return NULL; }
+    DSStringNode *node = (DSStringNode*)malloc(sizeof(*node));
+    if (!node) { free(s); ds_runtime_error("out of memory tracking"); return NULL; }
+    node->string = s; node->next = ds_strings; ds_strings = node;
+    return s;
+}
+char *ds_num_to_string(double number) {
+    char buf[96];
+    if (snprintf(buf, sizeof(buf), "%g", number) < 0) return NULL;
+    return ds_track_string(ds_strdup(buf));
+}
+void ds_string_pool_reset(void) {
+    DSStringNode *node = ds_strings;
+    while (node) { DSStringNode *next = node->next; free(node->string); free(node); node = next; }
+    ds_strings = NULL;
+}
 char *ds_concat(const char *left, const char *right) {
     size_t la = left ? strlen(left) : 0, lb = right ? strlen(right) : 0;
-    char *out = ds_arena_alloc(la + lb + 1);
-    if (!out) return NULL;
+    char *out = (char*)malloc(la+lb+1);
+    if (!out) return ds_track_string(ds_strdup(""));
     if (la) memcpy(out, left, la);
-    if (lb) memcpy(out + la, right, lb);
+    if (lb) memcpy(out+la, right, lb);
     out[la+lb] = '\0';
-    return out;
+    return ds_track_string(out);
 }
 struct DSArray { double *data; size_t len, cap; };
 DSArray* arr_new(void) {
@@ -288,7 +270,7 @@ int str_ends_with(const char *s, const char *suf){
     return strcmp(s+ls-lf,suf)==0 ? 1 : 0;
 }
 const char *str_sub(const char *s, double start, double len){
-    if(!s) return ds_str_copy("");
+    if(!s) return ds_track_string(ds_strdup(""));
     size_t sl=strlen(s);
     long st=(long)start;
     long ln=(long)len;
@@ -296,11 +278,11 @@ const char *str_sub(const char *s, double start, double len){
     if((size_t)st>sl) st=sl;
     if(ln<0) ln=0;
     if((size_t)(st+ln)>sl) ln=sl-st;
-    char *out=ds_arena_alloc((size_t)ln+1);
-    if(!out) return "";
+    char *out=(char*)malloc((size_t)ln+1);
+    if(!out) return ds_track_string(ds_strdup(""));
     memcpy(out,s+st,(size_t)ln);
     out[ln]='\0';
-    return out;
+    return ds_track_string(out);
 }
 double str_to_num(const char *s){
     if(!s) return 0;
@@ -310,41 +292,41 @@ double str_to_num(const char *s){
     return v;
 }
 const char *str_trim(const char *s){
-    if(!s) return ds_str_copy("");
+    if(!s) return ds_track_string(ds_strdup(""));
     const char *a=s;
     while(*a && (*a==' '||*a=='\t'||*a=='\n'||*a=='\r')) a++;
     const char *b=s+strlen(s);
     while(b>a && (b[-1]==' '||b[-1]=='\t'||b[-1]=='\n'||b[-1]=='\r')) b--;
     size_t ln=b-a;
-    char *out=ds_arena_alloc(ln+1);
-    if(!out) return "";
+    char *out=(char*)malloc(ln+1);
+    if(!out) return ds_track_string(ds_strdup(""));
     memcpy(out,a,ln);
     out[ln]='\0';
-    return out;
+    return ds_track_string(out);
 }
 const char *str_lower(const char *s){
-    if(!s) return ds_str_copy("");
+    if(!s) return ds_track_string(ds_strdup(""));
     size_t l=strlen(s);
-    char *out=ds_arena_alloc(l+1);
-    if(!out) return "";
+    char *out=(char*)malloc(l+1);
+    if(!out) return ds_track_string(ds_strdup(""));
     for(size_t i=0;i<l;i++){
         char c=s[i];
         if(c>='A'&&c<='Z') c=c-'A'+'a';
         out[i]=c;
     }
     out[l]='\0';
-    return out;
+    return ds_track_string(out);
 }
 const char *str_upper(const char *s){
-    if(!s) return ds_str_copy("");
+    if(!s) return ds_track_string(ds_strdup(""));
     size_t l=strlen(s);
-    char *out=ds_arena_alloc(l+1);
-    if(!out) return "";
+    char *out=(char*)malloc(l+1);
+    if(!out) return ds_track_string(ds_strdup(""));
     for(size_t i=0;i<l;i++){
         char c=s[i];
         if(c>='a'&&c<='z') c=c-'a'+'A';
         out[i]=c;
     }
     out[l]='\0';
-    return out;
+    return ds_track_string(out);
 }

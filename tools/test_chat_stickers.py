@@ -224,18 +224,18 @@ static void test_send_and_touch(void) {
 }
 
 static void test_video_settings(void) {
-    /* Апскейла и лимита FPS в настройках больше нет: последняя строка —
-     * переключатель счётчика FPS. Все 8 строк влезают даже на низком
-     * (landscape) экране: на экранах ниже нужного шаг строк сжимается
-     * (но не меньше высоты кнопки). */
+    /* Апскейла и лимита FPS в настройках больше нет: строк стало 8, последняя -
+     * индекс 7, а функций переключения их значений не существует вовсе. */
     assert(SETTINGS_ROWS == 8);
+    /* Все 8 строк настроек помещаются на низком (landscape) экране: на
+     * экранах ниже нужного шаг строк сжимается (но не меньше высоты кнопки). */
     screen_h = 720;
-    assert(ds_fn_settings_row_y(SETTINGS_ROWS - 1) + 56 <= screen_h - 4);
+    assert(ds_fn_settings_row_y(7) + 56 <= screen_h - 4);
     screen_h = 640;
-    assert(ds_fn_settings_row_y(SETTINGS_ROWS - 1) + 56 <= screen_h - 4);
+    assert(ds_fn_settings_row_y(7) + 56 <= screen_h - 4);
     screen_h = 1280;
-    assert(ds_fn_settings_row_y(SETTINGS_ROWS - 1) + 56 <= screen_h - 4);
-    puts("settings: no fps cap or upscale rows, the remaining rows fit OK");
+    assert(ds_fn_settings_row_y(7) + 56 <= screen_h - 4);
+    puts("video settings: no fps cap / upscale rows, 8 settings rows fit OK");
 }
 
 static void test_class_mottos(void) {
@@ -358,18 +358,21 @@ def main():
         assert "sticker_menu_open == 1" in draw_body
         touch_body = "".join(compiler.functions["touch_chat"][2])
         assert "chat_send_sticker(" in touch_body
-        # Настройки: зимняя тема и счётчик FPS переключаются прямо из экрана,
-        # а лимита FPS и апскейла там больше нет.
+        # Настройки: лимита FPS и апскейла больше нет - ни строк, ни подписей,
+        # ни вызовов ds_set_*; последние две строки - зимняя тема и счётчик FPS.
         settings_body = "".join(compiler.functions["draw_settings"][2])
-        assert "tr_winter_toggle()" in settings_body
-        assert "tr_fps_meter_toggle()" in settings_body
+        assert "tr_fps_label()" not in settings_body
+        assert "tr_scale_label()" not in settings_body
+        assert "tr_winter_toggle()" in settings_body and "tr_fps_meter_toggle()" in settings_body
         assert "settings_row_y(6)" in settings_body and "settings_row_y(7)" in settings_body
-        assert "tr_fps_label()" not in settings_body and "tr_scale_label()" not in settings_body
+        assert "settings_row_y(8)" not in settings_body and "settings_row_y(9)" not in settings_body
         touch_settings_body = "".join(compiler.functions["touch_settings"][2])
-        assert "winter_theme = 1 - winter_theme" in touch_settings_body
-        assert "show_fps = 1 - show_fps" in touch_settings_body
         assert "ds_set_fps_cap(" not in touch_settings_body
         assert "ds_set_render_scale(" not in touch_settings_body
+        assert "next_fps_cap" not in touch_settings_body
+        assert "next_render_scale" not in touch_settings_body
+        assert "winter_theme = 1 - winter_theme" in touch_settings_body
+        assert "show_fps = 1 - show_fps" in touch_settings_body
         bubble_body = "".join(compiler.functions["draw_chat_bubble_at"][2])
         assert "chat_sticker_tex(" in bubble_body
         android = temp / "android"

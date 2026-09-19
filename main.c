@@ -10,7 +10,6 @@
 #include <android/input.h>
 #include <android/keycodes.h>
 #include <android/native_activity.h>
-#include <errno.h>
 #include <unistd.h>
 static int init_done = 0;
 static int script_active = 0;
@@ -25,7 +24,7 @@ static uint64_t monotonic_ns(void) {
     return (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
 }
 /* Кадр всегда рисуется в полном размере окна: ни апскейла, ни лимита FPS в
- * настройках больше нет (по просьбе игрока) - оба параметра только портили
+ * настройках больше нет (по просьбе игрока) — оба параметра только портили
  * картинку и заставляли ждать кадр впустую. */
 static int phys_w = 0, phys_h = 0;
 /* screen_w/screen_h — то, что видит скрипт: всегда полный размер окна. */
@@ -127,7 +126,8 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event) {
         i = (action == AMOTION_EVENT_ACTION_MOVE) ? 0 : index;
         count = (action == AMOTION_EVENT_ACTION_MOVE) ? count : index + 1;
         for (; i < count; i++) {
-            /* Координаты окна — те же пиксели, в которых живёт скрипт. */
+            /* Координаты окна — те же пиксели, в которых живёт скрипт:
+             * апскейл на них больше не влияет. */
             call.x = AMotionEvent_getX(event, i);
             call.y = AMotionEvent_getY(event, i);
             /* Край окна: прижимаем к виртуальному экрану, чтобы касание у самой

@@ -52,7 +52,7 @@ public number azum_cost=65, santa_candy_cost=100, ebuc_candy_cost=150
 public number player_level=0, levels_unlocked=0
 public number max_level=3, level_base_cost=30, level_cost_step=10
 public number SKIN_NORMAL=0, SKIN_ZOMBIE=1, SKIN_COUNT=2
-public number azum_tex_ok=0, azum_punch_tex_ok=0, azum_zombie_tex_ok=0, azum_zombie_punch_tex_ok=0
+public number azum_tex_ok=0, azum_zombie_tex_ok=0, azum_zombie_punch_tex_ok=0
 public number azum_skin=SKIN_NORMAL
 public number arena_tile_size=256, snow_tex_ok=0, snow_t=0
 -- Зимняя тема — настройка из меню: снежный фон арены и снегопад включаются и
@@ -60,21 +60,17 @@ public number arena_tile_size=256, snow_tex_ok=0, snow_t=0
 -- арена снова в траве (grass.png), как было до зимнего оформления.
 public number winter_theme=1
 public number show_hitboxes=1
--- Все боевые хитбоксы - одна полупрозрачная чёрная зона: и удар, и рывок, и
--- снежок, и вселенная рисуются одним цветом (hitbox_rgb) с одной альфой
--- (hitbox_zone_alpha). Раньше у каждой зоны была своя прозрачность (36/102/140/
--- 170), а зона рывка вообще шла через конвейер без смешивания и выглядела
--- залитым чёрным пятном.
+-- Хитбоксы: ОДИН цвет и ОДНА прозрачность на все зоны сразу (удар, снежок,
+-- рывок, вселенная) — hitbox_rgb + hitbox_zone_alpha. Раньше у каждой зоны
+-- была своя альфа (36 / 102 / 140 / 170) и свой цвет-псевдоним, из-за чего
+-- зоны выглядели по-разному. Скруглений нет нигде: hitbox_corner удалён,
+-- прямоугольные зоны рисуются с острыми углами (rect / rect_rot), а roundrect
+-- в хитбоксах больше не используется вовсе (он ещё и рисуется конвейером без
+-- смешивания, то есть непрозрачно).
 public number hitbox_rgb=0x00000000
 public number hitbox_zone_alpha=96
 public number hitbox_fade_in=0.16, hitbox_fade_out=0.26
--- Зона удара начинается не от центра бойца, а от края его корпуса
--- (доля размера бойца): раньше половина нарисованного прямоугольника пряталась
--- под спрайтом, и казалось, что удар бьёт «в себя», а не вперёд. Теперь и
--- рисунок, и проверка попадания начинаются от края корпуса, поэтому хитбокс
--- стоит впереди игрока и совпадает с тем, что видно.
-public number punch_front_scale=0.65
--- Радиус зоны рывка (доля от суммы корпусов): рисуется полосой той же ширины.
+public number dash_hitbox_zone_scale=1.3
 public number dash_hit_radius_scale=0.9
 public number punch_time=0.2, punch_cooldown=0.3, punch_reach=104, punch_width=104, punch_damage=1
 public number joy_speed=192, player_scale=1.8, enemy_scale=1.8
@@ -145,10 +141,9 @@ public string LOBBY_MUSIC="lobbymusic.wav"
 public number music_ok=0, music_level=1, music_fade_in_time=0.25, music_fade_out_time=1.0
 public number music_volume=70, music_vol_step=10, music_btn_gap=16
 -- Счётчик кадров в бою: настройка (show_fps) и усреднённое значение, которое
--- пересчитывается раз в fps_interval секунд, чтобы цифры не прыгали. Рисуется
--- в правом верхнем углу без плашки, крупным текстом (см. draw_fps_meter).
+-- пересчитывается раз в fps_interval секунд, чтобы цифры не прыгали.
 public number show_fps=0, fps_value=0, fps_acc=0, fps_frames=0, fps_interval=0.5
-public number fps_text_scale=1.0, fps_margin_x=16, fps_margin_y=56
+public number fps_plate_rgb=0xDD171923, fps_text_scale=0.5
 public number event_mode=0, disco_t=0, event_t=0, event_flakes=44
 public number plates_size=150, plates_shrink_time=0.9, plates_stand_r=80
 public number plates_xa=0.22, plates_xb=0.78, plates_yy=0.5

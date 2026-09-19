@@ -88,8 +88,9 @@ void keyboard_backspace(void);
 void keyboard_commit_utf8(const char *utf8);
 void rect(float x, float y, float w, float h, uint32_t color);
 void roundrect(float x, float y, float w, float h, float r, uint32_t color);
-/* Повёрнутый прямоугольник: x,y - левый верхний угол не повёрнутой фигуры,
- * angle - поворот вокруг её центра. Рисуется с альфа-смешиванием. */
+/* Повёрнутый прямоугольник: x,y - левый верхний угол НЕ повёрнутой фигуры,
+ * angle - поворот вокруг её центра. Рисуется с альфа-смешиванием (как rect),
+ * поэтому годится для полупрозрачных зон хитбоксов с острыми углами. */
 void rect_rot(float x, float y, float w, float h, float angle, uint32_t color);
 void circle(float x, float y, float r, uint32_t color);
 void ring(float x, float y, float r, float t, uint32_t color);
