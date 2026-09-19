@@ -12,7 +12,7 @@ public number stat_hp_color=0xE94560, stat_power_color=0x4FC3F7
 public number btn_w=280, btn_h=56, btn_gap=16, btn_radius=20
 public number back_y=24, title_gap=12
 public number lobby_rows=5
-public number modes_rows=5
+public number modes_rows=6
 public number touch_pad_x=12, touch_pad_y=8
 public number screen_margin=40, class_action_gap=40
 public number class_count=4, class_gap=14, class_card_h=272
@@ -135,7 +135,7 @@ public number lb_wait=0, lb_wait_max=8
 public number banner_show_time=6, banner_fade=0.5, banner_seen_ts=0, banner_t=0, banner_skip=1
 public number login_field=1, login_status=0, login_after=0
 public number login_ox=0, login_oy=-50, login_fh=50, login_lab=34, login_lab_ox=12
-public number login_w=460, login_btn_w=380, login_field_gap=70, login_btn_gap=22
+public number login_w=460, login_btn_w=380, login_field_gap=64, login_btn_gap=22
 public string login_nick="", login_pass=""
 public string LOBBY_MUSIC="lobbymusic.wav"
 public number music_ok=0, music_level=1, music_fade_in_time=0.25, music_fade_out_time=1.0
@@ -161,7 +161,7 @@ public number plates_lock_me=0, plates_save_interval=4
 -- поэтому пропустить его «случайно зашедший» человек не может: вход в игру
 -- равен осознанному принятию риска. Нажатие фиксируется в settings.dat
 -- (метка времени), системная кнопка «Назад» на этом экране выходит из игры.
-public number warn_open=1, warn_a=1
+public number warn_open=1, warn_a=1, warn_ready=0, warn_wait=3
 public number studio_open=0, studio_t=0, studio_a=0, studio_bg_a=1
 public number studio_in=0.5, studio_hold=1.6, studio_fade=0.7
 public string STUDIO_NAME="CUBIC CORPORATION"

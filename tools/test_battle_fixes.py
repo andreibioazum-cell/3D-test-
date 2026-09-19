@@ -34,6 +34,8 @@ int mouse_clicked = 0;
 Joy joy;
 double ds_mouse_x = 0, ds_mouse_y = 0;
 
+static int legal_marks;
+void settings_mark_legal(void) { legal_marks++; }
 void ds_log(const char *format, ...) { (void)format; }
 void ds_log_err(const char *format, ...) { (void)format; }
 void ds_console_log(int is_error, const char *format, ...) { (void)is_error; (void)format; }
@@ -580,10 +582,23 @@ static void test_splash_screens(void) {
      * до явного согласия (legal_accept в скриптах), иначе предупреждение
      * можно «проспать» и войти в игру без него. */
     ds_fn_reset_battle();
-    warn_open = 1; warn_a = 1;
+    warn_open = 1; warn_a = 1; warn_ready = 0;
     studio_open = 0;
     dt = 0.1;
-    for (int i = 0; i < 40; i++) ds_fn_update_warning();  /* 4.0 c */
+    ds_fn_legal_accept();
+    assert(warn_open == 1 && studio_open == 0);
+    for (int i = 0; i < 15; i++) ds_fn_update_warning();
+    near(warn_ready, 0.5);
+    ds_fn_touch_warn(screen_w / 2, ds_fn_warn_btn_y() + 20, 0);
+    assert(warn_open == 1 && studio_open == 0);
+    for (int i = 0; i < 25; i++) ds_fn_update_warning();
+    near(warn_ready, 1);
+    assert(legal_marks == 0);
+    ds_fn_touch_warn(screen_w / 2, ds_fn_warn_btn_y() + 20, 1);
+    assert(legal_marks == 0);
+    ds_fn_touch_warn(screen_w / 2, ds_fn_warn_btn_y() + 20, 0);
+    assert(legal_marks == 1 && warn_open == 0 && studio_open == 1);
+    warn_open = 1; warn_a = 1; studio_open = 0;
     assert(warn_open == 1 && warn_a == 1 && studio_open == 0);
     /* Согласие (тело legal_accept): гейт закрывается и стартует заставка
      * студии — дальше она работает как раньше. */
@@ -609,7 +624,7 @@ static void test_splash_screens(void) {
     assert(calls[0].kind == 'q' && calls[0].color == 0xFF000000);
     int saw_accept_btn = 0;
     for (int i = 0; i < call_count; i++) {
-        if (calls[i].kind == 'o' && calls[i].color == 0xFF5F10A0) saw_accept_btn = 1;
+        if (calls[i].kind == 'o' && calls[i].color == 0xFF383838) saw_accept_btn = 1;
     }
     assert(saw_accept_btn);
     studio_open = 1; studio_a = 0.4; studio_bg_a = 0.4;

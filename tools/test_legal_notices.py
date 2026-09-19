@@ -11,7 +11,7 @@
   stamp   — нажатие согласия пишется в settings.dat нативно
             (settings_mark_legal / строка "legal %d"), метка локальная и в
             облачный PATCH не попадает;
-  privacy — экран ST_PRIVACY нарисован, достижим из настроек (9-я строка) и
+  privacy — экран ST_PRIVACY нарисован, достижим из настроек (8-я строка) и
             возвращается в настройки кнопкой «Назад»; текст есть на обоих
             языках;
   perms   — в манифесте ровно два разрешения: INTERNET и
@@ -55,6 +55,9 @@ def main():
     accept = function_body(menu_input, "legal_accept")
     assert "warn_open = 0" in accept and "settings_mark_legal()" in accept, \
         "согласие не закрывает гейт или не пишет метку: %s" % accept
+    assert "if warn_ready < 1 then" in accept
+    assert "warn_ready = clamp(warn_ready + dt / warn_wait, 0, 1)" in warn_update
+    assert "warn_ready=0, warn_wait=3" in config
     touch_warn = function_body(menu_input, "touch_warn")
     assert "hit_warn_btn" in touch_warn and "legal_accept()" in touch_warn
     touch = function_body(engine, "touch")
@@ -87,14 +90,14 @@ def main():
 
     # --- экран приватности: рисунок, вход из настроек, выход назад -------
     assert "ST_PRIVACY=16" in config
-    assert "SETTINGS_ROWS=9" in layout
+    assert "SETTINGS_ROWS=8" in layout
     draw_settings = function_body(menu_screens, "draw_settings")
-    assert "settings_row_y(8)" in draw_settings and "tr_privacy()" in draw_settings
+    assert "settings_row_y(7)" in draw_settings and "tr_privacy()" in draw_settings
     draw_privacy = function_body(menu_screens, "draw_privacy")
     for i in range(1, 11):
         assert "tr_pv%d()" % i in draw_privacy, "строка tr_pv%d не рисуется" % i
     touch_settings = function_body(menu_input, "touch_settings")
-    assert re.search(r"hit_settings_row\(x, y, 8\) == 1 then\s*\n\s*start_transition\(ST_PRIVACY\)",
+    assert re.search(r"hit_settings_row\(x, y, 7\) == 1 then\s*\n\s*start_transition\(ST_PRIVACY\)",
                      touch_settings), "строка приватности не открывает экран"
     touch_menu = function_body(menu_input, "touch_menu")
     assert "ST_PRIVACY" in touch_menu and "back_hit" in touch_menu

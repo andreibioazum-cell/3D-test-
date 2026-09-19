@@ -147,6 +147,7 @@ public function update_warning()
         return
     end
     warn_a = 1
+    warn_ready = clamp(warn_ready + dt / warn_wait, 0, 1)
 end
 public function update_studio()
     if studio_open != 1 then

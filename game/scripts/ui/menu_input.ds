@@ -128,9 +128,17 @@ public function draw_warning()
     ctext_scaled(tr_warn_ru4(), y + 318, body, 0.52)
     -- Кнопка согласия: вход в игру только осознанный (метка пишется в
     -- settings.dat), поэтому предупреждение нельзя проскроллить мимо.
-    button_scaled(tr_legal_accept(), center_x(warn_btn_w()), warn_btn_y(), warn_btn_w(), btn_h, 0.8)
+    -- Same shape and contrast, but neutral gray; brighten before enabling.
+    local number brightness = 0.25 + 0.75 * warn_ready
+    local number gray = floor(56 * brightness)
+    local number ink = floor(255 * brightness)
+    roundrect(center_x(warn_btn_w()), warn_btn_y(), warn_btn_w(), btn_h, btn_radius, 0xFF000000 + gray * 0x010101)
+    text_in_box(tr_legal_accept(), center_x(warn_btn_w()), warn_btn_y(), warn_btn_w(), btn_h, 0xFF000000 + ink * 0x010101, 0.8)
 end
 public function legal_accept()
+    if warn_ready < 1 then
+        return
+    end
     warn_open = 0
     warn_a = 0
     settings_mark_legal()
@@ -210,6 +218,12 @@ public function touch_lobby(number x, number y, number action)
     end
 end
 public function touch_modes(number x, number y)
+    if hit_modes_row(x, y, 5) == 1 then
+        winter_theme = 1 - winter_theme
+        apply_winter_theme()
+        save_settings()
+        return
+    end
     if hit_modes_row(x, y, 0) == 1 then
         start_transition(ST_LOBBY)
         return
@@ -259,17 +273,11 @@ public function touch_settings(number x, number y)
         return
     end
     if hit_settings_row(x, y, 6) == 1 then
-        winter_theme = 1 - winter_theme
-        apply_winter_theme()
-        save_settings()
-        return
-    end
-    if hit_settings_row(x, y, 7) == 1 then
         show_fps = 1 - show_fps
         save_settings()
         return
     end
-    if hit_settings_row(x, y, 8) == 1 then
+    if hit_settings_row(x, y, 7) == 1 then
         start_transition(ST_PRIVACY)
         return
     end
