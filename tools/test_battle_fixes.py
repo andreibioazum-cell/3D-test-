@@ -57,10 +57,15 @@ double clamp(double v, double lo, double hi) { return v < lo ? lo : v > hi ? hi 
 double dist(double x, double y, double a, double b) { return hypot(x - a, y - b); }
 double lerp(double a, double b, double t) { return a + (b - a) * t; }
 /* Строковые хелперы рантайма: нужны экранам боя (подписи кнопок, «+N кубков»). */
-static char s_concat[512];
+/* Как в настоящем рантайме: каждый вызов возвращает свежий буфер, чтобы
+ * вложенные конкатенации («a»+n+«b») не затирали друг друга. */
 char *ds_concat(const char *left, const char *right) {
-    snprintf(s_concat, sizeof(s_concat), "%s%s", left ? left : "", right ? right : "");
-    return s_concat;
+    const char *l = left ? left : "", *r = right ? right : "";
+    size_t la = strlen(l), lb = strlen(r);
+    char *out = malloc(la + lb + 1);
+    assert(out);
+    memcpy(out, l, la); memcpy(out + la, r, lb); out[la + lb] = 0;
+    return out;
 }
 char *ds_num_to_string(double value) {
     static char buf[64];
@@ -87,7 +92,13 @@ void tex_tint(float x, float y, const char *name, float a, float sc, uint32_t c)
 int text_ink_width(const char *s) { (void)s; return 10; }
 int text_ink_height(const char *s) { (void)s; return 10; }
 int text_ink_top(const char *s) { (void)s; return 2; }
-void text_scaled(const char *s, float x, float y, uint32_t c, float scale) { (void)s; (void)x; (void)y; (void)c; (void)scale; }
+/* Последняя нарисованная строка: кнопка согласия в конце draw_warning
+ * выводит свою подпись последней, поэтому по last_text видно её текст. */
+static char last_text[160];
+void text_scaled(const char *s, float x, float y, uint32_t c, float scale) {
+    (void)x; (void)y; (void)c; (void)scale;
+    snprintf(last_text, sizeof(last_text), "%s", s ? s : "");
+}
 
 /* Net stubs (same prototypes as net.h): purchases/saves never reach the cloud
  * in these tests, they only need to not crash. */
@@ -591,7 +602,7 @@ static void test_splash_screens(void) {
      * до явного согласия (legal_accept в скриптах), иначе предупреждение
      * можно «проспать» и войти в игру без него. */
     ds_fn_reset_battle();
-    warn_open = 1; warn_a = 1; warn_ready = 0;
+    warn_open = 1; warn_a = 1; warn_ready = 0; warn_t = 0;
     studio_open = 0;
     dt = 0.1;
     ds_fn_legal_accept();
@@ -636,6 +647,26 @@ static void test_splash_screens(void) {
         if (calls[i].kind == 'o' && calls[i].color == 0xFF383838) saw_accept_btn = 1;
     }
     assert(saw_accept_btn);
+    /* Кнопка сразу в полной яркости, а подпись держит отсчёт «(3)(2)(1)»;
+     * на 4-й секунде секунды пропадают и кнопка принимает нажатие. */
+    warn_ready = 0; warn_t = 0.0;
+    call_count = 0;
+    ds_fn_draw_warning();
+    assert(strstr(last_text, "(3)") != NULL);          /* 1-я секунда */
+    for (int i = 0; i < call_count; i++)
+        if (calls[i].kind == 'o') assert(calls[i].color == 0xFF383838); /* не тусклая */
+    warn_t = 1.5; warn_ready = 0.5;
+    ds_fn_draw_warning();
+    assert(strstr(last_text, "(2)") != NULL);          /* 2-я секунда */
+    warn_t = 2.5; warn_ready = 0.83;
+    ds_fn_draw_warning();
+    assert(strstr(last_text, "(1)") != NULL);          /* 3-я секунда */
+    warn_t = 3.0; warn_ready = 1.0;
+    ds_fn_draw_warning();
+    assert(strstr(last_text, "(") == NULL);            /* секунды исчезли */
+    int marks_before = legal_marks;
+    ds_fn_touch_warn(screen_w / 2, ds_fn_warn_btn_y() + 20, 0);
+    assert(legal_marks == marks_before + 1 && warn_open == 0 && studio_open == 1);
     studio_open = 1; studio_a = 0.4; studio_bg_a = 0.4;
     call_count = 0;
     ds_fn_draw_studio();

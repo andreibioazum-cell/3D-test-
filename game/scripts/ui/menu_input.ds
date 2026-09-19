@@ -128,12 +128,15 @@ public function draw_warning()
     ctext_scaled(tr_warn_ru4(), y + 318, body, 0.52)
     -- Кнопка согласия: вход в игру только осознанный (метка пишется в
     -- settings.dat), поэтому предупреждение нельзя проскроллить мимо.
-    -- Same shape and contrast, but neutral gray; brighten before enabling.
-    local number brightness = 0.25 + 0.75 * warn_ready
-    local number gray = floor(56 * brightness)
-    local number ink = floor(255 * brightness)
-    roundrect(center_x(warn_btn_w()), warn_btn_y(), warn_btn_w(), btn_h, btn_radius, 0xFF000000 + gray * 0x010101)
-    text_in_box(tr_legal_accept(), center_x(warn_btn_w()), warn_btn_y(), warn_btn_w(), btn_h, 0xFF000000 + ink * 0x010101, 0.8)
+    -- Кнопка сразу в полной яркости (как в конце), без «разгорания»; пока
+    -- идёт отсчёт, в подписи держится «(N)» и нажатия не принимаются, а когда
+    -- отсчёт кончается, секунды пропадают и кнопка становится доступна.
+    local string label = tr_legal_accept()
+    if warn_ready < 1 then
+        label = label + " (" + (warn_wait - floor(warn_t)) + ")"
+    end
+    roundrect(center_x(warn_btn_w()), warn_btn_y(), warn_btn_w(), btn_h, btn_radius, 0xFF000000 + 56 * 0x010101)
+    text_in_box(label, center_x(warn_btn_w()), warn_btn_y(), warn_btn_w(), btn_h, 0xFFFFFFFF, 0.8)
 end
 public function legal_accept()
     if warn_ready < 1 then

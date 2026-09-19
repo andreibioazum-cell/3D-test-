@@ -164,9 +164,12 @@ public number plates_lock_me=0, plates_save_interval=4
 -- Предупреждение об эпилепсии: больше не гаснет само по таймеру. Экран
 -- держится, пока игрок сам не нажмёт кнопку согласия (legal_accept),
 -- поэтому пропустить его «случайно зашедший» человек не может: вход в игру
--- равен осознанному принятию риска. Нажатие фиксируется в settings.dat
--- (метка времени), системная кнопка «Назад» на этом экране выходит из игры.
-public number warn_open=1, warn_a=1, warn_ready=0, warn_wait=3
+-- равен осознанному принятию риска. Кнопка сразу в полной яркости, но пока
+-- идёт отсчёт warn_t (3-2-1 в подписи), нажатия не принимает; когда отсчёт
+-- кончается, секунды из подписи пропадают и кнопка доступна. Нажатие
+-- фиксируется в settings.dat (метка времени), системная кнопка «Назад» на
+-- этом экране выходит из игры.
+public number warn_open=1, warn_a=1, warn_ready=0, warn_t=0, warn_wait=3
 public number studio_open=0, studio_t=0, studio_a=0, studio_bg_a=1
 public number studio_in=0.5, studio_hold=1.6, studio_fade=0.7
 public string STUDIO_NAME="CUBIC CORPORATION"
