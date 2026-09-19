@@ -50,6 +50,8 @@ def find_ds_files(directory):
         "combat/battle_events_input.ds", # события, баннеры и ввод
         "fx/weather.ds",           # фон арены и общий эффект снега
         "fx/dust.ds",              # след пыли
+        "game3d/platformer.ds",    # 3D-платформер: мир и физика
+        "game3d/platformer_ui.ds", # 3D-платформер: отрисовка и ввод
         "core/engine.ds",          # главный цикл
     ]
     files = []

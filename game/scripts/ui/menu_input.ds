@@ -215,6 +215,11 @@ public function touch_lobby(number x, number y, number action)
         start_transition(ST_ACHIEVEMENTS)
         return
     end
+    if hit_menu_row(x, y, 5) == 1 then
+        p3d_start()
+        start_transition(ST_PLATFORM3D)
+        return
+    end
     if hit_lobby_quests(x, y) == 1 then
         quest_load()
         start_transition(ST_QUESTS)

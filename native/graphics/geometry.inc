@@ -62,6 +62,21 @@ static int geo_quad(const GeoVert q[4]) {
         if (!geo_push_index((uint16_t)(base + order[i]))) return 0;
     return 1;
 }
+
+/* Экранный треугольник 3D-слоя (грань куба после проекции): вершины уже в
+ * пикселях окна, UV не нужны. Рисуется тем же сплошным конвейером с
+ * альфа-смешиванием, что rect. */
+static int geo_tri(float x0, float y0, float x1, float y1,
+                   float x2, float y2, uint32_t c) {
+    size_t base = geo_vn;
+    if (!geo_push_vert(x0, y0, 0, 0, c)) return 0;
+    if (!geo_push_vert(x1, y1, 0, 0, c)) return 0;
+    if (!geo_push_vert(x2, y2, 0, 0, c)) return 0;
+    if (!geo_push_index((uint16_t)base) ||
+        !geo_push_index((uint16_t)(base + 1)) ||
+        !geo_push_index((uint16_t)(base + 2))) return 0;
+    return 1;
+}
 static void geo_reset(void) { geo_vn = 0; geo_in = 0; }
 
 /* --- кэш тригонометрии для вееров ---

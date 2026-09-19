@@ -96,6 +96,10 @@ static int ensure_font(void) {
 
 static DSCmd *push(DSCommand t) {
     if (!frame_open) return NULL;
+    /* 3D-команды, накопленные скриптом до этой 2D-команды, рисуются сейчас:
+     * порядок слоёв в кадре задаёт сам скрипт порядком вызовов (сначала мир,
+     * потом HUD). Внутри flush3d рекурсии нет — флаг ds3d_flushing. */
+    ds3d_flush_pending();
     if (cmd_n == cmd_cap) {
         size_t cap = cmd_cap ? cmd_cap*2 : 256;
         if (cap < cmd_n || cap > SIZE_MAX/sizeof(*cmds)) { ds_runtime_error("too many renderer commands"); return NULL; }
@@ -114,6 +118,7 @@ static void discard_commands(void) {
         }
     }
     cmd_n = 0;
+    ds3d_discard(); /* не начатый (или отменённый) кадр 3D-очередь не рисует */
 }
 
 /* --- активы --- */
@@ -425,5 +430,6 @@ void ds_graphics_shutdown(void) {
     free(geo_verts); geo_verts = NULL; geo_vcap = geo_vn = 0;
     free(geo_idx); geo_idx = NULL; geo_icap = geo_in = 0;
     geo_trig_free();
+    ds3d_release();
 }
 #include "ttf_font.c"

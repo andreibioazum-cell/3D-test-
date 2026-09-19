@@ -59,7 +59,8 @@ struct Texture {
 
 typedef enum {
     DS_CMD_RECT, DS_CMD_ROUND, DS_CMD_CIRCLE, DS_CMD_RING, DS_CMD_LINE,
-    DS_CMD_TEX, DS_CMD_TEXT, DS_CMD_TEX_TINT, DS_CMD_RECT_ROT
+    DS_CMD_TEX, DS_CMD_TEXT, DS_CMD_TEX_TINT, DS_CMD_RECT_ROT,
+    DS_CMD_TRI /* грань 3D-слоя, уже спроецированная на экран (render3d.inc) */
 } DSCommand;
 typedef struct {
     DSCommand t;
@@ -79,6 +80,9 @@ typedef struct {
          * цвета работает так же, как у rect. */
         struct { float x, y, w, h, ang; uint32_t c; } rot;
         struct { char *s; float x, y, sc; uint32_t c; } tt;
+        /* Экранный треугольник 3D-слоя: вершины уже в пикселях окна, цвет —
+         * с освещением грани. Рисуется сплошным конвейером со смешиванием. */
+        struct { float x0, y0, x1, y1, x2, y2; uint32_t c; } tri;
     } v;
 } DSCmd;
 
@@ -116,3 +120,9 @@ static AAssetManager *amgr;
 static Texture *textures;
 static DSFont *font;
 static int font_tried;
+/* 3D-слой (render3d.inc) определяется позже в этом же трансляционном юните,
+ * но push() обязан выдавать его очередь до первой 2D-команды — поэтому
+ * прототипы объявлены здесь. */
+static void ds3d_flush_pending(void);
+static void ds3d_discard(void);
+static void ds3d_release(void);
