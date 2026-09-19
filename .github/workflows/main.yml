@@ -128,8 +128,10 @@ jobs:
             -I tools/host_test/stub -I . -lm \
             -Wl,--wrap=malloc,--wrap=calloc,--wrap=realloc,--wrap=free
           /tmp/test_string_arena
+          g++ -std=gnu++11 -O1 -fno-exceptions -fno-rtti -c native/crash_guard.cpp \
+            -o /tmp/crash_guard.o -I tools/host_test/stub -I .
           gcc -std=gnu99 -O1 -o /tmp/test_full_game tools/host_test/test_full_game.c \
-            native/graphics/cpu_backend.c \
+            native/graphics/cpu_backend.c /tmp/crash_guard.o \
             -I tools/host_test/stub -I /tmp/vkheaders/include -I . -lm -lpthread
           /tmp/test_full_game
 
@@ -147,18 +149,18 @@ jobs:
           mkdir -p staging/lib/arm64-v8a staging/lib/armeabi-v7a staging/lib/x86_64
 
           {
-          "$TOOLCHAIN/aarch64-linux-android26-clang" -O3 -s -fPIC -shared \
-            game/game.c runtime.c main.c native/graphics/cpu_backend.c "$GLUE/android_native_app_glue.c" \
+          "$TOOLCHAIN/aarch64-linux-android26-clang" -O3 -s -fPIC -shared -fno-exceptions -fno-rtti \
+            game/game.c runtime.c main.c native/graphics/cpu_backend.c native/crash_guard.cpp "$GLUE/android_native_app_glue.c" \
             -I. -I"$GLUE" -landroid -llog -lm -lvulkan \
             -o staging/lib/arm64-v8a/libds_game.so
 
-          "$TOOLCHAIN/armv7a-linux-androideabi26-clang" -O3 -s -fPIC -shared \
-            game/game.c runtime.c main.c native/graphics/cpu_backend.c "$GLUE/android_native_app_glue.c" \
+          "$TOOLCHAIN/armv7a-linux-androideabi26-clang" -O3 -s -fPIC -shared -fno-exceptions -fno-rtti \
+            game/game.c runtime.c main.c native/graphics/cpu_backend.c native/crash_guard.cpp "$GLUE/android_native_app_glue.c" \
             -I. -I"$GLUE" -landroid -llog -lm -lvulkan \
             -o staging/lib/armeabi-v7a/libds_game.so
 
-          "$TOOLCHAIN/x86_64-linux-android26-clang" -O3 -s -fPIC -shared \
-            game/game.c runtime.c main.c native/graphics/cpu_backend.c "$GLUE/android_native_app_glue.c" \
+          "$TOOLCHAIN/x86_64-linux-android26-clang" -O3 -s -fPIC -shared -fno-exceptions -fno-rtti \
+            game/game.c runtime.c main.c native/graphics/cpu_backend.c native/crash_guard.cpp "$GLUE/android_native_app_glue.c" \
             -I. -I"$GLUE" -landroid -llog -lm -lvulkan \
             -o staging/lib/x86_64/libds_game.so
           } 2>&1 | tee "$RUNNER_TEMP/ndk-build.log"

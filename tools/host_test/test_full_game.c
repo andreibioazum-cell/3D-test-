@@ -426,7 +426,7 @@ void ANativeWindow_acquire(ANativeWindow *w) { (void)w; }
 void ANativeWindow_release(ANativeWindow *w) { (void)w; }
 
 /* Отчёт о падении - тот же модуль, что в main.c. */
-#include "native/crash_report.inc"
+#include "native/crash_guard.h"
 #include <signal.h>
 
 /* ==== клавиатура: на устройстве это android_keyboard.inc (JNI IME) ==== */
@@ -466,6 +466,13 @@ static void app_frame(int n) {
         ds_call_protected(protected_draw, &g_fb, "draw");
         ds_graphics_end_frame();
     }
+}
+
+/* «Упавший драйвер»: тело защищаемого участка для pcall-сценария. */
+static void harness_crashy(void *ctx) {
+    (void)ctx;
+    ds_crumb("gfx-vk-init");
+    raise(SIGSEGV);
 }
 
 int main(void) {
@@ -585,37 +592,29 @@ int main(void) {
     /* Счётчик падений Vulkan: инкремент только для Vulkan-сессий + сброс. */
     fprintf(stderr, "HARNESS: vk_fails scenario\n");
     ds_vk_fail_reset();
-    ds_crash_gpu = 1;
+    ds_crash_gpu_mode(1);
     ds_crash_report_write(SIGSEGV, NULL);
     if (ds_vk_fail_count() != 1) { printf("FAIL: vk_fails после 1 падения = %d\n", ds_vk_fail_count()); return 1; }
     ds_crash_report_write(SIGSEGV, NULL);
     if (ds_vk_fail_count() != 2) { printf("FAIL: vk_fails после 2 падений = %d\n", ds_vk_fail_count()); return 1; }
     ds_vk_fail_reset();
     if (ds_vk_fail_count() != 0) { printf("FAIL: vk_fails не сбросился\n"); return 1; }
-    ds_crash_gpu = 0;
+    ds_crash_gpu_mode(0);
     ds_crash_report_write(SIGABRT, NULL);
     if (ds_vk_fail_count() != 0) { printf("FAIL: CPU-падение не должно поднимать vk_fails\n"); return 1; }
     ds_crash_report_clear();
     if (ds_mem_total_mb() <= 0 && ds_mem_total_mb() != -1) { printf("FAIL: mem_total\n"); return 1; }
 
-    /* pcall: настоящий raise(SIGSEGV) на защищённом участке должен вернуться
-     * в sigsetjmp, записать отчёт и поднять vk_fails (сессия помечена GPU). */
+    /* pcall (crash_guard.cpp): настоящий raise(SIGSEGV) внутри защищённого
+     * участка должен вернуться из ds_guard_run с номером сигнала, записать
+     * отчёт и поднять vk_fails (сессия помечена как GPU). */
     fprintf(stderr, "HARNESS: pcall scenario\n");
     ds_vk_fail_reset();
-    ds_crash_gpu = 1;
+    ds_crash_gpu_mode(1);
     ds_crash_report_clear();
     {
-        int jsig = sigsetjmp(ds_pcall_env, 1);
-        if (jsig == 0) {
-            ds_pcall_arm();
-            ds_crumb("gfx-vk-init");
-            raise(SIGSEGV); /* «драйвер упал» - обработчик должен уйти в siglongjmp */
-            ds_pcall_disarm();
-            printf("FAIL: pcall не сработал - raise вернулся как ни в чём не бывало\n");
-            return 1;
-        }
-        ds_pcall_disarm();
-        if (jsig != SIGSEGV) { printf("FAIL: pcall вернул %d\n", jsig); return 1; }
+        int jsig = ds_guard_run(harness_crashy, NULL);
+        if (jsig != SIGSEGV) { printf("FAIL: pcall вернул %d (ожидался SIGSEGV)\n", jsig); return 1; }
     }
     if (!ds_crash_report_load(report, sizeof report)) {
         printf("FAIL: pcall не записал отчёт\n"); return 1;

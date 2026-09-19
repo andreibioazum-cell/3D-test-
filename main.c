@@ -12,9 +12,11 @@
 #include <android/native_activity.h>
 #include <errno.h>
 #include <unistd.h>
-#include "native/crash_report.inc"
+#include "native/crash_guard.h"
 static int init_done = 0;
 static int script_active = 0;
+/* 1 = текущая сессия на Vulkan (для vk_fails и записи чистого выхода). */
+static int g_vk_session = 0;
 static AAssetManager *script_assets = NULL;
 static uint64_t restart_after_ns = 0;
 static unsigned int restart_failures = 0;
@@ -27,6 +29,11 @@ static int g_cpu_render = 0;
 static int g_show_report = 0;
 static char g_report[DS_CRASH_REPORT_MAX];
 static unsigned long g_frame_count = 0;
+/* Защищённые pcall функции (определены ниже, перед handle_input). */
+static void ds_guarded_vk_init(void *p);
+static void ds_guarded_vk_begin(void *p);
+static void ds_guarded_vk_cancel(void *p);
+static void ds_guarded_vk_end(void *p);
 static uint64_t monotonic_ns(void) {
     struct timespec now;
     if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0;
@@ -105,30 +112,28 @@ static void handle_cmd(struct android_app *app, int32_t command) {
             } else {
                 /* pcall: если драйвер уронит процесс внутри vkCreate*, обработчик
                  * сделает siglongjmp сюда - и этот же запуск продолжится на CPU. */
+                struct VkInitJob { AAssetManager *am; ANativeWindow *w; int ok; } job;
                 int jsig;
-                ds_crash_gpu = 1;
+                job.am = script_assets; job.w = app->window; job.ok = 0;
+                ds_crash_gpu_mode(1);
                 ds_crumb("gfx-vk-init");
-                ds_pcall_arm();
-                jsig = sigsetjmp(ds_pcall_env, 1);
-                if (jsig == 0) {
-                    gfx_ok = ds_graphics_init(script_assets, app->window);
-                    ds_pcall_disarm();
-                } else {
+                jsig = ds_guard_run(ds_guarded_vk_init, &job);
+                gfx_ok = jsig ? 0 : job.ok;
+                if (jsig) {
                     ds_log_err("vulkan init crashed (signal %d) - pcall switched to CPU", jsig);
                     ds_ext_log_write("vulkan init crashed - pcall caught", 1);
-                    gfx_ok = 0;
                 }
                 if (!gfx_ok) {
                     ds_crumb("gfx-cpu-fallback");
                     g_cpu_render = 1;
+                    ds_crash_gpu_mode(0);
                     ds_vk_fail_reset(); /* счётчик уже поднят обработчиком падения */
                     gfx_ok = ds_graphics_init_cpu(script_assets, app->window);
                 }
             }
             if (!gfx_ok) { init_done = 0; return; }
             ds_crumb(g_cpu_render ? "gfx-cpu-ok" : "gfx-vk-ok");
-            /* Падение в этой сессии поднимет vk_fails только для Vulkan. */
-            ds_crash_gpu = !g_cpu_render;
+            g_vk_session = !g_cpu_render;
             /* Пока на экране отчёт о падении: звук и скрипт откладываем, чтобы
              * экран появился даже если упало бы что-то из их инициализации. */
             if (g_show_report) { init_done = 1; script_active = 0; break; }
@@ -159,6 +164,34 @@ static void handle_cmd(struct android_app *app, int32_t command) {
         case APP_CMD_LOST_FOCUS: ds_sound_pause(); break;
         default: break;
     }
+}
+/* --- защищаемые pcall участки (crash_guard.cpp): инициализация Vulkan и
+ * вызовы драйвера кадра. При краше внутри драйвера отчёт пишется в
+ * ds_logs, а игра продолжает этот же запуск на CPU. --- */
+static void ds_guarded_vk_init(void *p) {
+    struct { AAssetManager *am; ANativeWindow *w; int ok; } *job = p;
+    job->ok = ds_graphics_init(job->am, job->w);
+}
+static void ds_guarded_vk_begin(void *p) {
+    Buffer *frame = p;
+    if (!ds_graphics_begin_frame(frame)) frame->pixels = NULL; /* нет кадра */
+}
+static void ds_guarded_vk_cancel(void *p) {
+    ds_graphics_cancel_frame();
+    (void)p;
+}
+static void ds_guarded_vk_end(void *p) {
+    (void)p;
+    ds_graphics_end_frame();
+}
+/* Крашнулся вызов драйвера кадра: гасим Vulkan до конца запуска (отчёт
+ * обработчик уже записал в ds_logs и внутреннюю папку). */
+static void vulkan_frame_crashed(const char *what) {
+    ds_log_err("%s crashed - switching to CPU renderer", what);
+    ds_ext_log_write("vulkan frame crashed - pcall caught", 1);
+    ds_crash_gpu_mode(0);
+    g_cpu_render = 1;
+    ds_graphics_shutdown();
 }
 static int32_t handle_input(struct android_app *app, AInputEvent *event) {
     (void)app;
@@ -294,7 +327,7 @@ void android_main(struct android_app *app) {
                                                       : "/data/data/com.cb4");
     ds_set_activity(app->activity);
     ds_crumb("jni");
-    if (app->activity && !ds_ext_log_path[0]) {
+    if (app->activity && !ds_ext_log_active()) {
         /* Нет доступа к ds_logs - показываем системный диалог один раз;
          * после выдачи логи начнут писаться со следующего запуска. */
         ANativeActivity_showRequestPermission(app->activity,
@@ -304,7 +337,7 @@ void android_main(struct android_app *app) {
         char boot[160];
         snprintf(boot, sizeof(boot), "session start render=%s vk_fails=%d ram=%dMB extlog=%s",
                  g_cpu_render ? "cpu" : "vulkan", ds_vk_fail_count(), ds_mem_total_mb(),
-                 ds_ext_log_path[0] ? "yes" : "no");
+                 ds_ext_log_active() ? "yes" : "no");
         ds_log("%s", boot);
         ds_ext_log_write(boot, 1);
     }
@@ -317,8 +350,9 @@ void android_main(struct android_app *app) {
                 init_done = 0; script_active = 0; keyboard_hide();
                 ds_graphics_shutdown_cpu(); ds_graphics_shutdown(); ds_sound_shutdown();
                 /* Vulkan пережил целую сессию - мимолётным сбоем его не считаем. */
-                if (ds_crash_gpu) ds_vk_fail_reset();
-                ds_ext_log_write("session end (clean)", 1);
+                if (g_vk_session) ds_vk_fail_reset();
+                ds_ext_log_write(g_vk_session && !g_cpu_render
+                                 ? "session end (clean, vulkan)" : "session end (clean)", 1);
                 return;
             }
         }
@@ -349,8 +383,17 @@ void android_main(struct android_app *app) {
         frame.height = screen_h;
         frame.stride = screen_w;
         if (frame.width > 0 && frame.height > 0) {
-            int opened = g_cpu_render ? ds_graphics_begin_frame_cpu(&frame)
-                                      : ds_graphics_begin_frame(&frame);
+            /* begin/end кадра для Vulkan идут под pcall: краш драйвера на
+             * present'е ловится, Vulkan гасится, следующие кадры рисует CPU. */
+            int opened;
+            if (g_cpu_render) {
+                opened = ds_graphics_begin_frame_cpu(&frame);
+            } else if (ds_guard_run(ds_guarded_vk_begin, &frame)) {
+                vulkan_frame_crashed("vulkan begin_frame");
+                opened = 0;
+            } else {
+                opened = frame.pixels != NULL;
+            }
             if (!opened) continue;
             int draw_failed = 0;
             if (g_show_report) {
@@ -365,10 +408,10 @@ void android_main(struct android_app *app) {
                      * конвейер, поэтому кадр именно завершаем, а не отменяем. */
                     ds_graphics_error_screen(ds_runtime_error_message());
                 } else if (g_cpu_render) ds_graphics_cancel_frame_cpu();
-                else ds_graphics_cancel_frame();
+                else if (ds_guard_run(ds_guarded_vk_cancel, NULL)) vulkan_frame_crashed("vulkan cancel_frame");
             }
             if (g_cpu_render) ds_graphics_end_frame_cpu(&frame);
-            else ds_graphics_end_frame();
+            else if (ds_guard_run(ds_guarded_vk_end, &frame)) vulkan_frame_crashed("vulkan end_frame");
         }
     }
 }

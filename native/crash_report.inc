@@ -1,20 +1,20 @@
-/* Отчёт о падении: последний крик умирающего процесса.
+/* Служебные писатели отчёта о падении (подключается из crash_guard.cpp).
  *
  * Проблема: на части устройств драйвер падает внутри Vulkan-вызова, а у
  * игрока нет adb - причину не достать. Решение: на каждом шаге запуска
- * остаётся «крошка» (ds_crumb), обработчик SIGSEGV/SIGBUS/SIGABRT/SIGILL/
- * SIGFPE пишет крошки в файл во внутренней папке приложения, а следующий
- * запуск читает его, включает безопасный CPU-режим и показывает отчёт на
- * экране ошибки - игрок просто присылает скриншот.
+ * остаётся «крошка» (ds_crumb), обработчик (он живёт в crash_guard.cpp)
+ * пишет крошки в файл во внутренней папке приложения и во внешний лог
+ * /storage/emulated/0/ds_logs/ds_log.txt, а следующий запуск читает его,
+ * включает безопасный CPU-режим и показывает отчёт на экране ошибки.
  *
  * Дополнительно файл vk_fails хранит, сколько раз игра упала в Vulkan-сессии:
- * одного падения достаточно, чтобы следующие запуски стартовали на CPU
- * (драйвер, уронивший процесс один раз, уронит и второй). Чистый выход из
- * Vulkan-сессии обнуляет счётчик - мимолётный сбой не лишает GPU навсегда.
+ * после двух падений следующие запуски стартуют на CPU (драйвер, уронивший
+ * процесс дважды, уронит и третий). Чистый выход из Vulkan-сессии обнуляет
+ * счётчик - мимолётный сбой не лишает GPU навсегда.
  *
  * Писать можно только async-signal-safe: open/read/write/close и ручное
- * форматирование - никаких snprintf/stdio/locks. Крошки складываются без
- * блокировок: вызовы идут только из потока игры.
+ * форматирование - никаких snprintf/stdio/locks в обработчике. Крошки
+ * складываются без блокировок: вызовы идут только из потока игры.
  *
  * ВАЖНО: на Android 8.x (Go) internalDataPath в android_main бывает NULL -
  * тогда пути уходят на жёсткий фолбэк /data/data/com.cb4 (пакет зафиксирован
@@ -24,20 +24,20 @@
 #ifndef DS_CRASH_REPORT_INC
 #define DS_CRASH_REPORT_INC
 
-#include <signal.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <unistd.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <time.h>
-#include <setjmp.h>
-#include <string.h>
-#include <stdio.h>
+#include <unistd.h>
 
 #define DS_CRUMB_MAX 24
 #define DS_CRUMB_LEN 56
+#ifndef DS_CRASH_REPORT_MAX
 #define DS_CRASH_REPORT_MAX 2048
-#define DS_VK_MAX_FAILS 2  /* сколько падений Vulkan прощаем; дальше - только CPU */
+#endif
 
 /* Внешняя папка логов (видна игроку через любой файловый менеджер).
  * На Android 8..10 нужна запись во внешнее хранилище: разрешение
@@ -51,22 +51,9 @@ static char ds_vk_fails_path[256] = {0};
 static char ds_ext_log_path[256] = {0};
 static char ds_crumb_buf[DS_CRUMB_MAX][DS_CRUMB_LEN];
 static volatile int ds_crumb_n = 0;
-/* 1 = текущая сессия рисует через Vulkan (падение поднимет vk_fails). */
-static volatile int ds_crash_gpu = 0;
-static volatile sig_atomic_t ds_in_crash = 0;
-
-/* --- pcall: защита опасного участка (инициализация драйвера) ---
- *
- * ds_pcall_arm() ставится перед участком; если внутри драйвер роняет
- * процесс (SIGSEGV и пр.), обработчик пишет отчёт, поднимает vk_fails и
- * делает siglongjmp обратно в точку sigsetjmp - игра продолжает работать
- * в ЭТОМ ЖЕ запуске на CPU-рендере. Поведение как у pcall в Lua: вызов
- * «поймал ошибку» вместо смерти процесса. После siglongjmp из драйвера
- * Vulkan считаем отравленным и больше его не трогаем до перезапуска. */
-static sigjmp_buf ds_pcall_env;
-static volatile sig_atomic_t ds_pcall_armed = 0;
-static void ds_pcall_arm(void) { ds_pcall_armed = 1; }
-static void ds_pcall_disarm(void) { ds_pcall_armed = 0; }
+/* 1 = сессия рисует через Vulkan: только её падения поднимают vk_fails
+ * (см. ds_crash_gpu_mode в crash_guard.cpp). */
+static volatile int ds_vk_fails_enabled = 0;
 
 /* Метка этапа запуска: «boot», «gfx-vk-init», «f240» (240-й кадр) и т.п. */
 static void ds_crumb(const char *s) {
@@ -152,8 +139,8 @@ static void ds_ext_log_write(const char *event, int write_crumbs) {
     close(fd);
 }
 
-/* Сама запись отчёта. Вынесена из обработчика, чтобы хост-тест мог вызвать
- * её без реального сигнала (ASan перехватывает SIGSEGV раньше нас). */
+/* Сама запись отчёта: crash_report.txt во внутренней папке + строка «crash
+ * signal N» во внешний лог. Зовётся из обработчика crash_guard.cpp. */
 static void ds_crash_report_write(int sig, void *addr) {
     if (ds_crash_path[0]) {
         int fd = ds_open_int_file(ds_crash_path, O_WRONLY | O_CREAT | O_TRUNC);
@@ -162,7 +149,7 @@ static void ds_crash_report_write(int sig, void *addr) {
             ds_w_int(fd, sig);
             ds_w_str(fd, " addr 0x");
             ds_w_hex(fd, (unsigned long)(uintptr_t)addr);
-            ds_w_str(fd, ds_crash_gpu ? " (vulkan)\n" : " (cpu)\n");
+            ds_w_str(fd, ds_vk_fails_enabled ? " (vulkan)\n" : " (cpu)\n");
             int total = ds_crumb_n;
             if (total > DS_CRUMB_MAX) total = DS_CRUMB_MAX;
             for (int i = 0; i < total; i++) {
@@ -178,7 +165,7 @@ static void ds_crash_report_write(int sig, void *addr) {
         char head[96];
         char *h = head;
         const char *p = "crash signal ";
-        /* Ручная склейка вместо snprintf: функция зовётся и из обработчика. */
+        /* Ручная склейка вместо snprintf: функция зовётся из обработчика. */
         while (*p) *h++ = *p++;
         if (sig >= 10) *h++ = (char)('0' + sig / 10);
         *h++ = (char)('0' + sig % 10);
@@ -187,7 +174,7 @@ static void ds_crash_report_write(int sig, void *addr) {
     }
     /* Падение в Vulkan-сессии: поднимаем счётчик, чтобы следующие запуски
      * включили CPU сразу, не дожидаясь повторных убытков. */
-    if (ds_crash_gpu && ds_vk_fails_path[0]) {
+    if (ds_vk_fails_enabled && ds_vk_fails_path[0]) {
         char b = '0';
         int fd2 = ds_open_int_file(ds_vk_fails_path, O_RDONLY);
         if (fd2 >= 0) {
@@ -204,37 +191,10 @@ static void ds_crash_report_write(int sig, void *addr) {
     }
 }
 
-static void ds_crash_handler(int sig, siginfo_t *info, void *uctx) {
-    (void)uctx;
-    if (ds_in_crash) _exit(70);
-    ds_in_crash = 1;
-    ds_crumb("pcall");
-    ds_crash_report_write(sig, info ? info->si_addr : NULL);
-    /* pcall: краш на защищённом участке (инициализация драйвера) - возврат
-     * в sigsetjmp, игра продолжает этот же запуск на CPU. */
-    if (ds_pcall_armed) {
-        ds_pcall_armed = 0;
-        siglongjmp(ds_pcall_env, sig ? sig : 1);
-    }
-    /* Отдаём падение системе: tombstone должен появиться как обычно. */
-    signal(sig, SIG_DFL);
-    raise(sig);
-    _exit(70);
-}
-
 static void ds_crash_report_init(const char *dir) {
     if (!dir || !*dir) dir = "/data/data/com.cb4"; /* см. ВАЖНО выше */
     snprintf(ds_crash_path, sizeof(ds_crash_path), "%s/crash_report.txt", dir);
     snprintf(ds_vk_fails_path, sizeof(ds_vk_fails_path), "%s/vk_fails", dir);
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_sigaction = ds_crash_handler;
-    sa.sa_flags = SA_SIGINFO;
-    sigaction(SIGSEGV, &sa, NULL);
-    sigaction(SIGBUS, &sa, NULL);
-    sigaction(SIGABRT, &sa, NULL);
-    sigaction(SIGILL, &sa, NULL);
-    sigaction(SIGFPE, &sa, NULL);
 }
 
 /* Отчёт прошлого запуска: 1 - есть (в out лежит текст). */
@@ -259,7 +219,7 @@ static void ds_crash_report_clear(void) {
     if (ds_crash_path[0]) unlink(ds_crash_path);
 }
 
-/* Сколько раз уже падали в Vulkan-сессии (по файлу vk_fails). */
+/* Сколько раз уже падали в Vulkan-сессиях (по файлу vk_fails). */
 static int ds_vk_fail_count(void) {
     if (!ds_vk_fails_path[0]) return 0;
     int fd = ds_open_int_file(ds_vk_fails_path, O_RDONLY);
@@ -281,9 +241,7 @@ static void ds_vk_fail_reset(void) {
     }
 }
 
-/* Объём RAM в МБ по /proc/meminfo (или -1, если не смогли прочитать).
- * Нужен, чтобы на Android Go (1 ГБ) вообще не трогать Vulkan: инициализация
- * драйвера там может уронить процесс под OOM-киллером (SIGKILL не ловится). */
+/* Объём RAM в МБ по /proc/meminfo (или -1, если не смогли прочитать). */
 static int ds_mem_total_mb(void) {
     int fd = ds_open_int_file("/proc/meminfo", O_RDONLY);
     if (fd < 0) return -1;
