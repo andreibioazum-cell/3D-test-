@@ -17,11 +17,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdarg.h>
 
 #include "runtime.h"
 
 void ds_log(const char *format, ...) { (void)format; }
-void ds_log_err(const char *format, ...) { (void)format; }
+void ds_log_err(const char *format, ...) {
+    va_list ap; va_start(ap, format);
+    vfprintf(stderr, format, ap);
+    va_end(ap);
+}
 void ds_console_log(int is_error, const char *format, ...) { (void)is_error; (void)format; }
 void ds_runtime_error(const char *format, ...) { (void)format; }
 const char *ds_runtime_error_message(void) { return ""; }
@@ -309,6 +314,152 @@ static void test_draw_layers(void) {
     end();
 }
 
+/* --- мини-растеризатор (как в test_3d.c): проверка «что реально видно» --- */
+static uint32_t tfb[1280 * 720];
+
+static void tfb_blend(uint32_t *dst, uint32_t src) {
+    uint32_t sr = src & 0xff, sg = (src >> 8) & 0xff, sb = (src >> 16) & 0xff;
+    uint32_t a = (src >> 24) & 0xff;
+    uint32_t dr = (*dst >> 16) & 0xff, dg = (*dst >> 8) & 0xff, db = *dst & 0xff;
+    if (a >= 255) { *dst = 0xff000000u | (sr << 16) | (sg << 8) | sb; return; }
+    uint32_t ia = 255 - a;
+    *dst = 0xff000000u | (((sr * a + dr * ia) / 255) << 16)
+         | (((sg * a + dg * ia) / 255) << 8) | ((sb * a + db * ia) / 255);
+}
+
+static void tfb_tri(float x0, float y0, float x1, float y1, float x2, float y2,
+                    uint32_t c) {
+    float minx = fminf(fminf(x0, x1), x2), maxx = fmaxf(fmaxf(x0, x1), x2);
+    float miny = fminf(fminf(y0, y1), y2), maxy = fmaxf(fmaxf(y0, y1), y2);
+    if (minx < 0) minx = 0; if (miny < 0) miny = 0;
+    if (maxx > 1279) maxx = 1279; if (maxy > 719) maxy = 719;
+    float d = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2);
+    if (fabsf(d) < 1e-6f) return;
+    for (int y = (int)miny; y <= (int)maxy; y++)
+        for (int x = (int)minx; x <= (int)maxx; x++) {
+            float px = x + 0.5f, py = y + 0.5f;
+            float w0 = ((y1 - y2) * (px - x2) + (x2 - x1) * (py - y2)) / d;
+            float w1 = ((y2 - y0) * (px - x2) + (x0 - x2) * (py - y2)) / d;
+            float w2 = 1 - w0 - w1;
+            if (w0 >= -0.001f && w1 >= -0.001f && w2 >= -0.001f)
+                tfb_blend(&tfb[y * 1280 + x], c);
+        }
+}
+
+static void tfb_render(void) {
+    for (size_t i = 0; i < cmd_n; i++) {
+        DSCmd *c = &cmds[i];
+        if (c->t == DS_CMD_TRI)
+            tfb_tri(c->v.tri.x0, c->v.tri.y0, c->v.tri.x1, c->v.tri.y1,
+                    c->v.tri.x2, c->v.tri.y2, c->v.tri.c);
+        /* 2D-команды не нужны: в проверках используется только 3D-слой. */
+    }
+}
+
+/* rbox3d: замкнутый скруглённый бокс виден с любой стороны и при вращении
+ * (качании вокруг плеча) число видимых граней не обнуляется. */
+static void test_rbox(void) {
+    static const double dirs[8][3] = {
+        { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 },
+        { 0, 0, 1 }, { 0, 0, -1 }, { 0.6, 0.6, 0.6 }, { 0.6, -0.6, 0.6 },
+    };
+    begin();
+    for (int d = 0; d < 8; d++) {
+        cam3d(dirs[d][0] * 6, dirs[d][1] * 6, dirs[d][2] * 6, 0, 0, 0, 60);
+        rbox3d(0, 0, 0, 1.8, 1.8, 1.8, 0.6, 6, 0, 0, 0, 0, 0, 0, 0xFF9E9E9E);
+        flush3d();
+        int n = count_cmds(DS_CMD_TRI);
+        CHECK(n > 100, "rbox: скруглённый бокс виден с этой стороны");
+        if (n <= 100) { end(); begin(); }
+    }
+    int min_n = 1 << 30;
+    for (double a = 0; a < 6.3; a += 0.5) {
+        cam3d(4, 1, 4, 0, 0, 0, 60);
+        rbox3d(0, 0, 0, 1.3, 2.8, 1.1, 0.02, 3, 0, a, 0, 1.4, 0, 0, 0xFF9E9E9E);
+        flush3d();
+        int n = count_cmds(DS_CMD_TRI);
+        if (n < min_n) min_n = n;
+    }
+    CHECK(min_n > 20, "rbox: при качании вокруг плеча грани не пропадают");
+    end();
+}
+
+/* Большая плоская грань делится на плитки: без этого средняя глубина
+ * грани — плохой ключ алгоритма художника. */
+static void test_tile_big_face(void) {
+    begin();
+    /* Крыша 8×8 видна скошенно: разброс глубин по грани ~8 — без тилайнинга
+     * это была бы одна грань со средней глубиной в её центре. */
+    cam3d(0, 2, 10, 0, 0, 0, 50);
+    cube3d(0, 0, 0, 8, 1, 8, 0xFF9C6B3F);
+    flush3d();
+    int n = count_cmds(DS_CMD_TRI);
+    /* Без тилайнинга это было бы ~10 треугольников (6 граней × 2);
+     * с тилайнингом — сотни (крыша 8×8 с наклоненной камеры). */
+    CHECK(n > 100, "большая грань делится на плитки для алгоритма художника");
+    end();
+}
+
+/* Регрессия «пропадают руки на движущихся плитах»: игрок у дальнего края
+ * небольшой движущейся платформы, камера под стандартным углом. Без
+ * тилайнинга крыша платформы (одна большая грань, средняя глубина ближе
+ * к камере) рисовалась ПОСЛЕ персонажа и перекрывала его конечности. */
+/* Регрессия «пропадают руки на движущихся плитах»: раньше монета №3
+ * висела в центре пути платформы 4 (0, 2.5, 22) — прямо между камерой
+ * и игроком; с невысокого ракурса её проекция накрывала руки персонажа
+ * и те «исчезали». Теперь монета смещена в сторону (2.2, 2.3, 22), и в
+ * кадре над плечом игрока — серая рука персонажа, а не монета/пол. */
+static void test_limb_over_platform(void) {
+    reset();
+    game_state = ST_GAME;
+    t_dir = 0; t_fade = 0;
+    p3d_init_world();
+    p3d_t = 0; /* позиции движущихся платформ считаются от p3d_t */
+    /* Платформа 4 (2.6×2.6, едет по Z): игрок в её дальней части — там
+     * монета (раньше 0, 2.5, 22) попадает между камерой и игроком, и её
+     * проекция накрывает руки. */
+    p3d_px = p3d_plat[4].cx + 0.0;
+    p3d_pz = p3d_plat[4].cz + 0.85;
+    p3d_py = p3d_plat[4].by + p3d_plat[4].hy + P3D_HALF;
+    p3d_vx = p3d_vy = p3d_vz = 0;
+    p3d_ground = 1; p3d_stand = 4;
+    p3d_angle = 0.0; p3d_swing = 0.4;
+    p3d_cam_yaw = 0.0;
+    /* Камера пониже обычного: с такого ракурса проекции накладываются. */
+    p3d_cam_pitch = -0.5;
+    frames(2); /* платформа едет, игрок едет с ней, камера пересчитана */
+    CHECK(fabs(p3d_pz - p3d_plat[4].cz) > 0.8, "игрок едет вместе с платформой");
+    /* Центр правой руки с учётом качания вокруг плеча (pivot 1.4·RIG_K). */
+    double sw = p3d_swing;
+    double ax = p3d_px + 1.95 * RIG_K;
+    double ay = p3d_py + RIG_OY + RIG_K - 1.4 * RIG_K * cos(sw);
+    double az = p3d_pz + 1.4 * RIG_K * sin(sw);
+    float vx, vy, vz, sx, sy;
+    ds3d_view(ax, ay, az, &vx, &vy, &vz);
+    ds3d_screen_xy(vx, vy, vz, &sx, &sy);
+    /* Кадр рисуем и растрируем ДО end(): end() сбрасывает список команд. */
+    begin();
+    draw(NULL);
+    memset(tfb, 0, sizeof tfb);
+    tfb_render();
+    end();
+    int gray = 0, total = 0;
+    for (int dy = -4; dy <= 4; dy++)
+        for (int dx = -4; dx <= 4; dx++) {
+            int px = (int)sx + dx, py = (int)sy + dy;
+            if (px < 0 || py < 0 || px >= 1280 || py >= 720) continue;
+            uint32_t c = tfb[py * 1280 + px];
+            int r = (c >> 16) & 0xff, g = (c >> 8) & 0xff, b = c & 0xff;
+            total++;
+            /* Рука — серый 0x9E9E9E; под ней ещё и тень (полупрозрачные
+             * слои ~45%) — цвет может быть заметно темнее базы. Монета —
+             * жёлтая (r>>g), пол — коричневый: оба не пройдут проверку. */
+            if (r > 30 && r < 230 && abs(r - g) < 25 && abs(g - b) < 25) gray++;
+        }
+    CHECK(total > 50, "рука попала в кадр");
+    CHECK(gray >= total / 2, "рука не перекрыта монетой: в кадре серый риг");
+}
+
 /* «Назад» сверху и системная кнопка — оба возвращают в лобби. */
 static void test_back(void) {
     reset();
@@ -345,6 +496,9 @@ int main(void) {
     test_no_floor_tunnel();
     test_finish_and_overlay();
     test_back();
+    test_rbox();
+    test_tile_big_face();
+    test_limb_over_platform();
     test_draw_layers();
     if (failures) {
         printf("\nFAILURES: %d\n", failures);

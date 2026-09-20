@@ -134,7 +134,11 @@ static const P3dWorldBox P3D_WORLD[] = {
 };
 static const struct { double x, y, z; } P3D_COIN_POS[P3D_COINS] = {
     { 0.0, 1.2, 3.5 }, { 2.5, 1.6, 12 }, { -2.0, 2.0, 17 },
-    { 0.0, 2.5, 22 },  { 3.2, 3.4, 32 }, { -3.0, 3.9, 36 },
+    /* Монета над платформой 4 со смещением вправо: в центре (0, …, 22)
+     * она висела между камерой и игроком и перекрывала ему руки
+     * («пропадающие руки» на движущейся плите). С края платформы её
+     * собирается прыжком (радиус сбора 0.8). */
+    { 2.2, 2.3, 22 },  { 3.2, 3.4, 32 }, { -3.0, 3.9, 36 },
     { 0.0, 6.8, 61 },
 };
 
@@ -524,25 +528,31 @@ static void p3d_draw_world(void) {
         cube3d(p->cx, p->by, p->cz, p->hx * 2, p->hy * 2, p->hz * 2,
                p3d_box_color(p->kind));
         if (p->kind == 3) {
-            /* Плита чекпоинта: активный светится голубым. */
+            /* Плита чекпоинта: активный светится голубым. bias держит
+             * плоскую плиту поверх соседних плиток крыши. */
             uint32_t mark = (p3d_cp == i) ? 0xFF4FC3F7 : 0xFF244E86;
-            cube3d(p->cx, p->by + p->hy + 0.03, p->cz,
-                   p->hx * 2 * 1.15, 0.05, p->hz * 2 * 1.15, mark);
+            cube3d_part(p->cx, p->by + p->hy + 0.03, p->cz,
+                        p->hx * 2 * 1.15, 0.05, p->hz * 2 * 1.15,
+                        0.0, 0.0, 0.15, mark);
         }
         if (p->kind == 4) {
-            /* Флаг на финишной площадке. */
+            /* Флаг на финишной площадке. bias — чтобы полотнище не
+             * перекрывали плитки крыши с низкого ракурса. */
             double top = p->by + p->hy;
             line3d(p->cx, top, p->cz - 1.8, p->cx, top + 3.2, p->cz - 1.8,
                    4, 0xFFE8E8E8);
-            cube3d(p->cx + 0.9, top + 2.8, p->cz - 1.8, 1.4, 0.8, 0.1, 0xFFE94560);
+            cube3d_part(p->cx + 0.9, top + 2.8, p->cz - 1.8, 1.4, 0.8, 0.1,
+                        0.0, 0.0, 0.55, 0xFFE94560);
         }
     }
     for (int c = 0; c < P3D_COINS; c++) {
         if (!p3d_coin_on[c]) continue;
-        cube3d_yaw(P3D_COIN_POS[c].x,
-                   P3D_COIN_POS[c].y + 0.15 * sin(p3d_t * 2.4 + c),
-                   P3D_COIN_POS[c].z, 0.55, 0.55, 0.55,
-                   p3d_t * 2.6 + c * 0.9, 0xFFFFD34D);
+        /* bias — держит монету поверх плиток пола даже с низкого ракурса,
+         * когда игрок (и монета) у дальнего края платформы. */
+        cube3d_part(P3D_COIN_POS[c].x,
+                    P3D_COIN_POS[c].y + 0.15 * sin(p3d_t * 2.4 + c),
+                    P3D_COIN_POS[c].z, 0.55, 0.55, 0.55,
+                    p3d_t * 2.6 + c * 0.9, 0.0, 0.55, 0xFFFFD34D);
     }
 }
 
@@ -570,34 +580,55 @@ static void p3d_draw_shadow(void) {
     }
 }
 
-/* Одна часть персонажа: локальный смещение (ox, oy, oz) вращается углом
- * p3d_angle вокруг центра игрока, сама деталь повёрнута тем же yaw (и
- * pitch для конечностей). bias держит части поверх пола, на котором стоит
- * персонаж (иначе соплоскостные грани менялись бы местами от кадра). */
-static void p3d_part(double ox, double oy, double oz,
-                     double sx, double sy, double sz,
-                     double pitch, uint32_t color) {
+/* Персонаж — риг, дословно по референсу (Three.js RoundedBox):
+ *   голова 1.8×1.8×1.8, r 0.6, seg 6, y 3.2;
+ *   торс   2.6×2.8×1.1, r 0.15, seg 3, y 1.0;
+ *   руки   1.3×2.8×1.1, r 0.15, seg 3, x ±1.95, y 1.0;
+ *   ноги   1.3×2.8×1.1, r 0.15, seg 3, x ±0.7,  y −1.8;
+ * все детали одного цвета (серый 0x9E9E9E), руки/ноги примыкают к торсу
+ * без зазора, низ ног y −3.2. Масштаб RIG_K переводит референс (рост 7.3)
+ * в игрока: низ ног — точно в низ бокса (py−0.45), чтобы не «проваливаться»
+ * в пол. Руки и ноги качаются вокруг верха детали (плечо/бедро) — качание
+ * идёт в плоскости «вперёд-назад» относительно персонажа, конечность
+ * никогда не уходит в торс. bias держит детали поверх пола, на котором
+ * стоит персонаж (иначе грани меняли бы порядок от кадра к кадру). */
+#define RIG_GRAY 0xFF9E9E9Eu
+#define RIG_K 0.13
+/* Начало координат референса: низ ног (y −3.2) → низ бокса игрока. */
+#define RIG_OY (-0.45 + 3.2 * RIG_K)
+
+static void p3d_rpart(double ox, double oy, double oz,
+                      double sx, double sy, double sz,
+                      double r, int seg,
+                      double pvx, double pvy, double pvz, double pitch) {
     double ca = cos(p3d_angle), sa = sin(p3d_angle);
     double wx = p3d_px + ca * ox + sa * oz;
     double wz = p3d_pz - sa * ox + ca * oz;
-    cube3d_part(wx, p3d_py + oy, wz, sx, sy, sz, p3d_angle, pitch, 0.5, color);
+    rbox3d(wx, p3d_py + oy, wz, sx, sy, sz, r, seg,
+           p3d_angle, pitch, pvx, pvy, pvz, 0.55, RIG_GRAY);
 }
-
-/* Персонаж в духе Roblox («нуб»: жёлтая голова и руки, синий торс,
- * зелёные ноги). Ноги точно доходят до низа бокса (py-0.45), чтобы не
- * «проваливаться» в пол. */
-#define NOOB_YELLOW 0xFFFFD800u
-#define NOOB_BLUE   0xFF2E64D8u
-#define NOOB_GREEN  0xFF4CA64Cu
 
 static void p3d_draw_player(void) {
     double s = p3d_swing;
-    p3d_part(-0.155, -0.33, 0, 0.26, 0.24, 0.24,  s, NOOB_GREEN);  /* левая нога */
-    p3d_part( 0.155, -0.33, 0, 0.26, 0.24, 0.24, -s, NOOB_GREEN);  /* правая нога */
-    p3d_part(0, -0.04, 0, 0.52, 0.34, 0.30, 0, NOOB_BLUE);         /* торс */
-    p3d_part(-0.37, -0.04, 0, 0.20, 0.34, 0.24, -s, NOOB_YELLOW);  /* левая рука */
-    p3d_part( 0.37, -0.04, 0, 0.20, 0.34, 0.24,  s, NOOB_YELLOW);  /* правая рука */
-    p3d_part(0, 0.32, 0, 0.34, 0.34, 0.34, 0, NOOB_YELLOW);        /* голова */
+    double y0 = RIG_OY;
+    p3d_rpart(0.0,          y0 + 3.2 * RIG_K, 0.0,
+              1.8 * RIG_K, 1.8 * RIG_K, 1.8 * RIG_K, 0.6 * RIG_K, 6,
+              0, 0, 0, 0);                                       /* голова   */
+    p3d_rpart(0.0,          y0 + 1.0 * RIG_K, 0.0,
+              2.6 * RIG_K, 2.8 * RIG_K, 1.1 * RIG_K, 0.15 * RIG_K, 3,
+              0, 0, 0, 0);                                       /* торс     */
+    p3d_rpart(-1.95 * RIG_K, y0 + 1.0 * RIG_K, 0.0,
+              1.3 * RIG_K, 2.8 * RIG_K, 1.1 * RIG_K, 0.15 * RIG_K, 3,
+              0, 1.4 * RIG_K, 0, -s);                            /* левая рука */
+    p3d_rpart( 1.95 * RIG_K, y0 + 1.0 * RIG_K, 0.0,
+              1.3 * RIG_K, 2.8 * RIG_K, 1.1 * RIG_K, 0.15 * RIG_K, 3,
+              0, 1.4 * RIG_K, 0,  s);                            /* правая рука */
+    p3d_rpart(-0.7 * RIG_K,  y0 - 1.8 * RIG_K, 0.0,
+              1.3 * RIG_K, 2.8 * RIG_K, 1.1 * RIG_K, 0.15 * RIG_K, 3,
+              0, 1.4 * RIG_K, 0,  s);                            /* левая нога */
+    p3d_rpart( 0.7 * RIG_K,  y0 - 1.8 * RIG_K, 0.0,
+              1.3 * RIG_K, 2.8 * RIG_K, 1.1 * RIG_K, 0.15 * RIG_K, 3,
+              0, 1.4 * RIG_K, 0, -s);                            /* правая нога */
 }
 
 static void p3d_draw_hud(void) {

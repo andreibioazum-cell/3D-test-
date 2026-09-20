@@ -120,6 +120,13 @@ void cube3d_yaw(double x, double y, double z, double sx, double sy, double sz,
  * платформы. См. ds3d_cube в render3d.inc. */
 void cube3d_part(double x, double y, double z, double sx, double sy, double sz,
                  double yaw, double pitch, double bias, uint32_t color);
+/* Скруглённый бокс (радиус r по всем рёбрам и углам): персонаж-нооб
+ * (голова/торс/руки/ноги). seg — число сегментов скругления (как у
+ * RoundedBoxGeometry), pivot (px,py,pz) — точка качания в локальных
+ * координатах детали (плечо/бедро). См. rbox3d в render3d.inc. */
+void rbox3d(double cx, double cy, double cz, double sx, double sy, double sz,
+            double r, int seg, double yaw, double pitch,
+            double px, double py, double pz, double bias, uint32_t color);
 void line3d(double x1, double y1, double z1, double x2, double y2, double z2,
             double thickness, uint32_t color);
 void flush3d(void);

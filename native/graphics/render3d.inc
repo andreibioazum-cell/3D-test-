@@ -35,6 +35,16 @@
 /* Точек в грани после обрезки по ближней плоскости: четырёхугольник даёт
  * максимум 5, запас — на будущие примитивы. */
 #define DS3D_FACE_PTS 9
+/* Средняя глубина большой грани — плохой ключ алгоритма художника: крыша
+ * длинной платформы, центр которой ближе к камере, чем объект, стоящий у
+ * её дальнего края, рисуется ПОСЛЕ него и «съедает» его с высокого ракурса
+ * (баг: пропадающие руки персонажа на небольших движущихся плитах). Такие
+ * квады делаются в мировом пространстве на k×k плиток: средняя глубина
+ * каждой плитки локальна, и плитка под объектом стоит в очереди по глубине
+ * объекта. Плитка наследует нормаль/цвет/bias грани; вершины соседних
+ * плиток совпадают бит в бит (одна формула lerp) — швов нет. */
+#define DS3D_TILE_SPAN 0.5f
+#define DS3D_TILE_MAXK 16
 
 typedef struct {
     float ex, ey, ez;        /* положение глаза */
@@ -215,10 +225,45 @@ static uint32_t ds3d_shade(uint32_t c, float k) {
 
 /* Проекция готового многоугольника мира на экран и постановка в очередь.
  * nx,ny,nz — внешняя нормаль (для отбора задних граней и света), bias —
- * смещение глубины в очереди (см. ds3d_push_face). */
+ * смещение глубины в очереди (см. ds3d_push_face). tiled — грань уже
+ * разбита на плитки, повторная subdivision не нужна. */
 static void ds3d_emit_poly(const double *wx, const double *wy, const double *wz, int n,
                            float nx, float ny, float nz, uint32_t color, float thick,
-                           float bias) {
+                           float bias, int tiled) {
+    /* Большой квад — на плитки (см. DS3D_TILE_SPAN). Глубина на плоской
+     * грани меняется линейно, поэтому глубина плитки <= span/k. */
+    if (n == 4 && !tiled) {
+        float d0 = ds3d_depth(wx[0], wy[0], wz[0]);
+        float d1 = ds3d_depth(wx[1], wy[1], wz[1]);
+        float d2 = ds3d_depth(wx[2], wy[2], wz[2]);
+        float d3 = ds3d_depth(wx[3], wy[3], wz[3]);
+        float dmin = fminf(fminf(d0, d1), fminf(d2, d3));
+        float dmax = fmaxf(fmaxf(d0, d1), fmaxf(d2, d3));
+        if (dmax > dmin + DS3D_TILE_SPAN) {
+            int k = (int)((dmax - dmin) / DS3D_TILE_SPAN) + 1;
+            if (k > DS3D_TILE_MAXK) k = DS3D_TILE_MAXK;
+            for (int i = 0; i < k; i++)
+                for (int j = 0; j < k; j++) {
+                    float u0 = (float)i / k, u1 = (float)(i + 1) / k;
+                    float v0 = (float)j / k, v1 = (float)(j + 1) / k;
+                    /* Углы плитки в обход: (u0,v0), (u1,v0), (u1,v1), (u0,v1) —
+                     * тот же порядок, что у исходного квада, иначе веерная
+                     * триангуляция даст «бабочку» с дырой на половине плитки. */
+                    double qx[4], qy[4], qz[4];
+                    for (int c = 0; c < 4; c++) {
+                        float u = (c == 1 || c == 2) ? u1 : u0;
+                        float v = (c & 2) ? v1 : v0;
+                        float a00 = (1 - u) * (1 - v), a10 = u * (1 - v);
+                        float a11 = u * v, a01 = (1 - u) * v;
+                        qx[c] = wx[0] * a00 + wx[1] * a10 + wx[2] * a11 + wx[3] * a01;
+                        qy[c] = wy[0] * a00 + wy[1] * a10 + wy[2] * a11 + wy[3] * a01;
+                        qz[c] = wz[0] * a00 + wz[1] * a10 + wz[2] * a11 + wz[3] * a01;
+                    }
+                    ds3d_emit_poly(qx, qy, qz, 4, nx, ny, nz, color, thick, bias, 1);
+                }
+            return;
+        }
+    }
     /* Задняя грань: смотрит от камеры — не строится. Мягкий допуск, чтобы
      * рёбра куба не мигали на грани «ребро к глазу». */
     float cx = 0, cy = 0, cz = 0;
@@ -342,7 +387,7 @@ static void ds3d_cube(double x, double y, double z,
         float npz = nyl * sp + nzl * cp;
         float fnx = ca * nxl + sa * npz;
         float fnz = -sa * nxl + ca * npz;
-        ds3d_emit_poly(wx, wy, wz, 4, fnx, npy, fnz, color, 0, (float)bias);
+        ds3d_emit_poly(wx, wy, wz, 4, fnx, npy, fnz, color, 0, (float)bias, 0);
     }
 }
 
@@ -359,6 +404,92 @@ void cube3d_part(double x, double y, double z,
                  double sx, double sy, double sz,
                  double yaw, double pitch, double bias, uint32_t color) {
     ds3d_cube(x, y, z, sx, sy, sz, yaw, pitch, bias, color);
+}
+
+/* Скруглённый бокс: параллелепипед, все рёбра и углы которого скруглены
+ * радиусом r (сумма Минковского «бокс ⊕ шар») — персонаж-нооб: голова,
+ * торс, руки, ноги. Поверхность параметризуется единичным направлением u:
+ *     P(u) = u · (Σ |u_i|·(h_i − r) + r) —
+ * одна формула даёт плоские части, скруглённые рёбра и углы; нормаль в
+ * точке P(u) — это именно u. Меш — сетка по сфере: 2·seg шагов на
+ * четверть оборота (фаза «центр грани → рёбро → центр грани»), то есть seg
+ * имеет тот же смысл, что у RoundedBoxGeometry. Треугольник подсвечивается
+ * по нормализованной сумме u своих углов — плавное затенение скруглённой
+ * поверхности, не зависящее от ориентации обхода. Свайп конечности идёт
+ * вокруг pivot (px,py,pz) в локальных координатах детали (плечо/бедро);
+ * порядок поворотов и очередь художника (bias, отсечение задних граней,
+ * обрезка у глаза) — общие с гранями куба. */
+void rbox3d(double cx, double cy, double cz,
+            double sx, double sy, double sz, double r, int seg,
+            double yaw, double pitch,
+            double px, double py, double pz,
+            double bias, uint32_t color) {
+    if (!frame_open) return;
+    if (!isfinite(cx + cy + cz + sx + sy + sz + r + yaw + pitch + px + py + pz)) return;
+    if (sx <= 0 || sy <= 0 || sz <= 0) return;
+    if (seg < 1) seg = 1;
+    if (seg > 8) seg = 8;
+    ds3d_ensure_cam();
+    double hx = sx * 0.5, hy = sy * 0.5, hz = sz * 0.5;
+    if (r < 0) r = 0;
+    double hmin = hx < hy ? (hx < hz ? hx : hz) : (hy < hz ? hy : hz);
+    if (r > 0.49 * hmin) r = 0.49 * hmin;
+    double ix = hx - r, iy = hy - r, iz = hz - r;
+    int rows = 4 * seg, cols = 8 * seg;
+    static float rsin[65], rcos[65], csin[65], ccos[65];
+    for (int i = 0; i <= rows; i++) {
+        float phi = (float)((double)i / (double)rows) * (float)M_PI;
+        rsin[i] = sinf(phi); rcos[i] = cosf(phi);
+    }
+    for (int j = 0; j < cols; j++) {
+        float lam = (float)((double)j / (double)cols) * (float)(2.0 * M_PI);
+        csin[j] = sinf(lam); ccos[j] = cosf(lam);
+    }
+    float ca = (float)cos(yaw), sa = (float)sin(yaw);
+    float cp = (float)cos(pitch), sp = (float)sin(pitch);
+    static float VX[33 * 64], VY[33 * 64], VZ[33 * 64];
+    static float UX[33 * 64], UY[33 * 64], UZ[33 * 64];
+    for (int i = 0; i <= rows; i++)
+        for (int j = 0; j < cols; j++) {
+            int v = i * cols + j;
+            float ux = rsin[i] * ccos[j], uy = rcos[i], uz = rsin[i] * csin[j];
+            float s = fabsf(ux) * (float)ix + fabsf(uy) * (float)iy
+                    + fabsf(uz) * (float)iz + (float)r;
+            float lx = ux * s, ly = uy * s, lz = uz * s;
+            /* pivot, затем pitch вокруг X, затем yaw вокруг Y (как в кубе). */
+            float wx0 = lx - (float)px, wy0 = ly - (float)py, wz0 = lz - (float)pz;
+            float pyy = wy0 * cp - wz0 * sp;
+            float pzz = wy0 * sp + wz0 * cp;
+            VX[v] = (float)(cx) + ca * wx0 + sa * pzz;
+            VY[v] = (float)(cy) + pyy;
+            VZ[v] = (float)(cz) - sa * wx0 + ca * pzz;
+            UX[v] = ux; UY[v] = uy; UZ[v] = uz;
+        }
+    double tx[3], ty[3], tz[3];
+    for (int i = 0; i < rows; i++)
+        for (int j = 0; j < cols; j++) {
+            int j2 = (j + 1) % cols;
+            int a = i * cols + j, b = i * cols + j2;
+            int c = (i + 1) * cols + j2, d = (i + 1) * cols + j;
+            const int id[2][3] = { { a, b, c }, { a, c, d } };
+            for (int t = 0; t < 2; t++) {
+                int i0 = id[t][0], i1 = id[t][1], i2 = id[t][2];
+                /* Вырожденные уголки у полюсов сетки не ставим в очередь. */
+                if ((VX[i0] == VX[i1] && VY[i0] == VY[i1] && VZ[i0] == VZ[i1]) ||
+                    (VX[i1] == VX[i2] && VY[i1] == VY[i2] && VZ[i1] == VZ[i2]))
+                    continue;
+                float nx = UX[i0] + UX[i1] + UX[i2];
+                float ny = UY[i0] + UY[i1] + UY[i2];
+                float nz = UZ[i0] + UZ[i1] + UZ[i2];
+                float nl = sqrtf(nx * nx + ny * ny + nz * nz);
+                if (!(nl > 1e-6f)) continue;
+                nx /= nl; ny /= nl; nz /= nl;
+                tx[0] = VX[i0]; ty[0] = VY[i0]; tz[0] = VZ[i0];
+                tx[1] = VX[i1]; ty[1] = VY[i1]; tz[1] = VZ[i1];
+                tx[2] = VX[i2]; ty[2] = VY[i2]; tz[2] = VZ[i2];
+                ds3d_emit_poly(tx, ty, tz, 3, nx, ny, nz, color, 0, (float)bias, 1);
+            }
+        }
 }
 
 void line3d(double x1, double y1, double z1, double x2, double y2, double z2,

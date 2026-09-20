@@ -214,12 +214,12 @@ int main(int argc, char **argv) {
     cam3d(0, 4, -6, 0, 1, 0, 60);
     cube3d(0, 1, 0, 2, 2, 2, 0xFF808080);
     flush3d();
-    /* Видны только лицевая (z=-1) и верхняя (y=2) грани: 2 грани = 4 треугольника. */
-    CHECK(count_cmds(DS_CMD_TRI) == 4, "видимы ровно 2 грани куба (4 треугольника)");
+    /* Видны только лицевая (z=-1) и верхняя (y=2) грани. Большие грани
+     * делятся на плитки (см. DS3D_TILE_SPAN), поэтому треугольников больше
+     * четырёх, но их объединение — те же две грани с теми же углами. */
+    CHECK(count_cmds(DS_CMD_TRI) >= 4, "видимы грани куба (2 грани, с плитками >= 4 треугольника)");
     float ex_sx[4], ex_sy[4];
     expect_front_corners(ex_sx, ex_sy);
-    /* Лицевая грань рисуется последней (она ближе верхней). Её вершины —
-     * веер из 2 треугольников: ищем треугольник с тремя различными x. */
     DSCmd *front = NULL, *top = NULL;
     for (size_t i = 0; i < cmd_n; i++) {
         if (cmds[i].t != DS_CMD_TRI) continue;
@@ -231,14 +231,16 @@ int main(int argc, char **argv) {
     CHECK(top && front, "верхняя и лицевая грани найдены по экранной высоте");
     if (front) {
         /* Лицевая грань — трапеция (камера наклонена вниз), поэтому сравниваем
-         * все четыре расчётных угла с вершинами двух её треугольников. */
-        float vx[6], vy[6];
+         * все четыре расчётных угла с вершинами всех её плиток. */
+        float vx[256], vy[256];
         int vn = 0, matched = 0;
-        for (size_t i = 0; i < cmd_n && vn < 6; i++) {
+        float front_ymax = 0;
+        for (size_t i = 0; i < cmd_n && vn < 252; i++) {
             if (cmds[i].t != DS_CMD_TRI) continue;
             DSCmd *c = &cmds[i];
             float ymax = fmaxf(c->v.tri.y0, fmaxf(c->v.tri.y1, c->v.tri.y2));
             if (ymax <= 360) continue;
+            front_ymax = fmaxf(front_ymax, ymax);
             vx[vn] = c->v.tri.x0; vy[vn] = c->v.tri.y0; vn++;
             vx[vn] = c->v.tri.x1; vy[vn] = c->v.tri.y1; vn++;
             vx[vn] = c->v.tri.x2; vy[vn] = c->v.tri.y2; vn++;
@@ -247,8 +249,7 @@ int main(int argc, char **argv) {
             for (int i = 0; i < vn; i++)
                 if (fabsf(vx[i] - ex_sx[k]) < 0.6f && fabsf(vy[i] - ex_sy[k]) < 0.6f) { matched++; break; }
         CHECK(matched == 4, "все 4 угла лицевой грани совпадают с расчётом");
-        float ymax = fmaxf(front->v.tri.y0, fmaxf(front->v.tri.y1, front->v.tri.y2));
-        CHECK(fabsf(ymax - ex_sy[0]) < 0.6f, "нижний угол лицевой грани совпадает с расчётом");
+        CHECK(fabsf(front_ymax - ex_sy[0]) < 0.6f, "нижний угол лицевой грани совпадает с расчётом");
     }
     end();
 
@@ -259,21 +260,23 @@ int main(int argc, char **argv) {
     cube3d(0, 0, 0, 1, 1, 1, 0xFF00FF00);   /* ближний: рисуется последним */
     flush3d();
     {
-        DSCmd *tris[64]; int n = 0;
-        for (size_t i = 0; i < cmd_n && n < 64; i++)
-            if (cmds[i].t == DS_CMD_TRI) tris[n++] = &cmds[i];
-        CHECK(n == 8, "два куба дали 8 треугольников (по 2 грани)");
-        if (n == 8) {
-            /* Размах первого треугольника (дальний куб) меньше ближнего. */
-            DSCmd *a = tris[0], *b = tris[n - 1];
-            float span_a = fmaxf(a->v.tri.x0, fmaxf(a->v.tri.x1, a->v.tri.x2)) -
-                           fminf(a->v.tri.x0, fminf(a->v.tri.x1, a->v.tri.x2));
-            float span_b = fmaxf(b->v.tri.x0, fmaxf(b->v.tri.x1, b->v.tri.x2)) -
-                           fminf(b->v.tri.x0, fminf(b->v.tri.x1, b->v.tri.x2));
-            CHECK(span_a < span_b, "дальний куб нарисован раньше ближнего");
-            /* Цвета не перепутаны: у ближнего зелёный. */
-            CHECK((b->v.tri.c & 0x00ff00u) != 0, "ближний куб сохранил свой цвет");
+        /* Грани могут быть разбиты на плитки — проверяем не число, а
+         * строгий порядок: все треугольники дальнего (красного) куба идут
+         * раньше всех треугольников ближнего (зелёного). Глубины кубов не
+         * пересекаются, поэтому порядок полный. */
+        int n = 0, last_red = -1, first_green = -1, has_green = 0, has_red = 0;
+        for (size_t i = 0; i < cmd_n; i++) {
+            if (cmds[i].t != DS_CMD_TRI) continue;
+            DSCmd *c = &cmds[i];
+            n++;
+            /* pack_c: r в младшем байте; у дальнего куба g==0, у ближнего g!=0. */
+            int green = (c->v.tri.c & 0x00ff00u) != 0;
+            if (green) { has_green = 1; if (first_green < 0) first_green = (int)i; }
+            else { has_red = 1; last_red = (int)i; }
         }
+        CHECK(n >= 8, "два куба дали грани (>= 8 треугольников)");
+        CHECK(has_red && has_green, "оба цвета кубов на месте");
+        CHECK(last_red >= 0 && first_green > last_red, "дальний куб нарисован раньше ближнего");
     }
     end();
 
