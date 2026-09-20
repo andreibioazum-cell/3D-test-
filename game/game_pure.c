@@ -28,6 +28,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 
 /* ---------------- состояния и переходы ---------------- */
 
@@ -556,79 +557,261 @@ static void p3d_draw_world(void) {
     }
 }
 
-/* Мягкая тень: четыре вложенные пластины с растущей альфой к центру —
- * «шейдер тени» для конвейера без depth-буфера. Пластины лежат почти в
- * одной плоскости с крышей платформы, поэтому каждая со своим bias, чтобы
- * порядок (светлая под тёмной) был один и тот же каждый кадр. В прыжке
- * тень уменьшается и бледнеет. */
-static void p3d_draw_shadow(void) {
-    int si = -1;
-    if (p3d_floor_top(&si) < 0) return;
-    double top = p3d_plat[si].by + p3d_plat[si].hy;
-    double h = (p3d_py - P3D_HALF) - top;
-    double kf = 1.0 - h / 7.0;
-    if (kf < 0.2) kf = 0.2;
-    if (kf > 1.0) kf = 1.0;
-    static const double sizes[4] = { 1.2, 0.98, 0.78, 0.58 };
-    static const double alphas[4] = { 20, 28, 38, 52 };
-    for (int l = 0; l < 4; l++) {
-        double size = 0.9 * sizes[l] * (0.55 + 0.45 * kf);
-        uint32_t c = (uint32_t)(alphas[l] * kf) * 0x1000000u;
-        double bias = 0.20 + l * 0.08;
-        cube3d_part(p3d_px, top + 0.012 + l * 0.004, p3d_pz,
-                    size, 0.02, size, 0, 0, bias, c);
-    }
+/* ---------------- персонаж: собственный текстовый формат M3D -----------
+ * Персонаж — набор частей (скруглённые боксы и шары), описанный в
+ * game/assets/models/hero.txt и рисуемый в игре через rbox3d/ball3d.
+ * Формат (одна директива на строку, # — комментарий):
+ *   meta name <имя>
+ *   part <id> <shape> x y z sx sy sz r seg R G B A [pivot px py pz] [sway s]
+ *     shape: box — скруглённый бокс (r — радиус рёбер), ball — шар (sx = радиус)
+ *     начало модели = центр игрока (0,0,0), низ ног — y −0.45 (пол)
+ *     pivot — точка качания в локальных координатах части (0 0 0 = центр)
+ *     sway  — радианы на единицу походки (вращение вокруг X)
+ * Загрузка: APK → assets; если файла нет (например, в development-сборке) —
+ * файловая копия рядом с исходниками; если и её нет — встроенный дефолт. */
+#define M3D_MAX_PARTS 24
+typedef struct {
+    char id[16];
+    int shape;              /* 0 — box, 1 — ball */
+    float x, y, z;
+    float sx, sy, sz, r, seg;
+    uint8_t cr, cg, cb, ca;
+    float pvx, pvy, pvz, sway;
+} M3dPart;
+
+static M3dPart p3d_model[M3D_MAX_PARTS];
+static int p3d_model_n = 0;
+static int p3d_model_loaded = 0;
+
+static const char P3D_HERO_ASSET[] = "models/hero.txt";
+static const char P3D_HERO_FILE[] = "game/assets/models/hero.txt";
+
+/* Встроенная копия персонажа — игра работает даже без файла. */
+static const char P3D_HERO_DEFAULT[] =
+    "meta name hero\n"
+    "part shoes_l box  -0.16 -0.37 0.03 0.26 0.16 0.36 0.06 2 100 106 114 255\n"
+    "part shoes_r box   0.16 -0.37 0.03 0.26 0.16 0.36 0.06 2 100 106 114 255\n"
+    "part leg_l   box  -0.16 -0.19 0    0.24 0.44 0.26 0.08 3 152 158 166 255 pivot 0 0.22 0 sway 0.55\n"
+    "part leg_r   box   0.16 -0.19 0    0.24 0.44 0.26 0.08 3 152 158 166 255 pivot 0 0.22 0 sway -0.55\n"
+    "part torso   box   0    0.12 0     0.58 0.46 0.38 0.12 3 180 186 194 255\n"
+    "part arm_l   box  -0.40 -0.07 0    0.20 0.46 0.22 0.08 3 152 158 166 255 pivot 0 0.17 0 sway -0.55\n"
+    "part arm_r   box   0.40 -0.07 0    0.20 0.46 0.22 0.08 3 152 158 166 255 pivot 0 0.17 0 sway 0.55\n"
+    "part head    box   0    0.50 0     0.52 0.46 0.54 0.15 4 205 209 217 255\n"
+    "part eye_l   ball -0.12 0.54 0.245 0.075 0 0 0 2 255 255 255 255\n"
+    "part eye_r   ball  0.12 0.54 0.245 0.075 0 0 0 2 255 255 255 255\n"
+    "part pupil_l ball -0.12 0.54 0.30  0.038 0 0 0 2 40 44 52 255\n"
+    "part pupil_r ball  0.12 0.54 0.30  0.038 0 0 0 2 40 44 52 255\n";
+
+static int m3d_clamp8(float v) {
+    if (v < 0) v = 0;
+    if (v > 255) v = 255;
+    return (int)v;
 }
 
-/* Персонаж — риг, дословно по референсу (Three.js RoundedBox):
- *   голова 1.8×1.8×1.8, r 0.6, seg 6, y 3.2;
- *   торс   2.6×2.8×1.1, r 0.15, seg 3, y 1.0;
- *   руки   1.3×2.8×1.1, r 0.15, seg 3, x ±1.95, y 1.0;
- *   ноги   1.3×2.8×1.1, r 0.15, seg 3, x ±0.7,  y −1.8;
- * все детали одного цвета (серый 0x9E9E9E), руки/ноги примыкают к торсу
- * без зазора, низ ног y −3.2. Масштаб RIG_K переводит референс (рост 7.3)
- * в игрока: низ ног — точно в низ бокса (py−0.45), чтобы не «проваливаться»
- * в пол. Руки и ноги качаются вокруг верха детали (плечо/бедро) — качание
- * идёт в плоскости «вперёд-назад» относительно персонажа, конечность
- * никогда не уходит в торс. bias держит детали поверх пола, на котором
- * стоит персонаж (иначе грани меняли бы порядок от кадра к кадру). */
-#define RIG_GRAY 0xFF9E9E9Eu
-#define RIG_K 0.13
-/* Начало координат референса: низ ног (y −3.2) → низ бокса игрока. */
-#define RIG_OY (-0.45 + 3.2 * RIG_K)
+/* Разбор текста модели. Возвращает число частей (0 — модель не годится). */
+static int p3d_model_parse(const char *text) {
+    p3d_model_n = 0;
+    const char *p = text;
+    while (*p && p3d_model_n < M3D_MAX_PARTS) {
+        const char *nl = strchr(p, '\n');
+        size_t len = nl ? (size_t)(nl - p) : strlen(p);
+        char line[600];
+        if (len > sizeof line - 1) len = sizeof line - 1;
+        memcpy(line, p, len);
+        line[len] = 0;
+        p = nl ? nl + 1 : p + len;
+        while (len > 0 && (line[len - 1] == '\r' || line[len - 1] == ' '))
+            line[--len] = 0;
+        char *s = line;
+        while (*s == ' ' || *s == '\t') s++;
+        if (!*s || *s == '#') continue;
+        if (strncmp(s, "meta", 4) == 0) continue;      /* name — не нужно игре */
+        if (strncmp(s, "part", 4) != 0 ||
+            !isspace((unsigned char)s[4])) continue;
+        M3dPart *m = &p3d_model[p3d_model_n];
+        memset(m, 0, sizeof *m);
+        s += 5;
+        while (*s == ' ' || *s == '\t') s++;
+        int ti = 0;
+        while (*s && !isspace((unsigned char)*s)) {
+            if (ti < (int)sizeof m->id - 1) m->id[ti++] = *s;
+            s++;
+        }
+        m->id[ti] = 0;
+        if (!*m->id) continue;
+        while (*s == ' ' || *s == '\t') s++;
+        int shape;
+        if (strncmp(s, "box", 3) == 0) shape = 0;
+        else if (strncmp(s, "ball", 4) == 0) shape = 1;
+        else continue;
+        s += (shape == 1) ? 4 : 3;
+        /* Обязательные числа: x y z sx sy sz r seg R G B */
+        float nums[16];
+        int nn = 0;
+        for (int i = 0; i < 11; i++) {
+            char *e;
+            float v = strtof(s, &e);
+            if (e == s) goto bad_part;
+            nums[nn++] = v;
+            s = e;
+        }
+        m->shape = shape;
+        m->x = nums[0]; m->y = nums[1]; m->z = nums[2];
+        m->sx = nums[3]; m->sy = nums[4]; m->sz = nums[5];
+        m->r = nums[6];
+        m->seg = (float)(int)nums[7];
+        m->cr = (uint8_t)m3d_clamp8(nums[8]);
+        m->cg = (uint8_t)m3d_clamp8(nums[9]);
+        m->cb = (uint8_t)m3d_clamp8(nums[10]);
+        /* Опционально: A, затем ключевые слова pivot px py pz / sway s. */
+        while (*s) {
+            while (*s == ' ' || *s == '\t') s++;
+            if (!*s) break;
+            if (isdigit((unsigned char)*s)) {
+                if (nn < 16) {
+                    char *e;
+                    float v = strtof(s, &e);
+                    if (e == s) break;
+                    nums[nn++] = v;
+                    s = e;
+                }
+                continue;
+            }
+            if (strncmp(s, "pivot", 5) == 0) {
+                s += 5;
+                float a = 0, b = 0, c = 0;
+                char *e;
+                a = strtof(s, &e); if (e == s) goto bad_part; s = e;
+                b = strtof(s, &e); if (e == s) goto bad_part; s = e;
+                c = strtof(s, &e); if (e == s) goto bad_part; s = e;
+                m->pvx = a; m->pvy = b; m->pvz = c;
+                continue;
+            }
+            if (strncmp(s, "sway", 4) == 0) {
+                s += 4;
+                char *e;
+                float a = strtof(s, &e);
+                if (e == s) goto bad_part;
+                m->sway = a;
+                break;
+            }
+            break; /* неизвестное ключевое слово — игнорируем остаток */
+        }
+        if (nn > 11) m->ca = (uint8_t)m3d_clamp8(nums[11]);
+        if (!m->ca) m->ca = 255;
+        /* Проверка размеров: box с пустыми размерами или ball без радиуса — мимо. */
+        if (shape == 0) {
+            if (m->sx <= 0 || m->sy <= 0 || m->sz <= 0) goto bad_part;
+        } else if (m->sx <= 0) {
+            goto bad_part;
+        }
+        p3d_model_n++;
+        continue;
+    bad_part:
+        continue;
+    }
+    return p3d_model_n;
+}
 
-static void p3d_rpart(double ox, double oy, double oz,
-                      double sx, double sy, double sz,
-                      double r, int seg,
-                      double pvx, double pvy, double pvz, double pitch) {
+static char *p3d_read_file(const char *path, size_t maxsz) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long l = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *buf = NULL;
+    if (l > 0 && (uint64_t)l < maxsz) {
+        buf = (char *)malloc((size_t)l + 1);
+        if (buf && fread(buf, 1, (size_t)l, f) == (size_t)l) {
+            buf[l] = 0;
+        } else {
+            free(buf);
+            buf = NULL;
+        }
+    }
+    fclose(f);
+    return buf;
+}
+
+static void p3d_model_load(void) {
+    if (p3d_model_loaded) return;
+    p3d_model_loaded = 1;
+    char *text = NULL;
+#ifdef __ANDROID__
+    AAssetManager *am = ds_get_asset_manager();
+    if (am) {
+        AAsset *a = AAssetManager_open(am, P3D_HERO_ASSET, AASSET_MODE_BUFFER);
+        if (a) {
+            off_t l = AAsset_getLength(a);
+            if (l > 0 && (uint64_t)l < 65536) {
+                char *buf = (char *)malloc((size_t)l + 1);
+                if (buf) {
+                    off_t off = 0;
+                    while (off < l) {
+                        int nr = AAsset_read(a, buf + off, (size_t)(l - off));
+                        if (nr <= 0) break;
+                        off += nr;
+                    }
+                    if (off == l) { buf[off] = 0; text = buf; }
+                    else { free(buf); }
+                }
+            }
+            AAsset_close(a);
+        }
+    }
+#endif
+    if (!text) text = p3d_read_file(P3D_HERO_FILE, 65536);
+    if (text) {
+        if (p3d_model_parse(text) > 0) { free(text); return; }
+        free(text);
+        text = NULL;
+        ds_log_err("model: '%s' is invalid, using built-in character", P3D_HERO_ASSET);
+    }
+    if (p3d_model_parse(P3D_HERO_DEFAULT) > 0) return;
+    ds_log_err("model: built-in character is broken, player will be invisible");
+}
+
+int p3d_model_find(const char *id) {
+    for (int i = 0; i < p3d_model_n; i++)
+        if (strcmp(p3d_model[i].id, id) == 0) return i;
+    return -1;
+}
+
+/* Мир-координаты центра части (с учётом покачивания и поворота персонажа)
+ * — для пиксельных проверок в тестах. */
+static void p3d_model_part_world(int i, double *wx, double *wy, double *wz) {
+    M3dPart *m = &p3d_model[i];
+    double th = m->sway * p3d_swing;
+    double c = cos(th), s = sin(th);
+    /* Центр части после поворота вокруг pivot: pv + R_x(th)·(−pv). */
+    double ox = m->x + m->pvx;
+    double oy = m->y + m->pvy * (1 - c) + m->pvz * s;
+    double oz = m->z + m->pvz * (1 - c) - m->pvy * s;
     double ca = cos(p3d_angle), sa = sin(p3d_angle);
-    double wx = p3d_px + ca * ox + sa * oz;
-    double wz = p3d_pz - sa * ox + ca * oz;
-    rbox3d(wx, p3d_py + oy, wz, sx, sy, sz, r, seg,
-           p3d_angle, pitch, pvx, pvy, pvz, 0.55, RIG_GRAY);
+    *wx = p3d_px + ca * ox + sa * oz;
+    *wy = p3d_py + oy;
+    *wz = p3d_pz - sa * ox + ca * oz;
 }
 
 static void p3d_draw_player(void) {
     double s = p3d_swing;
-    double y0 = RIG_OY;
-    p3d_rpart(0.0,          y0 + 3.2 * RIG_K, 0.0,
-              1.8 * RIG_K, 1.8 * RIG_K, 1.8 * RIG_K, 0.6 * RIG_K, 6,
-              0, 0, 0, 0);                                       /* голова   */
-    p3d_rpart(0.0,          y0 + 1.0 * RIG_K, 0.0,
-              2.6 * RIG_K, 2.8 * RIG_K, 1.1 * RIG_K, 0.15 * RIG_K, 3,
-              0, 0, 0, 0);                                       /* торс     */
-    p3d_rpart(-1.95 * RIG_K, y0 + 1.0 * RIG_K, 0.0,
-              1.3 * RIG_K, 2.8 * RIG_K, 1.1 * RIG_K, 0.15 * RIG_K, 3,
-              0, 1.4 * RIG_K, 0, -s);                            /* левая рука */
-    p3d_rpart( 1.95 * RIG_K, y0 + 1.0 * RIG_K, 0.0,
-              1.3 * RIG_K, 2.8 * RIG_K, 1.1 * RIG_K, 0.15 * RIG_K, 3,
-              0, 1.4 * RIG_K, 0,  s);                            /* правая рука */
-    p3d_rpart(-0.7 * RIG_K,  y0 - 1.8 * RIG_K, 0.0,
-              1.3 * RIG_K, 2.8 * RIG_K, 1.1 * RIG_K, 0.15 * RIG_K, 3,
-              0, 1.4 * RIG_K, 0,  s);                            /* левая нога */
-    p3d_rpart( 0.7 * RIG_K,  y0 - 1.8 * RIG_K, 0.0,
-              1.3 * RIG_K, 2.8 * RIG_K, 1.1 * RIG_K, 0.15 * RIG_K, 3,
-              0, 1.4 * RIG_K, 0, -s);                            /* правая нога */
+    double ca = cos(p3d_angle), sa = sin(p3d_angle);
+    for (int i = 0; i < p3d_model_n; i++) {
+        M3dPart *m = &p3d_model[i];
+        double wx = p3d_px + ca * m->x + sa * m->z;
+        double wz = p3d_pz - sa * m->x + ca * m->z;
+        double wy = p3d_py + m->y;
+        double pitch = m->sway * s;
+        /* bias 0.55 — детали держатся поверх плиток пола (см. render3d.inc). */
+        uint32_t col = ((uint32_t)m->ca << 24) | ((uint32_t)m->cr << 16)
+                     | ((uint32_t)m->cg << 8) | (uint32_t)m->cb;
+        if (m->shape == 1)
+            ball3d(wx, wy, wz, m->sx, (int)m->seg, p3d_angle, pitch,
+                   m->pvx, m->pvy, m->pvz, 0.55, col);
+        else
+            rbox3d(wx, wy, wz, m->sx, m->sy, m->sz, m->r, (int)m->seg,
+                   p3d_angle, pitch, m->pvx, m->pvy, m->pvz, 0.55, col);
+    }
 }
 
 static void p3d_draw_hud(void) {
@@ -693,7 +876,6 @@ static void p3d_draw_hud(void) {
 static void p3d_draw(void) {
     p3d_draw_sky();
     p3d_draw_world();
-    p3d_draw_shadow();
     p3d_draw_player();
     flush3d();
     p3d_draw_hud();
@@ -797,6 +979,7 @@ static void p3d_touch(double x, double y, double action, double pid) {
 
 void init(AAssetManager *assets) {
     ds_set_asset_manager(assets);
+    p3d_model_load();
     reset();
 }
 

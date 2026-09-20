@@ -127,10 +127,16 @@ void cube3d_part(double x, double y, double z, double sx, double sy, double sz,
 void rbox3d(double cx, double cy, double cz, double sx, double sy, double sz,
             double r, int seg, double yaw, double pitch,
             double px, double py, double pz, double bias, uint32_t color);
+/* Шар радиуса rad (та же сетка/pivot/затенение, что у rbox3d). Для морд
+ * персонажа из формата моделей M3D (см. ball3d в render3d.inc). */
+void ball3d(double cx, double cy, double cz, double rad, int seg,
+            double yaw, double pitch,
+            double px, double py, double pz, double bias, uint32_t color);
 void line3d(double x1, double y1, double z1, double x2, double y2, double z2,
             double thickness, uint32_t color);
 void flush3d(void);
 void ds_set_asset_manager(AAssetManager *assets);
+AAssetManager *ds_get_asset_manager(void);
 void ds_release_assets(void);
 int png_load(const char *name);
 void tex(float x, float y, const char *name, float angle, float scale);

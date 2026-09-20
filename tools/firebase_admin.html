@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CB4 — админ-панель Firebase</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c2430; --line:#2a3441;
+    --txt:#e6edf3; --dim:#8b98a5; --acc:#4fc3f7; --red:#ff4444;
+    --grn:#3fb950; --yel:#d29922;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  header{padding:14px 18px;background:var(--panel);border-bottom:1px solid var(--line);
+         display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  h1{font-size:17px;margin:0 14px 0 0}
+  .tag{font-size:12px;color:var(--dim)}
+  main{padding:18px;max-width:1180px;margin:0 auto}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+          padding:14px 16px;margin-bottom:16px}
+  h2{font-size:14px;margin:0 0 10px;color:var(--acc);text-transform:uppercase;letter-spacing:.5px}
+  input,button,select,textarea{font:inherit}
+  input,select,textarea{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+        border-radius:7px;padding:7px 10px}
+  input:focus,textarea:focus{outline:1px solid var(--acc)}
+  button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+         border-radius:7px;padding:8px 14px;cursor:pointer}
+  button:hover{border-color:var(--acc)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:#1f6feb;border-color:#1f6feb}
+  button.danger{background:#7d1c1c;border-color:#a33}
+  button.ok{background:#1a5c2c;border-color:#2b7a41}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .card b{display:block;font-size:20px}
+  pre,#log{background:#0b0f14;border:1px solid var(--line);border-radius:8px;padding:10px;
+       max-height:320px;overflow:auto;font:12px/1.5 ui-monospace,Consolas,monospace;
+       white-space:pre-wrap;word-break:break-word}
+  .item{display:flex;gap:9px;align-items:flex-start;padding:6px 8px;border-bottom:1px solid var(--line)}
+  .item:last-child{border-bottom:0}
+  .item code{color:var(--yel);font:12px ui-monospace,monospace}
+  .why{color:var(--dim);font-size:12px}
+  .list{max-height:420px;overflow:auto;background:var(--panel2);border:1px solid var(--line);border-radius:8px}
+  .muted{color:var(--dim)}
+  .err{color:var(--red)} .good{color:var(--grn)} .warn{color:var(--yel)}
+  .hide{display:none}
+  label.chk{display:flex;gap:7px;align-items:center;font-size:13px}
+  .sp{flex:1}
+</style>
+</head>
+<body>
+<header>
+  <h1>CB4 — админ-панель Realtime Database</h1>
+  <span class="tag" id="who">не авторизован</span>
+  <span class="sp"></span>
+  <button id="logout" class="hide">Выйти</button>
+</header>
+
+<main>
+
+<section id="authBox">
+  <h2>Вход админа</h2>
+  <p class="muted">Ник и пароль от игры (аккаунт <code>&lt;ник&gt;@cb4.game</code>).
+     Мусор в корне и комнатах, <code>/event</code> и <code>/bans</code> пишут только админские
+     аккаунты из <code>firebase.rules.json</code>; чат и слоты можно чистить и обычным игрокам.</p>
+  <div class="row">
+    <input id="nick" placeholder="ник" value="Dimasi4ek229" size="18">
+    <input id="pass" placeholder="пароль" type="password" size="18" autocomplete="current-password">
+    <button id="login" class="primary">Войти</button>
+    <label class="chk"><input type="checkbox" id="showPass"> показать пароль</label>
+  </div>
+  <p class="muted" id="emailHint" style="margin:8px 0 0"></p>
+  <details style="margin-top:10px">
+    <summary class="muted">Настройки проекта (URL базы / API-ключ)</summary>
+    <div class="row" style="margin-top:8px">
+      <input id="dbUrl" size="52" value="https://cubicbattleserver-19ae2-default-rtdb.firebaseio.com">
+      <input id="apiKey" size="42" value="AIzaSyDJEqopxP5EqEoxP_ehO3jFXbNztu3DgVs">
+      <button id="checkKey">Проверить ключ</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label class="chk"><input type="checkbox" id="passSuffix" checked> добавлять внутренний суффикс к паролю</label>
+      <input id="suffix" size="14" value="|cb4v1" title="суффикс пароля Firebase">
+    </div>
+    <p class="muted" style="margin:8px 0 0">
+      Пароль для Firebase = игровой пароль + суффикс. Суффикс <b>обязан</b> совпадать с
+      <code>FB_PASS_SUFFIX</code> в <code>net.c</code> (сейчас <code>|cb4v1</code>), иначе Firebase
+      отвечает <code>INVALID_LOGIN_CREDENTIALS</code>. Панель на всякий случай сама перебирает
+      известные варианты суффикса, так что вход обычно проходит и с чужим значением в поле.
+    </p>
+  </details>
+</section>
+
+<section id="app" class="hide">
+
+  <h2>1. Снимок базы</h2>
+  <div class="row">
+    <button id="scan" class="primary">Сканировать базу</button>
+    <span id="scanInfo" class="muted"></span>
+  </div>
+  <div class="grid" id="stats" style="margin-top:12px"></div>
+</section>
+
+<section id="janitor" class="hide">
+  <h2>2. Что нашлось лишнего</h2>
+  <div class="row" style="margin-bottom:10px">
+    <label class="chk"><input type="checkbox" class="flt" data-k="unknown_root" checked> лишние корневые узлы</label>
+    <label class="chk"><input type="checkbox" class="flt" data-k="unknown_field" checked> левые поля в users/rooms</label>
+    <label class="chk"><input type="checkbox" class="flt" data-k="bad_user" checked> мусорные «игроки»</label>
+    <label class="chk"><input type="checkbox" class="flt" data-k="chat" checked> чат: взлом/спам</label>
+    <label class="chk"><input type="checkbox" class="flt" data-k="chat_all"> чат целиком</label>
+    <label class="chk"><input type="checkbox" class="flt" data-k="slot" checked> мёртвые/битые слоты</label>
+    <label class="chk"><input type="checkbox" class="flt" data-k="bans"> список банов</label>
+  </div>
+  <div class="row" style="margin-bottom:10px">
+    <span class="muted">стоп-слова (через запятую):</span>
+    <input id="words" size="70">
+  </div>
+  <div class="list" id="found"></div>
+  <div class="row" style="margin-top:12px">
+    <button id="all">Выделить всё</button>
+    <button id="none">Снять всё</button>
+    <span class="sp"></span>
+    <span id="selInfo" class="muted"></span>
+    <button id="wipe" class="danger">Удалить выбранное</button>
+  </div>
+  <p class="muted" style="margin:10px 0 0">
+    Никогда не трогается: <code>users/&lt;ник&gt;</code> с валидным прогрессом,
+    живые слоты <code>rooms/*/players</code>, <code>event</code>, структура комнат.
+  </p>
+</section>
+
+<section id="tools" class="hide">
+  <h2>3. Точечные инструменты</h2>
+  <div class="row">
+    <button data-ev="0">Ивент: выкл</button>
+    <button data-ev="1">Ивент: диско</button>
+    <button data-ev="2">Ивент: снег</button>
+    <span class="sp"></span>
+    <input id="banNick" placeholder="ник" size="16">
+    <button id="ban" class="danger">Забанить</button>
+    <button id="unban" class="ok">Разбанить</button>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button id="clearChat">Очистить чат комнаты</button>
+    <button id="clearSlots">Сбросить слоты (кикнуть всех)</button>
+    <input id="room" value="main" size="10" title="комната">
+    <span class="sp"></span>
+    <button id="dump">Скачать резервную копию (JSON)</button>
+  </div>
+</section>
+
+<section id="logBox" class="hide">
+  <h2>Журнал</h2>
+  <div id="log"></div>
+</section>
+
+</main>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+
+/* ---------- стоп-слова: взломы, спам, реклама ---------- */
+const DEFAULT_WORDS = [
+ "взлом","взломан","взломал","взламыв","хак","hack","hacked","cheat","чит","читы",
+ "чiт","мод","mod menu","aimbot","aim bot","wallhack","script","скрипт","инжект","inject",
+ "free cups","бесплатн","накрутк","промокод","подпишись","подписывайтесь","subscribe",
+ "телеграм","телега","t.me","discord.gg","http://","https://","www.","youtube","ютуб",
+ "пиши в лс","куплю","продам","бот","spam","спам","реклама","идиот","лох","нуб",
+ "админ дай","dayn","give admin","sql","<script","drop table","null null","test test"
+].join(", ");
+
+/* ---------- схема игры: что вообще существует ---------- */
+const ROOT_OK   = ["users","rooms","bans","event","banner"];
+const USER_REQ  = ["nick","cups","candies","cls","azum","santa","level","levels"];
+/* Всё, что пускают правила firebase.rules.json (включая ebuc/bp/azum_skin и уровни
+ * после удаления батл-пасса) — иначе панель предлагает удалить живой прогресс. */
+const USER_OPT  = ["ordinary_level","ordinary_levels","azum_level","azum_levels",
+                   "santa_level","santa_levels","ebuc","ebuc_level","ebuc_levels",
+                   "bp","azum_skin","ach_flags","ach_revives",
+                   /* Настройки игрока (settings_storage.inc): язык, хитбоксы,
+                      громкость музыки и список модов. mods — строка
+                      "a.zip|b.zip", остальные числа. promo/promo_used — личный
+                      промокод из promo.inc (строка CB4-XXXX-XXXX-XXXX + флаг). */
+                   "lang","hitboxes","musicvol","mods_n","mods",
+                   "promo","promo_used"];
+const ROOM_OK   = ["players","chat"];
+const SLOT_REQ  = ["uid","nick","x","y","angle","hp","alive","seq"];
+const SLOT_OPT  = ["px","py","pdx","pdy","punch","sx","sy","sdx","sdy","snow",
+                   "stx","sty","sthp","station","uzx","uzy","universe","thud","cls","level","skin"];
+const CHAT_OK   = ["uid","nick","text"];
+const NICK_RE   = /^[A-Za-z0-9_]{1,16}$/;
+const SLOT_STALE_MS = 60000;
+
+let TOKEN = null, REFRESH = null, EMAIL = "", EXP = 0, SNAP = null, FOUND = [];
+let SCOPED = false; /* корень закрыт правилами: снимок собран по игровым узлам */
+
+function log(msg, cls){
+  const d = document.createElement("div");
+  if (cls) d.className = cls;
+  d.textContent = new Date().toLocaleTimeString() + "  " + msg;
+  $("#log").appendChild(d);
+  $("#log").scrollTop = 1e9;
+  $("#logBox").classList.remove("hide");
+}
+const dbUrl = () => $("#dbUrl").value.trim().replace(/\/+$/,"");
+const key   = () => $("#apiKey").value.trim();
+/* Тестовый прогон (http://localhost с test/fake_firebase.py) ходит за auth туда же,
+ * куда и за данными — ровно как fb_auth_endpoint() в net.c. */
+const authHost  = () => /^http:\/\//.test(dbUrl()) ? dbUrl() : "https://identitytoolkit.googleapis.com";
+const tokenHost = () => /^http:\/\//.test(dbUrl()) ? dbUrl() : "https://securetoken.googleapis.com";
+
+/* ---------- настройки: помним между визитами ---------- */
+const LS = "cb4.admin.v1";
+function cfg(){ try{ return JSON.parse(localStorage.getItem(LS) || "{}") || {}; }catch(e){ return {}; } }
+function saveCfg(p){ try{ localStorage.setItem(LS, JSON.stringify({...cfg(), ...p})); }catch(e){} }
+function loadCfg(){
+  const c = cfg();
+  if(typeof c.nick   === "string") $("#nick").value   = c.nick;
+  if(typeof c.dbUrl  === "string") $("#dbUrl").value  = c.dbUrl;
+  if(typeof c.apiKey === "string") $("#apiKey").value = c.apiKey;
+  if(typeof c.suffix === "string") $("#suffix").value = c.suffix;
+  $("#passSuffix").checked = c.suffixOn !== false;
+}
+function saveAll(){
+  saveCfg({nick: $("#nick").value.trim(), dbUrl: $("#dbUrl").value.trim(),
+           apiKey: $("#apiKey").value.trim(), suffix: $("#suffix").value,
+           suffixOn: $("#passSuffix").checked});
+}
+function emailHint(){
+  const nick = $("#nick").value.trim() || "<ник>";
+  const sfx = $("#passSuffix").checked ? $("#suffix").value : "";
+  $("#emailHint").innerHTML =
+    "Вход как <code>" + esc(nick.toLowerCase() + "@cb4.game") + "</code>, пароль = «пароль» + «" +
+    esc(sfx) + "»" + (sfx ? "" : " (суффикс выключен)");
+}
+
+/* ---------- auth ---------- */
+const ADMINS = ["dimasi4ek229@cb4.game", "qwertyuiopaj1234@cb4.game"];
+/* Сюда — все суффиксы, с которыми игра когда-либо создавала аккаунты.
+ * Первый = актуальный FB_PASS_SUFFIX из net.c. */
+const KNOWN_SUFFIXES = ["|cb4v1", "#cb4", ""];
+
+const AUTH_ERR = {
+  EMAIL_NOT_FOUND:
+    "аккаунта с таким e-mail нет в Firebase Auth. Один раз зайди в игру под этим ником — игра сама его создаст (accounts:signUp) — и возвращайся сюда.",
+  INVALID_PASSWORD: "неверный пароль",
+  INVALID_LOGIN_CREDENTIALS:
+    "неверный пароль или такого аккаунта нет (Firebase намеренно не говорит, что именно). " +
+    "Чаще всего дело в суффиксе: пароль для Firebase = игровой пароль + «|cb4v1» (FB_PASS_SUFFIX в net.c). " +
+    "Панель сама перебирает известные варианты, так что если и это не помогло — проверь, что ник и пароль те же, что в игре.",
+  USER_DISABLED: "аккаунт отключён — Firebase Console → Authentication → Users",
+  TOO_MANY_ATTEMPTS_TRY_LATER: "слишком много попыток входа, подожди пару минут и попробуй снова",
+  OPERATION_NOT_ALLOWED: "вход по e-mail/паролю выключен — Firebase Console → Authentication → Sign-in method → Email/Password",
+  WEAK_PASSWORD: "пароль короче 6 символов — Firebase не принимает, как раз поэтому игра и добавляет суффикс",
+  API_KEY_INVALID: "API-ключ не подходит к этому проекту (или набран с опечаткой)",
+  PERMISSION_DENIED:
+    "API-ключ ограничен и из браузера не работает. В Google Cloud Console ограничения " +
+    "ставятся по HTTP-referrer / IP / Android-пакету (com.cb4); для этой панели нужен ключ " +
+    "с разрешённым referrer этой страницы либо вовсе без ограничений.",
+  REFERER_BLOCKED: "API-ключ ограничен по HTTP-referrer — добавь адрес этой страницы в список разрешённых"
+};
+function explain(msg){
+  const m = String(msg || "");
+  if(/referrer|referer/i.test(m)) return AUTH_ERR.REFERER_BLOCKED;
+  const code = (m.match(/\b([A-Z][A-Z0-9_]{3,})\b/) || [])[1];
+  const text = AUTH_ERR[code];
+  return text ? text + (text.endsWith(".") ? "" : ".") + "  [ответ Firebase: " + m + "]" : m;
+}
+function jwt(tok){
+  try{
+    const p = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(decodeURIComponent(escape(atob(p))));
+  }catch(e){ return null; }
+}
+async function idp(method, body){
+  const r = await fetch(`${authHost()}/v1/accounts:${method}?key=${encodeURIComponent(key())}`,
+    {method:"POST",headers:{"Content-Type":"application/json"},
+     body:JSON.stringify({...body, returnSecureToken:true})});
+  let j = {};
+  try{ j = await r.json(); }catch(e){}
+  if(!r.ok){
+    const e = new Error((j && j.error && j.error.message) || ("HTTP " + r.status));
+    e.status = r.status;
+    throw e;
+  }
+  return j;
+}
+/* idToken живёт час: обновляем его по refreshToken, чтобы панель не отваливалась. */
+async function refreshToken(){
+  if(!REFRESH) throw new Error("нет refresh-токена — нужно войти заново");
+  const r = await fetch(`${tokenHost()}/v1/token?key=${encodeURIComponent(key())}`,
+    {method:"POST",headers:{"Content-Type":"application/json"},
+     body:JSON.stringify({grant_type:"refresh_token", refresh_token:REFRESH})});
+  let j = {};
+  try{ j = await r.json(); }catch(e){}
+  if(!r.ok || !j.id_token) throw new Error((j && j.error && j.error.message) || ("HTTP " + r.status));
+  TOKEN = j.id_token;
+  if(j.refresh_token) REFRESH = j.refresh_token;
+  EXP = Date.now() + (parseInt(j.expires_in || "3600", 10) * 1000) - 60000;
+  return TOKEN;
+}
+function suffixVariants(){
+  const out = [], push = s => { if(s != null && !out.includes(s)) out.push(s); };
+  const c = cfg();
+  if(typeof c.lastSuffix === "string") push(c.lastSuffix);          // то, на что пустило в прошлый раз
+  push($("#passSuffix").checked ? $("#suffix").value : "");          // то, что стоит в настройках
+  for(const s of KNOWN_SUFFIXES) push(s);
+  return out;
+}
+const RETRYABLE = /INVALID_LOGIN_CREDENTIALS|INVALID_PASSWORD|EMAIL_NOT_FOUND|WEAK_PASSWORD/;
+
+async function doLogin(){
+  const nick = $("#nick").value.trim(), pass = $("#pass").value;
+  if(!nick || !pass) return alert("Введите ник и пароль");
+  const email = nick.toLowerCase() + "@cb4.game";
+  saveAll();
+  $("#login").disabled = true;
+  const tried = [];
+  try{
+    let ok = null, last = null;
+    for(const sfx of suffixVariants()){
+      try{
+        const j = await idp("signInWithPassword", {email, password: pass + sfx});
+        ok = {j, sfx};
+        break;
+      }catch(e){
+        last = e;
+        tried.push((sfx ? "«" + sfx + "»" : "без суффикса") + " → " + e.message);
+        if(!RETRYABLE.test(e.message)) break;   // ключ заблокирован, лимит попыток и т.п. — дальше пробовать бессмысленно
+      }
+    }
+    if(!ok){
+      /* Ни один вариант не подошёл. При включённой защите от перебора Firebase
+       * отвечает одинаково на «нет аккаунта» и «неверный пароль», поэтому
+       * разницу узнаём так же, как fb_sign_in() в net.c: пробуем signUp.
+       * Аккаунта нет → он создаётся (это ровно то, что делает игра при первом
+       * входе); аккаунт есть → Firebase ответит EMAIL_EXISTS, то есть дело
+       * в пароле. Только с явного согласия: это пишет в Firebase Auth. */
+      if(confirm("Войти как " + email + " не удалось.\n\n" +
+                 "Попробовать создать этот аккаунт с текущим паролем (signUp)?\n\n" +
+                 "• аккаунта нет — он создастся, как при первом входе в игру;\n" +
+                 "• аккаунт есть — Firebase ответит EMAIL_EXISTS, значит пароль не подошёл.")){
+        const sfx = $("#passSuffix").checked ? $("#suffix").value : "";
+        try{
+          const j = await idp("signUp", {email, password: pass + sfx});
+          ok = {j, sfx, created: true};
+          log("аккаунт создан: " + email, "good");
+        }catch(e){
+          if(/EMAIL_EXISTS/.test(e.message))
+            throw new Error("аккаунт " + email + " существует, значит пароль (или суффикс) не подошёл");
+          throw e;
+        }
+      }
+      if(!ok) throw last || new Error("вход не удался");
+    }
+
+    const j = ok.j;
+    TOKEN = j.idToken; REFRESH = j.refreshToken; EMAIL = email;
+    EXP = Date.now() + (parseInt(j.expiresIn || "3600", 10) * 1000) - 60000;
+    saveCfg({lastSuffix: ok.sfx});
+
+    const p = jwt(TOKEN) || {};
+    const isAdmin = ADMINS.includes(String(p.email || email).toLowerCase());
+    $("#who").textContent = email + (isAdmin ? " · админ" : " · не админ");
+    $("#who").className = "tag " + (isAdmin ? "good" : "warn");
+    $("#authBox").classList.add("hide");
+    $("#app").classList.remove("hide");
+    $("#tools").classList.remove("hide");
+    $("#logout").classList.remove("hide");
+    log("вход выполнен: " + email + (ok.sfx ? " (суффикс «" + ok.sfx + "»)" : " (без суффикса)"), "good");
+    log("токен: провайдер " + ((p.firebase || {}).sign_in_provider || "?") +
+        ", годен до " + new Date((p.exp || 0) * 1000).toLocaleTimeString(), "");
+    if(isAdmin) log("права админа есть — правила пустят запись в event/bans, полный снимок корня и чистку комнат", "good");
+    else{
+      log("это не админский аккаунт: читаются игровые узлы, чат и слоты чистить можно, а event/bans, чужие users и мусор в корне/комнатах — нет", "warn");
+      alert("Вход прошёл, но " + email + " нет в списке админов firebase.rules.json.\n\n" +
+            "Чат и слоты (в т.ч. целиком) чистить можно; /event, /bans, чужие /users и мусор " +
+            "в корне/комнатах — нет. Корневой мусор виден и удаляется только админами.");
+    }
+    scan();
+  }catch(e){
+    log("вход не удался: " + e.message, "err");
+    log("что это значит: " + explain(e.message), "warn");
+    alert("Не вышло войти как " + email + "\n\n" + e.message + "\n\n" + explain(e.message) +
+          (tried.length > 1 ? "\n\nПеребраны варианты суффикса:\n" + tried.join("\n") : ""));
+  }finally{ $("#login").disabled = false; }
+}
+
+/* ---------- REST к базе ---------- */
+/* Удаление идёт параллельным пулом запросов, и несколько из них могут
+ * одновременно обнаружить протухший токен — держим одно общее обновление,
+ * а не десяток одинаковых. */
+let tokenBusy = null;
+function ensureToken(){
+  if(!REFRESH || Date.now() <= EXP) return Promise.resolve();
+  if(!tokenBusy) tokenBusy = refreshToken().finally(() => { tokenBusy = null; });
+  return tokenBusy;
+}
+async function rtdb(path, method = "GET", body, retried){
+  if(REFRESH && Date.now() > EXP){
+    try{ await ensureToken(); }
+    catch(e){ log("не удалось обновить токен: " + e.message + " — " + explain(e.message), "warn"); }
+  }
+  const url = `${dbUrl()}/${path}.json?auth=${encodeURIComponent(TOKEN || "")}`;
+  const opt = {method};
+  if(body !== undefined){ opt.headers = {"Content-Type":"application/json"};
+                          opt.body = JSON.stringify(body); }
+  const r = await fetch(url, opt);
+  const txt = await r.text();
+  if(!r.ok){
+    const stale = r.status === 401 || /auth token|token expired|invalid_token|EXPIRED/i.test(txt);
+    if(stale && !retried && REFRESH){
+      try{
+        await ensureToken();
+        return rtdb(path, method, body, true);
+      }catch(e){ log("обновление токена не помогло: " + e.message, "err"); }
+    }
+    let msg = `${method} /${path} → ${r.status} ${txt.slice(0,140)}`;
+    if(r.status === 401 || r.status === 403)
+      msg += "  (401/403 = протухший токен либо правила базы; опубликуй свежие " +
+             "firebase.rules.json — мусор в корне и в комнатах пишут только админы, " +
+             "а при запрете контейнера панель удаляет по детям)";
+    throw new Error(msg);
+  }
+  return txt ? JSON.parse(txt) : null;
+}
+
+/* ---------- сканирование ---------- */
+/* Полный снимок читается с корня — это умеют админы (firebase.rules.json:
+ * ".read" на корне для админов). Если корень закрыт (не-админ или старые
+ * правила), читаем известные игровые узлы по отдельности — так панель
+ * продолжает работать и под обычным аккаунтом (чат/слоты), просто без
+ * корневого мусора. */
+const ROOT_PARTS = ["users","rooms","bans","event","banner"];
+async function takeSnapshot(){
+  try{ return {data: (await rtdb("")) || {}, scoped: false}; }
+  catch(e){
+    if(!/(403|permission|denied|unauthorized)/i.test(e.message)) throw e;
+    const out = {};
+    let firstErr = null;
+    for(const p of ROOT_PARTS){
+      try{
+        const v = await rtdb(p);
+        if(v !== null && typeof v === "object") out[p] = v;
+      }catch(e2){ firstErr = firstErr || e2; }
+    }
+    if(Object.keys(out).length) return {data: out, scoped: true};
+    throw firstErr || e;
+  }
+}
+async function scan(){
+  $("#scan").disabled = true; $("#scanInfo").textContent = "читаю…";
+  try{
+    const snap = await takeSnapshot();
+    SNAP = snap.data;
+    SCOPED = snap.scoped;
+    if(SCOPED)
+      log("корень базы закрыт правилами — читаю игровые узлы по отдельности (корневой мусор виден только админам)", "warn");
+    analyze();
+    $("#scanInfo").textContent = "снимок получен " + new Date().toLocaleTimeString() +
+                                 (SCOPED ? " · корень закрыт, по узлам" : "");
+    log("снимок базы получен" + (SCOPED ? " (по узлам)" : ""), "good");
+  }catch(e){
+    $("#scanInfo").innerHTML = '<span class="err">ошибка</span>';
+    log("скан: " + e.message, "err");
+    alert("Не удалось прочитать базу:\n" + e.message);
+  }finally{ $("#scan").disabled = false; }
+}
+
+const words = () => $("#words").value.split(",").map(s=>s.trim().toLowerCase()).filter(Boolean);
+function spamHit(text){
+  const t = String(text).toLowerCase();
+  for(const w of words()) if(t.includes(w)) return w;
+  if(/(.)\1{7,}/.test(t)) return "повтор символов";
+  if(t.length > 96) return "длина > 96";
+  if(/[\u0000-\u0008\u000b-\u001f]/.test(t)) return "управляющие символы";
+  return null;
+}
+function num(v, lo, hi){ return typeof v === "number" && isFinite(v) && v >= lo && v <= hi; }
+
+function analyze(){
+  FOUND = [];
+  const add = (kind, path, why, extra) =>
+    FOUND.push({kind, path, why, extra: extra || "", sel: kind !== "bans" && kind !== "chat_all"});
+  const d = SNAP || {};
+
+  /* корень */
+  for(const k of Object.keys(d))
+    if(!ROOT_OK.includes(k))
+      add("unknown_root", k, "корневого узла нет в игре (спам/мусор)", JSON.stringify(d[k]).slice(0,120));
+
+  /* users */
+  const users = d.users || {};
+  for(const [nick, u] of Object.entries(users)){
+    if(!NICK_RE.test(nick)){ add("bad_user", `users/${nick}`, "ник не проходит правила A-Za-z0-9_ (1-16)"); continue; }
+    if(typeof u !== "object" || u === null){ add("bad_user", `users/${nick}`, "не объект — мусорная запись", String(u).slice(0,80)); continue; }
+    const miss = USER_REQ.filter(f => !(f in u));
+    if(miss.length === USER_REQ.length){ add("bad_user", `users/${nick}`, "нет ни одного игрового поля"); continue; }
+    if(miss.length) add("bad_user", `users/${nick}`, "нет обязательных полей: " + miss.join(", "));
+    const hit = spamHit(nick);
+    if(hit) add("bad_user", `users/${nick}`, "ник похож на спам/взлом: " + hit);
+    for(const [f, v] of Object.entries(u)){
+      if(f === "pass"){ add("unknown_field", `users/${nick}/pass`, "пароль в базе — так больше нельзя"); continue; }
+      if(!USER_REQ.includes(f) && !USER_OPT.includes(f)){
+        add("unknown_field", `users/${nick}/${f}`, "поле не используется игрой", JSON.stringify(v).slice(0,80));
+      } else if(f === "nick" && typeof v === "string" && spamHit(v)){
+        add("unknown_field", `users/${nick}/nick`, "в нике спам-текст", String(v).slice(0,80));
+      } else if(f === "mods"){
+        /* Список модов — строка "a.zip|b.zip". */
+        if(typeof v !== "string" || v.length > 400)
+          add("unknown_field", `users/${nick}/mods`, "список модов не строка или длиннее 400", JSON.stringify(v).slice(0,60));
+      } else if(f === "promo"){
+        /* Промокод (promo.inc) — вторая строка в профиле: CB4-XXXX-XXXX-XXXX. */
+        if(typeof v !== "string" || !/^CB4-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$/.test(v))
+          add("unknown_field", `users/${nick}/promo`, "промокод не похож на CB4-XXXX-XXXX-XXXX", JSON.stringify(v).slice(0,60));
+      } else if(f !== "nick" && !num(v, 0, 10000000)){
+        add("unknown_field", `users/${nick}/${f}`, "значение не число / вне диапазона (накрутка)", JSON.stringify(v).slice(0,60));
+      }
+    }
+  }
+
+  /* rooms */
+  const rooms = d.rooms || {};
+  const now = Date.now();
+  for(const [rn, room] of Object.entries(rooms)){
+    if(typeof room !== "object" || room === null){
+      add("unknown_root", `rooms/${rn}`, "комната — не объект", String(room).slice(0,80)); continue;
+    }
+    for(const k of Object.keys(room))
+      if(!ROOM_OK.includes(k))
+        add("unknown_field", `rooms/${rn}/${k}`, "в комнате нет такого узла", JSON.stringify(room[k]).slice(0,100));
+
+    for(const [slot, p] of Object.entries(room.players || {})){
+      const base = `rooms/${rn}/players/${slot}`;
+      if(!/^[0-3]$/.test(slot)){ add("slot", base, "слота с таким номером не бывает (0-3)"); continue; }
+      if(typeof p !== "object" || p === null){ add("slot", base, "слот — не объект"); continue; }
+      const miss = SLOT_REQ.filter(f => !(f in p));
+      if(miss.length){ add("slot", base, "битый слот, нет полей: " + miss.join(", ")); continue; }
+      if(typeof p.nick === "string" && spamHit(p.nick))
+        add("slot", base, "ник в слоте — спам/взлом: " + spamHit(p.nick), p.nick);
+      for(const f of Object.keys(p))
+        if(!SLOT_REQ.includes(f) && !SLOT_OPT.includes(f))
+          add("unknown_field", `${base}/${f}`, "поле слота не используется игрой", JSON.stringify(p[f]).slice(0,60));
+      if(typeof p.seq === "number" && p.seq > 1e10 && now - p.seq > SLOT_STALE_MS)
+        add("slot", base, "слот заброшен более минуты назад", p.nick || "");
+    }
+
+    for(const [id, m] of Object.entries(room.chat || {})){
+      const base = `rooms/${rn}/chat/${id}`;
+      if(typeof m !== "object" || m === null){ add("chat", base, "сообщение — не объект"); continue; }
+      const bad = CHAT_OK.filter(f => !(f in m));
+      const extra = Object.keys(m).filter(f => !CHAT_OK.includes(f));
+      const hit = typeof m.text === "string" ? spamHit(m.text) : "нет текста";
+      const nickHit = typeof m.nick === "string" ? spamHit(m.nick) : null;
+      const label = `${m.nick ?? "?"}: ${String(m.text ?? "").slice(0,90)}`;
+      if(bad.length)        add("chat", base, "битое сообщение (нет " + bad.join(", ") + ")", label);
+      else if(extra.length) add("chat", base, "лишние поля: " + extra.join(", "), label);
+      else if(hit)          add("chat", base, "стоп-слово: " + hit, label);
+      else if(nickHit)      add("chat", base, "спам в нике: " + nickHit, label);
+      else                  add("chat_all", base, "обычное сообщение чата", label);
+    }
+  }
+
+  /* bans */
+  for(const [n, v] of Object.entries(d.bans || {})){
+    if(!NICK_RE.test(n) || typeof v !== "boolean")
+      add("unknown_field", `bans/${n}`, "битая запись бана", JSON.stringify(v));
+    else if(v === false)
+      add("unknown_field", `bans/${n}`, "бан снят (false) — запись лишняя");
+    else
+      add("bans", `bans/${n}`, "активный бан");
+  }
+
+  /* event */
+  if("event" in d && !num(d.event, 0, 3))
+    add("unknown_field", "event", "значение ивента вне 0..3", JSON.stringify(d.event));
+
+  stats();
+  render();
+  $("#janitor").classList.remove("hide");
+}
+
+function stats(){
+  const d = SNAP || {};
+  const rooms = Object.values(d.rooms || {});
+  const chat = rooms.reduce((a,r)=>a+Object.keys(r?.chat||{}).length,0);
+  const junk = FOUND.filter(f=>f.kind!=="chat_all"&&f.kind!=="bans").length;
+  const c = [
+    ["Игроков (users)", Object.keys(d.users||{}).length],
+    ["Комнат", rooms.length],
+    ["Сообщений в чате", chat],
+    ["Банов", Object.keys(d.bans||{}).length],
+    ["Ивент", d.event ?? 0],
+    ["Мусора найдено", junk]
+  ];
+  $("#stats").innerHTML = c.map(([k,v]) =>
+    `<div class="card"><span class="muted">${k}</span><b>${v}</b></div>`).join("");
+}
+
+function render(){
+  const on = new Set($$(".flt").filter(c=>c.checked).map(c=>c.dataset.k));
+  const list = FOUND.filter(f => on.has(f.kind));
+  $("#found").innerHTML = list.length ? list.map((f) => {
+    const i = FOUND.indexOf(f);
+    return `<label class="item"><input type="checkbox" data-i="${i}" ${f.sel?"checked":""}>
+      <span><code>${esc(f.path)}</code><br>
+      <span class="why">${esc(f.why)}${f.extra ? " — " + esc(f.extra) : ""}</span></span></label>`;
+  }).join("") : '<div class="item good">Ничего лишнего по выбранным фильтрам 🎉</div>';
+  $("#found").querySelectorAll("input").forEach(cb => cb.onchange = () => {
+    FOUND[+cb.dataset.i].sel = cb.checked; selInfo();
+  });
+  selInfo();
+}
+function selInfo(){
+  const on = new Set($$(".flt").filter(c=>c.checked).map(c=>c.dataset.k));
+  const n = FOUND.filter(f => on.has(f.kind) && f.sel).length;
+  $("#selInfo").textContent = "выбрано к удалению: " + n;
+  $("#wipe").disabled = !n;
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- удаление ---------- */
+/* Минимальный набор DELETE для выбранных узлов. REST Firebase не умеет
+ * батч-удаление, поэтому схлопываем: если ВСЕ дети узла (по снимку SNAP)
+ * выбраны, вылетает целиком родителем одним запросом. Считаем именно по
+ * снимку, поэтому лишнего задеть невозможно. Корень целиком удалить нельзя
+ * (RTDB это запрещает) — его расширяем до детей. */
+function wipePlan(paths){
+  if(!SNAP) return [...new Set(paths)];
+  const sel = new Set(paths);
+  const nodeAt = p => p ? p.split("/").reduce((n,k) =>
+        (n && typeof n === "object") ? n[k] : undefined, SNAP) : SNAP;
+  const keysAt = p => { const n = nodeAt(p);
+        return (n && typeof n === "object") ? Object.keys(n) : null; };
+  const memo = new Map();
+  const fully = p => {
+    if(sel.has(p)) return true;
+    if(memo.has(p)) return memo.get(p);
+    memo.set(p, false);
+    const ks = keysAt(p);
+    const r = !!ks && ks.length > 0 && ks.every(k => fully(p ? p + "/" + k : k));
+    memo.set(p, r);
+    return r;
+  };
+  const cand = new Set();
+  for(const p of paths){
+    let cur = p;
+    while(cur){ cand.add(cur); cur = cur.slice(0, cur.lastIndexOf("/")) || null; }
+  }
+  if(!cand.size) return [];
+  const plan = [];
+  for(const p of cand){
+    if(!fully(p)) continue;
+    const par = p ? p.slice(0, p.lastIndexOf("/")) : "";
+    if(!par || !fully(par)) plan.push(p);
+  }
+  if(plan.length === 1 && plan[0] === "")
+    return Object.keys(SNAP);
+  return plan;
+}
+
+/* Удаление узла с запасным путём: если правила не пускают удалить контейнер
+ * целиком (rooms/<комната>/chat, rooms/<комната>/players и т.п.), удаляем по одному ребёнку —
+ * каждый ребёнок правилами пишется, и эффект тот же. */
+async function wipeNode(p){
+  try{ await rtdb(p, "DELETE"); return; }
+  catch(e){
+    if(!/(403|permission|denied)/i.test(e.message)) throw e;
+    let cur = null;
+    if(SNAP) cur = p.split("/").reduce((o,k) => (o && typeof o === "object") ? o[k] : undefined, SNAP);
+    if(cur === null || typeof cur !== "object"){
+      try{ cur = await rtdb(p); }catch(e2){ throw e; }
+    }
+    if(cur === null || typeof cur !== "object") throw e;
+    const ks = Object.keys(cur);
+    if(!ks.length) throw e;
+    for(const k of ks) await rtdb(p + "/" + k, "DELETE");
+  }
+}
+
+/* Firebase REST не умеет батч-удаление — поэтому ускоряем двумя приёмами:
+ * схлопыванием (wipePlan) и параллельным пулом запросов. 10 одновременно —
+ * компромисс между скоростью и лимитами Firebase. */
+const WIPE_CONC = 10;
+async function wipe(){
+  const on = new Set($$(".flt").filter(c=>c.checked).map(c=>c.dataset.k));
+  const selected = FOUND.filter(f => on.has(f.kind) && f.sel);
+  if(!selected.length) return;
+  const plan = wipePlan(selected.map(f => f.path));
+  if(!plan.length) return;
+  if(!confirm(`Удалить ${selected.length} узлов?\nПакетом: ${plan.length} запрос(ов) к базе.\n\nПервые:\n` +
+              plan.slice(0,12).join("\n") + (plan.length>12?"\n…":""))) return;
+  const btn = $("#wipe"); btn.disabled = true;
+  let ok = 0, fail = 0, done = 0;
+  const total = plan.length, queue = [...plan];
+  const tick = () => { btn.textContent = `удаляю ${done}/${total}…`; };
+  const worker = async () => {
+    while(queue.length){
+      const p = queue.shift();
+      try{ await wipeNode(p); ok++; log("удалено: " + p); }
+      catch(e){ fail++; log("НЕ удалено " + p + " — " + e.message, "err"); }
+      done++; tick();
+    }
+  };
+  tick();
+  await Promise.all(Array.from({length: Math.min(WIPE_CONC, total)}, worker));
+  btn.textContent = "Удалить выбранное"; btn.disabled = false;
+  log(`готово: удалено ${ok}, ошибок ${fail} (из ${total} запросов)`, fail ? "warn" : "good");
+  alert(`Удалено: ${ok}\nОшибок: ${fail}` + (fail ? "\n\nОшибки обычно = правила базы запрещают запись в этот узел (см. журнал)." : ""));
+  scan();
+}
+
+/* ---------- точечное ---------- */
+async function safe(fn, name){
+  try{ await fn(); log(name + " — ок", "good"); scan(); }
+  catch(e){ log(name + ": " + e.message, "err"); alert(name + " не вышло:\n" + e.message); }
+}
+
+/* ---------- события ---------- */
+$("#words").value = DEFAULT_WORDS;
+loadCfg();
+emailHint();
+$("#login").onclick = doLogin;
+$("#pass").onkeydown = e => { if(e.key === "Enter") doLogin(); };
+$("#nick").onkeydown = e => { if(e.key === "Enter") $("#pass").focus(); };
+$("#nick").oninput = $("#suffix").oninput = emailHint;
+$("#passSuffix").onchange = () => { emailHint(); saveAll(); };
+$("#nick").onchange = $("#dbUrl").onchange = $("#apiKey").onchange = $("#suffix").onchange = saveAll;
+$("#showPass").onchange = e => { $("#pass").type = e.target.checked ? "text" : "password"; };
+$("#checkKey").onclick = async () => {
+  const b = $("#checkKey"); b.disabled = true;
+  try{
+    await idp("signInWithPassword",
+              {email: "cb4-probe-" + Date.now() + "@cb4.game", password: "probe-probe-1"});
+    log("проверка ключа: ответ без ошибки — странно, но ключ точно живой", "warn");
+  }catch(e){
+    if(RETRYABLE.test(e.message))
+      log("проверка ключа: ключ работает — Firebase ответил " + e.message +
+          " (значит запрос дошёл и не заблокирован); дело в паре «ник + пароль + суффикс»", "good");
+    else
+      log("проверка ключа: " + e.message + " — " + explain(e.message), "err");
+  }finally{ b.disabled = false; }
+};
+$("#logout").onclick = () => location.reload();
+$("#scan").onclick = scan;
+$$(".flt").forEach(c => c.onchange = render);
+$("#words").oninput = () => { if(SNAP) analyze(); };
+$("#all").onclick  = () => { const on=new Set($$(".flt").filter(c=>c.checked).map(c=>c.dataset.k));
+                             FOUND.forEach(f=>{ if(on.has(f.kind)) f.sel=true; }); render(); };
+$("#none").onclick = () => { FOUND.forEach(f=>f.sel=false); render(); };
+$("#wipe").onclick = wipe;
+$$("[data-ev]").forEach(b => b.onclick = () =>
+  safe(() => rtdb("event", "PUT", +b.dataset.ev), "смена ивента"));
+$("#ban").onclick = () => { const n = $("#banNick").value.trim();
+  if(n) safe(() => rtdb("bans/" + n, "PUT", true), "бан " + n); };
+$("#unban").onclick = () => { const n = $("#banNick").value.trim();
+  if(n) safe(() => rtdb("bans/" + n, "DELETE"), "разбан " + n); };
+$("#clearChat").onclick = () => { const r = $("#room").value.trim() || "main";
+  if(confirm("Стереть весь чат комнаты " + r + "?"))
+    safe(() => wipeNode(`rooms/${r}/chat`), "очистка чата"); };
+$("#clearSlots").onclick = () => { const r = $("#room").value.trim() || "main";
+  if(confirm("Сбросить все слоты игроков в " + r + "? Все выпадут из боя."))
+    safe(() => wipeNode(`rooms/${r}/players`), "сброс слотов"); };
+$("#dump").onclick = () => {
+  if(!SNAP) return alert("Сначала отсканируй базу");
+  const b = new Blob([JSON.stringify(SNAP, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(b);
+  a.download = "cb4-backup-" + new Date().toISOString().replace(/[:.]/g,"-") + ".json";
+  a.click();
+};
+</script>
+</body>
+</html>

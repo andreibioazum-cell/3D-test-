@@ -419,22 +419,21 @@ void cube3d_part(double x, double y, double z,
  * вокруг pivot (px,py,pz) в локальных координатах детали (плечо/бедро);
  * порядок поворотов и очередь художника (bias, отсечение задних граней,
  * обрезка у глаза) — общие с гранями куба. */
-void rbox3d(double cx, double cy, double cz,
-            double sx, double sy, double sz, double r, int seg,
-            double yaw, double pitch,
-            double px, double py, double pz,
-            double bias, uint32_t color) {
+/* Общая сетка «округлённого бокса»: ядро — бокс с полуразмерами ix,iy,iz
+ * (может быть вырождено в точку — тогда поверхность это шар радиуса r),
+ * P(u) = u·(|ux|·ix + |uy|·iy + |uz|·iz + r), u — единичное направление.
+ * ix,iy,iz — «ядро» (полуразмер минус радиус), r — радиус. ix=iy=iz=0 — шар. */
+static void ds3d_roundmesh(double cx, double cy, double cz,
+                           double ix, double iy, double iz, double r, int seg,
+                           double yaw, double pitch,
+                           double px, double py, double pz,
+                           double bias, uint32_t color) {
     if (!frame_open) return;
-    if (!isfinite(cx + cy + cz + sx + sy + sz + r + yaw + pitch + px + py + pz)) return;
-    if (sx <= 0 || sy <= 0 || sz <= 0) return;
+    if (!isfinite(cx + cy + cz + ix + iy + iz + r + yaw + pitch + px + py + pz)) return;
+    if (r <= 0) return;
     if (seg < 1) seg = 1;
     if (seg > 8) seg = 8;
     ds3d_ensure_cam();
-    double hx = sx * 0.5, hy = sy * 0.5, hz = sz * 0.5;
-    if (r < 0) r = 0;
-    double hmin = hx < hy ? (hx < hz ? hx : hz) : (hy < hz ? hy : hz);
-    if (r > 0.49 * hmin) r = 0.49 * hmin;
-    double ix = hx - r, iy = hy - r, iz = hz - r;
     int rows = 4 * seg, cols = 8 * seg;
     static float rsin[65], rcos[65], csin[65], ccos[65];
     for (int i = 0; i <= rows; i++) {
@@ -490,6 +489,29 @@ void rbox3d(double cx, double cy, double cz,
                 ds3d_emit_poly(tx, ty, tz, 3, nx, ny, nz, color, 0, (float)bias, 1);
             }
         }
+}
+
+void rbox3d(double cx, double cy, double cz,
+            double sx, double sy, double sz, double r, int seg,
+            double yaw, double pitch,
+            double px, double py, double pz,
+            double bias, uint32_t color) {
+    if (sx <= 0 || sy <= 0 || sz <= 0) return;
+    double hx = sx * 0.5, hy = sy * 0.5, hz = sz * 0.5;
+    if (r < 0) r = 0;
+    double hmin = hx < hy ? (hx < hz ? hx : hz) : (hy < hz ? hy : hz);
+    if (r > 0.49 * hmin) r = 0.49 * hmin;
+    ds3d_roundmesh(cx, cy, cz, hx - r, hy - r, hz - r, r, seg,
+                   yaw, pitch, px, py, pz, bias, color);
+}
+
+void ball3d(double cx, double cy, double cz, double rad, int seg,
+            double yaw, double pitch,
+            double px, double py, double pz,
+            double bias, uint32_t color) {
+    if (rad <= 0) return;
+    ds3d_roundmesh(cx, cy, cz, 0, 0, 0, rad, seg,
+                   yaw, pitch, px, py, pz, bias, color);
 }
 
 void line3d(double x1, double y1, double z1, double x2, double y2, double z2,

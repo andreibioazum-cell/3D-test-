@@ -400,15 +400,61 @@ static void test_tile_big_face(void) {
     end();
 }
 
-/* Регрессия «пропадают руки на движущихся плитах»: игрок у дальнего края
- * небольшой движущейся платформы, камера под стандартным углом. Без
- * тилайнинга крыша платформы (одна большая грань, средняя глубина ближе
- * к камере) рисовалась ПОСЛЕ персонажа и перекрывала его конечности. */
+/* Модель персонажа (M3D): загружена из файла, все части на месте. */
+static void test_model_load(void) {
+    CHECK(p3d_model_loaded, "модель загружена при init");
+    CHECK(p3d_model_n == 12, "в модели 12 частей");
+    CHECK(p3d_read_file("game/assets/models/hero.txt", 65536) != NULL,
+          "файл модели на месте");
+    int head = p3d_model_find("head");
+    CHECK(head >= 0, "часть «head» найдена");
+    if (head >= 0) {
+        CHECK(p3d_model[head].shape == 0, "голова — скруглённый бокс");
+        CHECK(fabs(p3d_model[head].sx - 0.52) < 1e-3, "ширина головы из файла");
+        CHECK(p3d_model[head].cr > 190 && p3d_model[head].cr < 220, "голова — светло-серая");
+    }
+    int arm = p3d_model_find("arm_r");
+    CHECK(arm >= 0, "часть «arm_r» найдена");
+    if (arm >= 0) {
+        CHECK(fabs(p3d_model[arm].sway - 0.55) < 1e-3, "рука качается при ходьбе");
+        CHECK(fabs(p3d_model[arm].pvy - 0.17) < 1e-3, "pivot руки — плечо");
+    }
+    int eye = p3d_model_find("eye_l");
+    CHECK(eye >= 0 && p3d_model[eye].shape == 1, "глаз — шар");
+}
+
+/* Тень под персонажом убрана: в кадре нет полупрозрачных чёрных граней. */
+static void test_shadow_gone(void) {
+    reset();
+    game_state = ST_GAME;
+    t_dir = 0; t_fade = 0;
+    p3d_init_world();
+    p3d_t = 0;
+    p3d_px = p3d_plat[4].cx;
+    p3d_pz = p3d_plat[4].cz;
+    p3d_py = p3d_plat[4].by + p3d_plat[4].hy + P3D_HALF;
+    p3d_vx = p3d_vy = p3d_vz = 0;
+    p3d_ground = 1; p3d_stand = 4;
+    p3d_cam_yaw = 0.0; p3d_cam_pitch = P3D_PITCH_DEF;
+    frames(2);
+    begin();
+    draw(NULL);
+    int alpha_black = 0;
+    for (size_t i = 0; i < cmd_n; i++) {
+        if (cmds[i].t != DS_CMD_TRI) continue;
+        uint32_t c = cmds[i].v.tri.c;
+        /* pack_c: r в младшем байте. Тень = чёрный цвет с альфой. */
+        if ((c & 0x00FFFFFFu) == 0 && ((c >> 24) & 0xFFu) > 0) alpha_black++;
+    }
+    end();
+    CHECK(alpha_black == 0, "под персонажем нет тени");
+}
+
 /* Регрессия «пропадают руки на движущихся плитах»: раньше монета №3
  * висела в центре пути платформы 4 (0, 2.5, 22) — прямо между камерой
  * и игроком; с невысокого ракурса её проекция накрывала руки персонажа
  * и те «исчезали». Теперь монета смещена в сторону (2.2, 2.3, 22), и в
- * кадре над плечом игрока — серая рука персонажа, а не монета/пол. */
+ * кадре над плечом игрока — серая рука из модели, а не монета/пол. */
 static void test_limb_over_platform(void) {
     reset();
     game_state = ST_GAME;
@@ -416,8 +462,7 @@ static void test_limb_over_platform(void) {
     p3d_init_world();
     p3d_t = 0; /* позиции движущихся платформ считаются от p3d_t */
     /* Платформа 4 (2.6×2.6, едет по Z): игрок в её дальней части — там
-     * монета (раньше 0, 2.5, 22) попадает между камерой и игроком, и её
-     * проекция накрывает руки. */
+     * старая монета (0, 2.5, 22) попадает между камерой и игроком. */
     p3d_px = p3d_plat[4].cx + 0.0;
     p3d_pz = p3d_plat[4].cz + 0.85;
     p3d_py = p3d_plat[4].by + p3d_plat[4].hy + P3D_HALF;
@@ -429,11 +474,11 @@ static void test_limb_over_platform(void) {
     p3d_cam_pitch = -0.5;
     frames(2); /* платформа едет, игрок едет с ней, камера пересчитана */
     CHECK(fabs(p3d_pz - p3d_plat[4].cz) > 0.8, "игрок едет вместе с платформой");
-    /* Центр правой руки с учётом качания вокруг плеча (pivot 1.4·RIG_K). */
-    double sw = p3d_swing;
-    double ax = p3d_px + 1.95 * RIG_K;
-    double ay = p3d_py + RIG_OY + RIG_K - 1.4 * RIG_K * cos(sw);
-    double az = p3d_pz + 1.4 * RIG_K * sin(sw);
+    /* Центр правой руки из модели (с учётом качания вокруг плеча). */
+    int arm = p3d_model_find("arm_r");
+    CHECK(arm >= 0, "правая рука есть в модели");
+    double ax, ay, az;
+    p3d_model_part_world(arm, &ax, &ay, &az);
     float vx, vy, vz, sx, sy;
     ds3d_view(ax, ay, az, &vx, &vy, &vz);
     ds3d_screen_xy(vx, vy, vz, &sx, &sy);
@@ -451,13 +496,12 @@ static void test_limb_over_platform(void) {
             uint32_t c = tfb[py * 1280 + px];
             int r = (c >> 16) & 0xff, g = (c >> 8) & 0xff, b = c & 0xff;
             total++;
-            /* Рука — серый 0x9E9E9E; под ней ещё и тень (полупрозрачные
-             * слои ~45%) — цвет может быть заметно темнее базы. Монета —
-             * жёлтая (r>>g), пол — коричневый: оба не пройдут проверку. */
+            /* Рука — серый (из модели); монета — жёлтая, пол — коричневый:
+             * оба не пройдут проверку нейтральности. */
             if (r > 30 && r < 230 && abs(r - g) < 25 && abs(g - b) < 25) gray++;
         }
     CHECK(total > 50, "рука попала в кадр");
-    CHECK(gray >= total / 2, "рука не перекрыта монетой: в кадре серый риг");
+    CHECK(gray >= total / 2, "рука не перекрыта монетой: в кадре серый персонаж");
 }
 
 /* «Назад» сверху и системная кнопка — оба возвращают в лобби. */
@@ -498,6 +542,8 @@ int main(void) {
     test_back();
     test_rbox();
     test_tile_big_face();
+    test_model_load();
+    test_shadow_gone();
     test_limb_over_platform();
     test_draw_layers();
     if (failures) {

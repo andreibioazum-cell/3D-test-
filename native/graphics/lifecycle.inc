@@ -138,6 +138,7 @@ void ds_set_asset_manager(AAssetManager *a) {
     if (amgr != a) { ds_release_assets(); amgr = a; }
     if (!amgr) ds_runtime_error("Android asset manager is unavailable");
 }
+AAssetManager *ds_get_asset_manager(void) { return amgr; }
 int png_load(const char *n) { return load_png(n) != NULL; }
 
 /* --- команды рисования (API скриптов, не меняется) --- */
