@@ -147,9 +147,14 @@ static void ds3d_screen_xy(float vx, float vy, float vz, float *sx, float *sy) {
     *sy = cy - vy * k;   /* экранная ось Y смотрит вниз */
 }
 
-/* Очередь граней. */
+/* Очередь граней. depth — средняя глубина вдоль взгляда (больше — дальше);
+ * bias — смещение глубины (положительное приближает грань к глазу и потому
+ * рисует её позже — поверх соседей с почти равной глубиной). Натуральное
+ * применение — пластины, лежащие почти в одной плоскости (тень на крыше
+ * платформы, ноги персонажа на том же уровне): без bias порядок такой пары
+ * в qsort неопределён и картинка мигает. */
 static int ds3d_push_face(const float *sx, const float *sy, int n,
-                          float depth, uint32_t c, float thick) {
+                          float depth, uint32_t c, float thick, float bias) {
     if (n < 2 || !isfinite(depth)) return 1;   /* n==2 — это линия */
     if (ds3d_fn >= DS3D_FACE_MAX) {
         if (!ds3d_overflow_warned) {
@@ -167,7 +172,7 @@ static int ds3d_push_face(const float *sx, const float *sy, int n,
     }
     DS3DFace *f = &ds3d_faces[ds3d_fn++];
     for (int i = 0; i < n; i++) { f->x[i] = sx[i]; f->y[i] = sy[i]; }
-    f->n = n; f->depth = depth; f->thick = thick; f->c = c;
+    f->n = n; f->depth = depth - bias; f->thick = thick; f->c = c;
     return 1;
 }
 
@@ -209,9 +214,11 @@ static uint32_t ds3d_shade(uint32_t c, float k) {
 }
 
 /* Проекция готового многоугольника мира на экран и постановка в очередь.
- * nx,ny,nz — внешняя нормаль (для отбора задних граней и света). */
+ * nx,ny,nz — внешняя нормаль (для отбора задних граней и света), bias —
+ * смещение глубины в очереди (см. ds3d_push_face). */
 static void ds3d_emit_poly(const double *wx, const double *wy, const double *wz, int n,
-                           float nx, float ny, float nz, uint32_t color, float thick) {
+                           float nx, float ny, float nz, uint32_t color, float thick,
+                           float bias) {
     /* Задняя грань: смотрит от камеры — не строится. Мягкий допуск, чтобы
      * рёбра куба не мигали на грани «ребро к глазу». */
     float cx = 0, cy = 0, cz = 0;
@@ -236,7 +243,7 @@ static void ds3d_emit_poly(const double *wx, const double *wy, const double *wz,
      * скриптов 0xRRGGBBAA, pack_c делает уже байтовый порядок кадра. */
     float k = 0.52f + 0.48f * ds3d_dot3(nx, ny, nz, -0.45f, 0.85f, 0.30f);
     if (k < 0) k = 0;
-    ds3d_push_face(sx, sy, m, depth, pack_c(ds3d_shade(color, k)), thick);
+    ds3d_push_face(sx, sy, m, depth, pack_c(ds3d_shade(color, k)), thick, bias);
 }
 
 /* Проекция отрезка: обе точки режутся по ближней плоскости параметрически. */
@@ -262,7 +269,7 @@ static void ds3d_emit_line(double x1, double y1, double z1,
     float depth = (kz1 + kz2) * 0.5f;
     float th = (float)thick;
     if (!(th > 0)) th = 1.0f;
-    ds3d_push_face(sx, sy, 2, depth, pack_c(color), th);
+    ds3d_push_face(sx, sy, 2, depth, pack_c(color), th, 0.0f);
 }
 
 void cam3d(double ex, double ey, double ez, double tx, double ty, double tz, double fov) {
@@ -273,26 +280,43 @@ void cam3d(double ex, double ey, double ez, double tx, double ty, double tz, dou
     ds3d_update_cam(ex, ey, ez, tx, ty, tz, fov);
 }
 
-/* Куб: (x,y,z) — центр, (sx,sy,sz) — полные размеры, yaw — поворот вокруг
- * вертикальной оси в радианах. Восемь вершин считаются явно, шесть граней
- * перечислены индексами — так не перепутать обход и нормали. */
-void cube3d_yaw(double x, double y, double z,
-                double sx, double sy, double sz, double yaw, uint32_t color) {
+/* Куб: (x,y,z) — центр, (sx,sy,sz) — полные размеры. Восемь вершин считаются
+ * явно, шесть граней перечислены индексами — так не перепутать обход и
+ * нормали. Общие варианты повёрнутых вызовов (yaw — вокруг вертикали, pitch —
+ * вокруг продольной оси «к лицу» куба, bias — смещение глубины в очереди
+ * художника; см. ds3d_push_face):
+ *   cube3d        — без поворотов
+ *   cube3d_yaw    — вокруг Y (монеты, спиннеры, тело персонажа)
+ *   cube3d_part   — оба поворота + bias (части персонажа: руки/ноги качаются
+ *                   вокруг своего центра, bias держит их поверх платформы,
+ *                   на которой стоит персонаж, — иначе сопараллельные грани
+ *                   менялись бы местами от кадра к кадру).
+ * Порядок поворотов: сначала pitch вокруг X, потом yaw вокруг Y, то есть
+ * мировое = R_y(yaw) * R_x(pitch) — качание конечности идёт вокруг оси,
+ * повёрнутой вместе с телом. */
+static void ds3d_cube(double x, double y, double z,
+                      double sx, double sy, double sz,
+                      double yaw, double pitch, double bias, uint32_t color) {
     if (!frame_open) return;
-    if (!isfinite(x + y + z + sx + sy + sz + yaw)) return;
+    if (!isfinite(x + y + z + sx + sy + sz + yaw + pitch)) return;
     if (sx <= 0 || sy <= 0 || sz <= 0) return;
     ds3d_ensure_cam();
     float hx = (float)(sx * 0.5), hy = (float)(sy * 0.5), hz = (float)(sz * 0.5);
     float ca = (float)cos(yaw), sa = (float)sin(yaw);
+    float cp = (float)cos(pitch), sp = (float)sin(pitch);
     double cx[8], cy[8], cz[8];
     static const float lx[8] = { -1, 1, -1, 1, -1, 1, -1, 1 };
     static const float ly[8] = { -1, -1, 1, 1, -1, -1, 1, 1 };
     static const float lz[8] = { -1, -1, -1, -1, 1, 1, 1, 1 };
     for (int i = 0; i < 8; i++) {
         float ax = lx[i] * hx, ay = ly[i] * hy, az = lz[i] * hz;
-        cx[i] = x + (double)(ca * ax + sa * az);
-        cy[i] = y + (double)ay;
-        cz[i] = z + (double)(-sa * ax + ca * az);
+        /* pitch вокруг X: y' = y*c - z*s, z' = y*s + z*c. */
+        float py_ = ay * cp - az * sp;
+        float pz_ = ay * sp + az * cp;
+        /* yaw вокруг Y: x' = x*c + z*s, z' = -x*s + z*c. */
+        cx[i] = x + (double)(ca * ax + sa * pz_);
+        cy[i] = y + (double)py_;
+        cz[i] = z + (double)(-sa * ax + ca * pz_);
     }
     /* Вершина = (X?1:0)*2 + (Y?1:0)*4 + (Z?1:0) по знаку локальной координаты:
      * локальные (-1,-1,-1)=0, (1,-1,-1)=1, (-1,1,-1)=2, (1,1,-1)=3,
@@ -312,16 +336,29 @@ void cube3d_yaw(double x, double y, double z,
         for (int i = 0; i < 4; i++) {
             wx[i] = cx[idx[i]]; wy[i] = cy[idx[i]]; wz[i] = cz[idx[i]];
         }
-        /* Нормаль поворачивается yaw'ом вместе с кубом. */
+        /* Нормаль поворачивается вместе с кубом: pitch, затем yaw. */
         float nxl = normals[f][0], nyl = normals[f][1], nzl = normals[f][2];
-        float fnx = ca * nxl + sa * nzl;
-        float fnz = -sa * nxl + ca * nzl;
-        ds3d_emit_poly(wx, wy, wz, 4, fnx, nyl, fnz, color, 0);
+        float npy = nyl * cp - nzl * sp;
+        float npz = nyl * sp + nzl * cp;
+        float fnx = ca * nxl + sa * npz;
+        float fnz = -sa * nxl + ca * npz;
+        ds3d_emit_poly(wx, wy, wz, 4, fnx, npy, fnz, color, 0, (float)bias);
     }
 }
 
+void cube3d_yaw(double x, double y, double z,
+                double sx, double sy, double sz, double yaw, uint32_t color) {
+    ds3d_cube(x, y, z, sx, sy, sz, yaw, 0.0, 0.0, color);
+}
+
 void cube3d(double x, double y, double z, double sx, double sy, double sz, uint32_t color) {
-    cube3d_yaw(x, y, z, sx, sy, sz, 0.0, color);
+    ds3d_cube(x, y, z, sx, sy, sz, 0.0, 0.0, 0.0, color);
+}
+
+void cube3d_part(double x, double y, double z,
+                 double sx, double sy, double sz,
+                 double yaw, double pitch, double bias, uint32_t color) {
+    ds3d_cube(x, y, z, sx, sy, sz, yaw, pitch, bias, color);
 }
 
 void line3d(double x1, double y1, double z1, double x2, double y2, double z2,

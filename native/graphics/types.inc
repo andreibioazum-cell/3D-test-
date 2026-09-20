@@ -60,6 +60,7 @@ struct Texture {
 typedef enum {
     DS_CMD_RECT, DS_CMD_ROUND, DS_CMD_CIRCLE, DS_CMD_RING, DS_CMD_LINE,
     DS_CMD_TEX, DS_CMD_TEXT, DS_CMD_TEX_TINT, DS_CMD_RECT_ROT,
+    DS_CMD_GRAD, /* вертикальный градиент c0 (верх) -> c1 (низ) */
     DS_CMD_TRI /* грань 3D-слоя, уже спроецированная на экран (render3d.inc) */
 } DSCommand;
 typedef struct {
@@ -79,6 +80,10 @@ typedef struct {
          * Рисуется обычным (смешивающим) конвейером, поэтому прозрачность
          * цвета работает так же, как у rect. */
         struct { float x, y, w, h, ang; uint32_t c; } rot;
+        /* Вертикальный градиент: c0 — верхняя кромка, c1 — нижняя. Цвета
+         * вершин quad'а интерполируются GPU (сплошной шейдер), поэтому
+         * переход по высоте плавный без единого пиксельного цикла. */
+        struct { float x, y, w, h; uint32_t c0, c1; } gr;
         struct { char *s; float x, y, sc; uint32_t c; } tt;
         /* Экранный треугольник 3D-слоя: вершины уже в пикселях окна, цвет —
          * с освещением грани. Рисуется сплошным конвейером со смешиванием. */

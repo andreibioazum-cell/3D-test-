@@ -92,6 +92,9 @@ void roundrect(float x, float y, float w, float h, float r, uint32_t color);
  * angle - поворот вокруг её центра. Рисуется с альфа-смешиванием (как rect),
  * поэтому годится для полупрозрачных зон хитбоксов с острыми углами. */
 void rect_rot(float x, float y, float w, float h, float angle, uint32_t color);
+/* Вертикальный градиент: верхняя кромка color_top, нижняя color_bottom.
+ * Плавный переход делает GPU (интерполяция цветов вершин), см. geo_rect_grad. */
+void grad_rect(float x, float y, float w, float h, uint32_t color_top, uint32_t color_bottom);
 void circle(float x, float y, float r, uint32_t color);
 void ring(float x, float y, float r, float t, uint32_t color);
 void line(float x1, float y1, float x2, float y2, float thickness, uint32_t color);
@@ -110,6 +113,13 @@ void cube3d(double x, double y, double z, double sx, double sy, double sz,
             uint32_t color);
 void cube3d_yaw(double x, double y, double z, double sx, double sy, double sz,
                 double yaw, uint32_t color);
+/* Куб с двумя поворотами (yaw вокруг Y, затем pitch вокруг X) и bias —
+ * смещением глубины в очереди художника (положительное bias рисует куб
+ * поверх соседей с почти равной глубиной). Натуральное применение: части
+ * персонажа (качание рук/ног + держаться поверх пола) и тень на крыше
+ * платформы. См. ds3d_cube в render3d.inc. */
+void cube3d_part(double x, double y, double z, double sx, double sy, double sz,
+                 double yaw, double pitch, double bias, uint32_t color);
 void line3d(double x1, double y1, double z1, double x2, double y2, double z2,
             double thickness, uint32_t color);
 void flush3d(void);

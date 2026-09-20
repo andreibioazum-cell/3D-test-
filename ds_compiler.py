@@ -142,9 +142,11 @@ BUILTINS = frozenset({
     'keyboard_enter_pressed', 'keyboard_type', 'keyboard_visible', 'str_len',
     'str_eq', 'str_contains', 'str_index_of', 'str_sub', 'str_to_num', 'str_trim',
     'str_starts_with', 'str_ends_with', 'str_lower', 'str_upper',
-    # 3D-слой: камера, кубы (в том числе повёрнутые), линии в мире и
-    # принудительный вывод очереди 3D-граней (см. render3d.inc / README).
-    'cam3d', 'cube3d', 'cube3d_yaw', 'line3d', 'flush3d',
+    # 3D-слой: камера, кубы (в том числе повёрнутые и часть объёма), линии
+    # в мире и принудительный вывод очереди 3D-граней (см. render3d.inc /
+    # README). 2D-градиент grad_rect — в lifecycle.inc/geometry.inc.
+    'cam3d', 'cube3d', 'cube3d_yaw', 'cube3d_part', 'grad_rect',
+    'line3d', 'flush3d',
     'ds_log', 'console_count', 'console_line', 'console_type',
     'ds_log', 'console_count', 'console_line', 'console_type',
     'console_clear', 'arr_new', 'arr_push', 'arr_get', 'arr_set', 'arr_len',

@@ -160,6 +160,13 @@ void rect_rot(float x, float y, float w, float h, float ang, uint32_t c) {
     DSCmd *p = push(DS_CMD_RECT_ROT); if (!p) return;
     p->v.rot.x=x; p->v.rot.y=y; p->v.rot.w=w; p->v.rot.h=h; p->v.rot.ang=ang; p->v.rot.c=pack_c(c);
 }
+/* Вертикальный градиент (верх c_top -> низ c_bottom): цвета вершин quad'а
+ * интерполируются GPU, переход по высоте плавный. См. geo_rect_grad. */
+void grad_rect(float x, float y, float w, float h, uint32_t c_top, uint32_t c_bottom) {
+    DSCmd *p = push(DS_CMD_GRAD); if (!p) return;
+    p->v.gr.x=x; p->v.gr.y=y; p->v.gr.w=w; p->v.gr.h=h;
+    p->v.gr.c0=pack_c(c_top); p->v.gr.c1=pack_c(c_bottom);
+}
 void circle(float x, float y, float r, uint32_t c) {
     DSCmd *p = push(DS_CMD_CIRCLE); if (!p) return;
     p->v.ci.x=x; p->v.ci.y=y; p->v.ci.r=r; p->v.ci.c=pack_c(c);
