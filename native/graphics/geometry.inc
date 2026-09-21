@@ -135,6 +135,20 @@ static int geo_rect(float x, float y, float w, float h, uint32_t c) {
     return geo_quad(q);
 }
 
+/* Вертикальный градиент (верх c_top -> низ c_bottom): один quad, у которого
+ * цвета верхних и нижних вершин разные — растеризатор сам делает плавный
+ * переход по barycentrics, поэтому и треугольников, и CPU-циклов меньше,
+ * чем у «лестницы» тонких rect'ов. */
+static int geo_rect_grad(float x, float y, float w, float h,
+                         uint32_t c_top, uint32_t c_bottom) {
+    if (!isfinite(x + y + w + h) || w <= 0 || h <= 0) return 1;
+    GeoVert q[4] = {
+        { x,     y,     0, 0, c_top },    { x + w, y,     1, 0, c_top },
+        { x + w, y + h, 1, 1, c_bottom }, { x,     y + h, 0, 1, c_bottom },
+    };
+    return geo_quad(q);
+}
+
 /* Адаптивное число сегментов окружности: ошибка формы меньше половины
  * пикселя при любом радиусе, но веер не раздувается для мелких кругов. */
 static int geo_circle_segs(float r) {

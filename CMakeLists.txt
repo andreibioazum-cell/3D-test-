@@ -2,19 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(CubicBattle C)
 set(CMAKE_C_STANDARD 99)
 
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
-set(GAME_C "${CMAKE_CURRENT_SOURCE_DIR}/game/game.c")
-# Скрипты лежат модулями в game/scripts/ (core/ui/combat/fx) — порядок
-# компиляции задаёт gen.py, здесь достаточно просто найти все .ds.
-file(GLOB_RECURSE DS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/game/*.ds")
-
-add_custom_command(
-    OUTPUT "${GAME_C}"
-    COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/gen.py"
-    DEPENDS ${DS_SOURCES} "${CMAKE_CURRENT_SOURCE_DIR}/ds_compiler.py" "${CMAKE_CURRENT_SOURCE_DIR}/gen.py"
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    COMMENT "Generating game/game.c from DimScript"
-)
+# Игра — чистый C в game/game_pure.c (DimScript в сборке больше не участвует).
 
 # Единственная целевая платформа — Android: библиотека libds_game.so, которую
 # забирает APK из game/AndroidManifest.xml. Поддержка ПК (Windows и Linux-тестовый
@@ -27,7 +15,7 @@ if(NOT ANDROID)
         "Готовый APK проще собрать workflow в GitHub Actions.")
 endif()
 
-add_library(ds_game SHARED "${GAME_C}" runtime.c main.c ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
+add_library(ds_game SHARED "game/game_pure.c" runtime.c main.c ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
 target_include_directories(ds_game PRIVATE . game ${ANDROID_NDK}/sources/android/native_app_glue)
 # vulkan - графический бэкенд рендера (swapchain, оффскрин, спечённые SPIR-V шейдеры).
 target_link_libraries(ds_game PRIVATE android log m vulkan)

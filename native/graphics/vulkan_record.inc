@@ -52,6 +52,12 @@ static int ds_vk_build_geometry(void) {
                 geo_rect_rot(c->v.rot.x, c->v.rot.y, c->v.rot.w, c->v.rot.h,
                              c->v.rot.ang, c->v.rot.c);
                 break;
+            case DS_CMD_GRAD:
+                /* pipeline 0: цвета вершин интерполирует GPU, альфа работает
+                 * как у rect. */
+                geo_rect_grad(c->v.gr.x, c->v.gr.y, c->v.gr.w, c->v.gr.h,
+                              c->v.gr.c0, c->v.gr.c1);
+                break;
             case DS_CMD_CIRCLE:
                 geo_circle(c->v.ci.x, c->v.ci.y, c->v.ci.r, c->v.ci.c);
                 break;

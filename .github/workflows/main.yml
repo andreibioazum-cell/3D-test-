@@ -86,9 +86,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Generate game.c
-        run: python3 gen.py
-
       # 3D-слой рендера (native/graphics/render3d.inc) проверяется на хосте
       # без Vulkan: проекция, отбор задних граней, обрезка у глаза, порядок
       # художника и вывод в общий командный список.
@@ -98,10 +95,15 @@ jobs:
             -I tools/host_test/stub -I . -lm
           /tmp/test_3d
 
-      # 3D-платформер: настоящие скрипты игры гоняются на хосте (спавн,
-      # прыжки, монеты, чекпоинты, финиш, кнопка в лобби, слои кадра).
-      - name: "Host test: 3D platformer"
-        run: python3 tools/test_platformer3d.py
+      # 3D-платформер на чистом C (game/game_pure.c, без DimScript): живая
+      # игра гоняется на хосте с настоящим рендером (спавн, ходьба джойстиком
+      # вправо/влево, поворот камеры и pitch, прыжки, монеты, чекпоинты,
+      # финиш, кнопка в лобби, слои кадра, защита «игрок не под полом»).
+      - name: "Host test: 3D platformer (pure C)"
+        run: |
+          gcc -std=gnu99 -O1 -o /tmp/test_p3d_pure tools/host_test/test_p3d_pure.c \
+            -I tools/host_test/stub -I . -lm
+          /tmp/test_p3d_pure
 
       - name: Stage assets
         run: python3 stage_assets.py game/assets staging/assets
@@ -116,17 +118,17 @@ jobs:
           mkdir -p staging/lib/arm64-v8a staging/lib/armeabi-v7a staging/lib/x86_64
 
           "$TOOLCHAIN/aarch64-linux-android26-clang" -O3 -s -fPIC -shared \
-            game/game.c runtime.c main.c "$GLUE/android_native_app_glue.c" \
+            game/game_pure.c runtime.c main.c "$GLUE/android_native_app_glue.c" \
             -I. -I"$GLUE" -landroid -llog -lm -lvulkan \
             -o staging/lib/arm64-v8a/libds_game.so
 
           "$TOOLCHAIN/armv7a-linux-androideabi26-clang" -O3 -s -fPIC -shared \
-            game/game.c runtime.c main.c "$GLUE/android_native_app_glue.c" \
+            game/game_pure.c runtime.c main.c "$GLUE/android_native_app_glue.c" \
             -I. -I"$GLUE" -landroid -llog -lm -lvulkan \
             -o staging/lib/armeabi-v7a/libds_game.so
 
           "$TOOLCHAIN/x86_64-linux-android26-clang" -O3 -s -fPIC -shared \
-            game/game.c runtime.c main.c "$GLUE/android_native_app_glue.c" \
+            game/game_pure.c runtime.c main.c "$GLUE/android_native_app_glue.c" \
             -I. -I"$GLUE" -landroid -llog -lm -lvulkan \
             -o staging/lib/x86_64/libds_game.so
 
